@@ -1,0 +1,5 @@
+# Host tools are pinned for reproducible local and CI verification.
+platformio==6.1.19
+clang-format==22.1.8
+scons==4.8.1
+esptool==4.11.0

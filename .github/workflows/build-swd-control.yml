@@ -47,7 +47,7 @@ jobs:
             tail -350 firmware-build.log
             exit 1
           fi
-          tail -80 firmware-build.log
+          tail -100 firmware-build.log
 
       - name: Check firmware size limits
         shell: bash
@@ -55,7 +55,11 @@ jobs:
           set -euo pipefail
           size_bin="$HOME/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-size"
           test -x "$size_bin"
-          for env in gausstop_master gausstop_master_swd gausstop_slave; do
+          for env in \
+            gausstop_master \
+            gausstop_master_swd \
+            bench_master_pa4_bypass \
+            gausstop_slave; do
             test -f ".pio/build/${env}/firmware.elf"
             "$size_bin" ".pio/build/${env}/firmware.elf"
           done
@@ -66,23 +70,19 @@ jobs:
           set -euo pipefail
           rm -rf artifacts
           mkdir -p \
+            artifacts/gausstop_master_swd \
             artifacts/bench_master_pa4_bypass \
             artifacts/gausstop_slave \
             artifacts/esp32_swd_coordinator
 
-          cp .pio/build/gausstop_master_swd/firmware.bin \
-            "artifacts/bench_master_pa4_bypass/gausstop-master-swd-bench-pa4-bypass-${SOURCE_SHA}.bin"
-          cp .pio/build/gausstop_master_swd/firmware.elf \
-            "artifacts/bench_master_pa4_bypass/gausstop-master-swd-bench-pa4-bypass-${SOURCE_SHA}.elf"
-          cp .pio/build/gausstop_master_swd/firmware.map \
-            "artifacts/bench_master_pa4_bypass/gausstop-master-swd-bench-pa4-bypass-${SOURCE_SHA}.map"
-
-          cp .pio/build/gausstop_slave/firmware.bin \
-            "artifacts/gausstop_slave/gausstop-slave-${SOURCE_SHA}.bin"
-          cp .pio/build/gausstop_slave/firmware.elf \
-            "artifacts/gausstop_slave/gausstop-slave-${SOURCE_SHA}.elf"
-          cp .pio/build/gausstop_slave/firmware.map \
-            "artifacts/gausstop_slave/gausstop-slave-${SOURCE_SHA}.map"
+          for ext in bin elf map; do
+            cp ".pio/build/gausstop_master_swd/firmware.${ext}" \
+              "artifacts/gausstop_master_swd/gausstop-master-swd-${SOURCE_SHA}.${ext}"
+            cp ".pio/build/bench_master_pa4_bypass/firmware.${ext}" \
+              "artifacts/bench_master_pa4_bypass/gausstop-master-swd-bench-pa4-bypass-${SOURCE_SHA}.${ext}"
+            cp ".pio/build/gausstop_slave/firmware.${ext}" \
+              "artifacts/gausstop_slave/gausstop-slave-${SOURCE_SHA}.${ext}"
+          done
 
           cp .pio/build/esp32_swd_coordinator/firmware.bin \
             "artifacts/esp32_swd_coordinator/esp32-swd-coordinator-app-${SOURCE_SHA}.bin"
@@ -108,17 +108,36 @@ jobs:
               'protocol_version': 2,
               'toolchain': {'platformio': '6.1.19', 'python': '3.12'},
               'profiles': {
-                  'bench_master_pa4_bypass': {
+                  'gausstop_master_swd': {
                       'environment': 'gausstop_master_swd',
+                      'pa4_bypass': False,
+                      'bridge_profile': 'TWO_LEG_FLOATING',
+                      'bridge_profile_id': 1,
+                      'power_profile': 'CONSERVATIVE_250',
+                      'power_profile_id': 1,
+                      'operational_release_allowed': True,
+                  },
+                  'bench_master_pa4_bypass': {
+                      'environment': 'bench_master_pa4_bypass',
                       'pa4_bypass': True,
+                      'bridge_profile': 'TWO_LEG_FLOATING',
+                      'bridge_profile_id': 1,
+                      'power_profile': 'CONSERVATIVE_250',
+                      'power_profile_id': 1,
                       'operational_release_allowed': False,
                   },
                   'gausstop_slave': {
                       'environment': 'gausstop_slave',
                       'pa4_bypass': False,
+                      'bridge_profile': 'TWO_LEG_FLOATING',
+                      'bridge_profile_id': 1,
+                      'power_profile': 'CONSERVATIVE_250',
+                      'power_profile_id': 1,
+                      'operational_release_allowed': True,
                   },
                   'esp32_swd_coordinator': {
                       'environment': 'esp32_swd_coordinator',
+                      'protocol_version': 2,
                   },
               },
               'files': {},
@@ -142,12 +161,19 @@ jobs:
         run: |
           set -euo pipefail
           mkdir -p /tmp/first-build
-          cp .pio/build/gausstop_master_swd/firmware.bin /tmp/first-build/master.bin
+          cp .pio/build/gausstop_master_swd/firmware.bin /tmp/first-build/master-operational.bin
+          cp .pio/build/bench_master_pa4_bypass/firmware.bin /tmp/first-build/master-bypass.bin
           cp .pio/build/gausstop_slave/firmware.bin /tmp/first-build/slave.bin
           cp .pio/build/esp32_swd_coordinator/firmware.bin /tmp/first-build/esp32.bin
           pio run -t clean >/dev/null
-          pio run -e gausstop_master_swd -e gausstop_slave -e esp32_swd_coordinator > reproducibility-build.log 2>&1
-          cmp /tmp/first-build/master.bin .pio/build/gausstop_master_swd/firmware.bin
+          pio run \
+            -e gausstop_master_swd \
+            -e bench_master_pa4_bypass \
+            -e gausstop_slave \
+            -e esp32_swd_coordinator \
+            > reproducibility-build.log 2>&1
+          cmp /tmp/first-build/master-operational.bin .pio/build/gausstop_master_swd/firmware.bin
+          cmp /tmp/first-build/master-bypass.bin .pio/build/bench_master_pa4_bypass/firmware.bin
           cmp /tmp/first-build/slave.bin .pio/build/gausstop_slave/firmware.bin
           cmp /tmp/first-build/esp32.bin .pio/build/esp32_swd_coordinator/firmware.bin
 

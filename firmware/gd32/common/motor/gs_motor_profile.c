@@ -7,7 +7,7 @@
 #error "GS_POWER_PROFILE_ID must select an explicit motor power profile"
 #endif
 
-#if GS_POWER_PROFILE_ID == GS_POWER_PROFILE_CONSERVATIVE_250
+#if GS_POWER_PROFILE_ID == 1
 static const gs_motor_power_profile current_profile = {
     .id = GS_POWER_PROFILE_CONSERVATIVE_250,
     .command_deadband = GS_COMMAND_DEADBAND,
@@ -17,7 +17,7 @@ static const gs_motor_power_profile current_profile = {
     .acceleration_per_second = 400u,
     .deceleration_per_second = 800u,
 };
-#elif GS_POWER_PROFILE_ID == GS_POWER_PROFILE_STANDARD_1000
+#elif GS_POWER_PROFILE_ID == 2
 static const gs_motor_power_profile current_profile = {
     .id = GS_POWER_PROFILE_STANDARD_1000,
     .command_deadband = GS_COMMAND_DEADBAND,

@@ -1,0 +1,85 @@
+name: Build SWD motor control
+
+on:
+  push:
+    branches:
+      - codex/swd-esp32-dual-motor-control
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    if: ${{ !contains(github.event.head_commit.message || '', '[skip build]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@v5
+        with:
+          python-version: '3.12'
+
+      - name: Install PlatformIO
+        run: python -m pip install --disable-pip-version-check platformio==6.1.19
+
+      - name: Run native tests
+        run: pio run -e native_tests
+
+      - name: Build firmware
+        run: >-
+          pio run
+          -e gausstop_master_swd
+          -e gausstop_slave
+          -e esp32_swd_coordinator
+
+      - name: Collect flashable images
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf dist/gausstop_master_swd dist/gausstop_slave_swd_control dist/esp32_swd_coordinator
+          mkdir -p dist/gausstop_master_swd dist/gausstop_slave_swd_control dist/esp32_swd_coordinator
+          cp .pio/build/gausstop_master_swd/firmware.bin dist/gausstop_master_swd/firmware.bin
+          cp .pio/build/gausstop_master_swd/firmware.elf dist/gausstop_master_swd/firmware.elf
+          cp .pio/build/gausstop_master_swd/firmware.map dist/gausstop_master_swd/firmware.map
+          cp .pio/build/gausstop_slave/firmware.bin dist/gausstop_slave_swd_control/firmware.bin
+          cp .pio/build/gausstop_slave/firmware.elf dist/gausstop_slave_swd_control/firmware.elf
+          cp .pio/build/gausstop_slave/firmware.map dist/gausstop_slave_swd_control/firmware.map
+          cp .pio/build/esp32_swd_coordinator/firmware.bin dist/esp32_swd_coordinator/firmware.bin
+          cp .pio/build/esp32_swd_coordinator/firmware.elf dist/esp32_swd_coordinator/firmware.elf
+          cp .pio/build/esp32_swd_coordinator/firmware.map dist/esp32_swd_coordinator/firmware.map
+          cp .pio/build/esp32_swd_coordinator/bootloader.bin dist/esp32_swd_coordinator/bootloader.bin
+          cp .pio/build/esp32_swd_coordinator/partitions.bin dist/esp32_swd_coordinator/partitions.bin
+          sha256sum \
+            dist/gausstop_master_swd/firmware.bin \
+            dist/gausstop_slave_swd_control/firmware.bin \
+            dist/esp32_swd_coordinator/bootloader.bin \
+            dist/esp32_swd_coordinator/partitions.bin \
+            dist/esp32_swd_coordinator/firmware.bin \
+            > dist/swd-control-sha256.txt
+
+      - name: Upload firmware artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: swd-esp32-dual-motor-firmware
+          path: |
+            dist/gausstop_master_swd
+            dist/gausstop_slave_swd_control
+            dist/esp32_swd_coordinator
+            dist/swd-control-sha256.txt
+          if-no-files-found: error
+
+      - name: Commit generated firmware
+        shell: bash
+        run: |
+          set -euo pipefail
+          git config user.name github-actions[bot]
+          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
+          git add dist/gausstop_master_swd dist/gausstop_slave_swd_control dist/esp32_swd_coordinator dist/swd-control-sha256.txt
+          if git diff --cached --quiet; then
+            exit 0
+          fi
+          git commit -m "Build SWD ESP32 motor-control firmware [skip build]"
+          git push

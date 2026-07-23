@@ -14,8 +14,8 @@ constexpr int kControllerRx = 35;
 constexpr int kControllerTx = 17;
 constexpr uint32_t kHeartbeatMs = 20;
 constexpr uint32_t kPiCommandTimeoutMs = 500;
-constexpr uint32_t kAckTimeoutMs = 100;
-constexpr uint32_t kFeedbackTimeoutMs = 150;
+constexpr uint32_t kAckTimeoutMs = 200;
+constexpr uint32_t kFeedbackTimeoutMs = 200;
 
 constexpr int kMpu6050Sda = 21;
 constexpr int kMpu6050Scl = 22;
@@ -25,20 +25,16 @@ HardwareSerial controller_uart(2);
 gs_console_state console_state;
 gs_frame_parser feedback_parser;
 gs_master_feedback feedback{};
-gs_esp_command last_command{};
+gs_command_sequencer command_sequencer;
 char console_line[GS_CONSOLE_MAX_LINE + 1];
 size_t console_length;
 bool console_overflow;
 bool clear_fault_pending;
 bool command_timeout_announced;
 bool session_ready;
-bool command_sent;
-uint16_t command_sequence;
-uint16_t last_sent_sequence;
 uint32_t next_heartbeat_ms;
 uint32_t last_feedback_ms;
 uint32_t last_control_input_ms;
-uint32_t last_sequence_change_ms;
 uint32_t command_frames;
 uint32_t feedback_frames;
 uint32_t crc_errors;
@@ -54,15 +50,13 @@ bool feedback_faulted() {
 }
 
 bool exact_ack() {
-  return command_sent && feedback.accepted_esp_sequence == last_sent_sequence &&
-         feedback.forwarded_slave_sequence == last_sent_sequence &&
-         feedback.accepted_slave_sequence == last_sent_sequence;
+  return gs_master_feedback_exact_ack(
+      &feedback, command_sequencer.in_flight.sequence, command_sequencer.sent);
 }
 
 bool zero_ready_ack() {
-  return exact_ack() && feedback.master_state == 1u &&
-         feedback.slave_state == 1u && !feedback_faulted() &&
-         (feedback.status_flags & GS_FEEDBACK_PEER_HEALTHY) != 0u;
+  return gs_master_feedback_motion_ready(
+      &feedback, command_sequencer.in_flight.sequence, command_sequencer.sent);
 }
 
 void force_safe_disable() {
@@ -76,7 +70,8 @@ void print_help() {
   Serial.println("enable | lr LEFT RIGHT | drive SPEED STEER | stop | disable");
   Serial.println("forward VALUE | reverse VALUE | ramp STEP | clearfault");
   Serial.println("shutdown | status | help");
-  Serial.println("Motion requires READY acknowledgment and fresh 100 ms sequence acknowledgment.");
+  Serial.println("Motion requires READY acknowledgment and fresh 200 ms "
+                 "sequence acknowledgment.");
 }
 
 void print_status() {
@@ -87,6 +82,9 @@ void print_status() {
       "\"sequence\":%u,\"master_ack\":%u,\"slave_forwarded\":%u,"
       "\"slave_ack\":%u,\"exact_ack\":%u,\"peer_healthy\":%u,"
       "\"pa4_raw_high\":%u,\"pa4_bypass\":%u,\"clear_pending\":%u,"
+      "\"slave_pa4_raw_high\":%u,\"halls\":[%u,%u],"
+      "\"compare\":[%u,%u],\"bridge\":[%u,%u],"
+      "\"odometers\":[%ld,%ld],"
       "\"command_age_ms\":%u,\"slave_feedback_age_ms\":%u,"
       "\"slave_command_age_ms\":%u,\"esp_feedback_age_ms\":%lu,"
       "\"states\":[%u,%u],\"faults\":[%lu,%lu],\"tx\":%lu,"
@@ -97,14 +95,30 @@ void print_status() {
       console_state.target.mode == GS_DRIVE_DIRECT_LR ? "lr" : "drive",
       console_state.target.first, console_state.target.second,
       console_state.current.left, console_state.current.right,
-      feedback.left_applied, feedback.right_applied, console_state.ramp_per_tick,
-      last_sent_sequence, feedback.accepted_esp_sequence,
-      feedback.forwarded_slave_sequence, feedback.accepted_slave_sequence,
-      exact_ack() ? 1u : 0u,
+      feedback.left_applied, feedback.right_applied,
+      console_state.ramp_per_tick, command_sequencer.in_flight.sequence,
+      feedback.accepted_esp_sequence, feedback.forwarded_slave_sequence,
+      feedback.accepted_slave_sequence, exact_ack() ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PEER_HEALTHY) != 0u ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PA4_RAW_HIGH) != 0u ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PA4_BYPASS) != 0u ? 1u : 0u,
-      (feedback.status_flags & GS_FEEDBACK_CLEAR_PENDING) != 0u ? 1u : 0u,
+      clear_fault_pending ||
+              (feedback.status_flags & GS_FEEDBACK_CLEAR_PENDING) != 0u
+          ? 1u
+          : 0u,
+      (feedback.motor_status_flags & GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH) != 0u
+          ? 1u
+          : 0u,
+      feedback.left_hall, feedback.right_hall, feedback.left_compare_offset,
+      feedback.right_compare_offset,
+      (feedback.motor_status_flags & GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED) != 0u
+          ? 1u
+          : 0u,
+      (feedback.motor_status_flags & GS_MASTER_MOTOR_RIGHT_BRIDGE_ENABLED) != 0u
+          ? 1u
+          : 0u,
+      static_cast<long>(feedback.left_odometer),
+      static_cast<long>(feedback.right_odometer),
       feedback.master_command_age_ms, feedback.slave_feedback_age_ms,
       feedback.slave_command_age_ms,
       static_cast<unsigned long>(millis() - last_feedback_ms),
@@ -186,12 +200,6 @@ void enforce_pi_timeout() {
   }
 }
 
-bool same_payload(const gs_esp_command &first, const gs_esp_command &second) {
-  return first.speed == second.speed && first.steer == second.steer &&
-         first.master_flags == second.master_flags &&
-         first.slave_flags == second.slave_flags;
-}
-
 gs_esp_command desired_command() {
   gs_esp_command command{};
   if (console_state.shutdown) {
@@ -216,23 +224,14 @@ gs_esp_command desired_command() {
 
 void send_heartbeat() {
   enforce_pi_timeout();
-  gs_console_ramp_tick(&console_state);
-  gs_esp_command command = desired_command();
-  if (!command_sent || !same_payload(command, last_command)) {
-    ++command_sequence;
-    if (command_sequence == 0u) {
-      ++command_sequence;
-    }
-    last_sequence_change_ms = millis();
-  }
-  command.sequence = command_sequence;
-  last_command = command;
-  last_sent_sequence = command.sequence;
+  gs_console_ramp_tick_when_ready(&console_state, session_ready);
+  const gs_esp_command desired = desired_command();
+  const gs_esp_command *command = gs_command_sequencer_select(
+      &command_sequencer, &desired, exact_ack(), millis());
   uint8_t frame[GS_ESP_COMMAND_SIZE];
-  if (gs_encode_esp_command(frame, &command)) {
+  if (command != nullptr && gs_encode_esp_command(frame, command)) {
     controller_uart.write(frame, sizeof(frame));
     ++command_frames;
-    command_sent = true;
   }
 }
 
@@ -251,13 +250,14 @@ void enforce_controller_health() {
     return;
   }
   if (feedback_faulted() ||
+      (session_ready && !gs_master_feedback_runtime_healthy(&feedback)) ||
       static_cast<uint32_t>(now - last_feedback_ms) > kFeedbackTimeoutMs) {
     force_safe_disable();
     Serial.println("SAFE STOP: stale or faulted controller feedback");
     return;
   }
-  if (!exact_ack() &&
-      static_cast<uint32_t>(now - last_sequence_change_ms) > kAckTimeoutMs) {
+  if (gs_command_sequencer_ack_expired(&command_sequencer, exact_ack(), now,
+                                       kAckTimeoutMs)) {
     ++ack_timeouts;
     force_safe_disable();
     Serial.println("SAFE STOP: command sequence was not acknowledged");
@@ -288,6 +288,7 @@ void service_feedback() {
 
 void setup() {
   gs_console_init(&console_state);
+  gs_command_sequencer_init(&command_sequencer);
   Serial.begin(kConsoleBaud);
   controller_uart.begin(kControllerBaud, SERIAL_8N1, kControllerRx,
                         kControllerTx);
@@ -296,9 +297,8 @@ void setup() {
   next_heartbeat_ms = millis();
   last_feedback_ms = millis();
   last_control_input_ms = millis();
-  last_sequence_change_ms = millis();
-  Serial.println(
-      "GAUSSTOP SWD coordinator protocol v2 ready, motors disabled. Type help.");
+  Serial.println("GAUSSTOP SWD coordinator protocol v2 ready, motors disabled. "
+                 "Type help.");
 }
 
 void loop() {

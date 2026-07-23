@@ -109,8 +109,7 @@ static bool pop_tx_byte(uint8_t *byte) {
     return false;
   }
   *byte = tx_buffer[tx_tail];
-  tx_tail =
-      (uint8_t)((tx_tail + 1u) & (GS_SWD_UART_TX_BUFFER_SIZE - 1u));
+  tx_tail = (uint8_t)((tx_tail + 1u) & (GS_SWD_UART_TX_BUFFER_SIZE - 1u));
   return true;
 }
 
@@ -119,8 +118,7 @@ static void start_rx_sampling(void) {
   rx_byte = 0u;
   rx_bit = 0u;
   timer_disable(TIMER14);
-  timer_autoreload_value_config(TIMER14,
-                                GS_SWD_UART_FIRST_SAMPLE_TICKS - 1u);
+  timer_autoreload_value_config(TIMER14, GS_SWD_UART_FIRST_SAMPLE_TICKS - 1u);
   timer_counter_value_config(TIMER14, 0u);
   timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
   timer_enable(TIMER14);
@@ -254,8 +252,7 @@ bool __wrap_gs_board_uart_read(gs_board_uart uart, uint8_t *byte) {
     return false;
   }
   *byte = rx_buffer[rx_tail];
-  rx_tail =
-      (uint8_t)((rx_tail + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
+  rx_tail = (uint8_t)((rx_tail + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
   return true;
 }
 

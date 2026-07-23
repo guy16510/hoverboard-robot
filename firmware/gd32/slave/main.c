@@ -8,6 +8,7 @@
 #include "gs_motor_control.h"
 #include "gs_safety.h"
 #include "gs_slave.h"
+#include "gs_wheel_mix.h"
 
 static gs_slave_coordinator slave;
 static gs_motor_controller motor;
@@ -86,6 +87,9 @@ static void apply_motor_step(uint8_t hall, bool hall_changed,
   }
   slave.applied_electrical = output.demand.logical_command;
   slave.odometer = motor.odometer;
+  gs_slave_set_motor_status(&slave, hall, output.demand.compare_offset,
+                            output.demand.bridge_enabled,
+                            gs_board_shutdown_raw_high());
 }
 
 static void service_motor(void) {
@@ -116,9 +120,7 @@ static void service_motor(void) {
   const uint8_t hall = gs_board_read_hall();
   gs_safety_set_enabled(&safety, slave.state == GS_CONTROLLER_READY ||
                                      slave.state == GS_CONTROLLER_ACTIVE);
-  gs_safety_note_demand(
-      &safety, slave.demanded_electrical != 0 || motor.applied_command != 0,
-      now_ms);
+  gs_safety_note_demand(&safety, gs_motor_bridge_active(&motor), now_ms);
   const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
                                    adc_value, hall != 0u && hall != 7u};
   if (gs_slave_fault_clear_requested(&slave) &&

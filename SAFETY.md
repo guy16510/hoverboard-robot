@@ -7,15 +7,15 @@ remains **Awaiting hardware validation**.
 
 | Limit | Value/unit | Source | Reason | Validation on this computer |
 |---|---:|---|---|---|
-| PWM ceiling | 80 compare ticks | conservative plan selection below historic 400 | bound first energized validation | **Native-test validated**, **Build validated** |
+| PWM ceiling | 100 compare ticks | physically proven 10% differential, still below historic 400 | reproduce the lowest proven movement authority | **Native-test validated**, **Build validated** |
 | Startup offset | 40 compare ticks | legacy operational behavior | bounded starting authority | **Native-test validated** |
 | Command deadband | 50 command units | legacy software | avoid sub-start oscillation | **Native-test validated** |
 | Acceleration | 400 command units/s | legacy internal limit | conservative increase | **Native-test validated** |
 | Deceleration | 800 command units/s | legacy internal limit | reach coast sooner | **Native-test validated** |
-| ESP32 heartbeat | 50 ms | protocol requirement | deterministic updates | **Statically validated** |
+| ESP32 heartbeat | 20 ms resend, stop-and-wait sequence advance | 47-byte feedback at 19,200 baud | keep the link alive without outrunning end-to-end acknowledgment | **Native-test validated**, **Build validated** |
 | ESP32 timeout | 400 ms | reconciles legacy 500/600 ms | stop demand below 500 ms maximum | **Native-test validated** |
 | Master/slave timeout | 100 ms | new conservative policy | fast subordinate stop | **Native-test validated** |
-| Startup timeout | 700 ms | legacy safety | require Hall progress | **Native-test validated** |
+| Startup timeout | 700 ms after bridge activation | legacy safety | require Hall progress without charging timeout during ramp/deadband | **Native-test validated** |
 | Stall timeout | 300 ms | legacy safety | stop absent transitions | **Native-test validated** |
 | Minimum Hall interval | 500 microseconds | legacy safety | reject implausibly fast transitions | **Native-test validated** |
 | Direction dwell | 250 ms | legacy safety | coast at zero before reversal | **Native-test validated** |
@@ -24,8 +24,19 @@ remains **Awaiting hardware validation**.
 
 Normal `stop` ramps targets to zero, disables every timer output below deadband,
 and coasts. Direction changes decelerate to zero, remain bridge-off for 250 ms,
-then restart. Regenerative and active braking are not implemented.
+then restart their ramp from zero. Fractional ramp progress is retained so the
+configured per-second rates remain accurate at a 1 ms service cadence. Hall
+tracking re-anchors while bridge-off so coast movement is not interpreted as an
+energized illegal transition. Regenerative and active braking are not
+implemented.
 **Native-test validated**
+
+The ESP32 holds its own command ramp at zero until an exact, healthy,
+zero-output acknowledgment reaches both controllers. Once enabled, it
+immediately disables if controller state, peer health, Hall, PA4, clear-pending,
+applied-command, compare, and bridge telemetry become contradictory.
+Sub-deadband applied ramp values remain valid only while the bridge is off.
+**Native-test validated** and **Build validated**
 
 Disable, shutdown, command/link timeout, protocol fault, invalid Hall, illegal
 Hall transition, too-fast Hall transition, startup/stall timeout, PA4 low, PA6
@@ -43,4 +54,3 @@ PA4 is active-low digital with a weak pull-up. Its source is unknown. PB12 is
 input-only and TIMER0 hardware break is disabled. PB2 stays high because its
 exact circuit role is unresolved. **Historically physically verified** behavior
 with remaining items **Awaiting hardware validation**
-

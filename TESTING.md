@@ -27,9 +27,10 @@ Arduino-ESP32, and clang-format pins are in `requirements-dev.txt`,
 ./tools/static-checks.sh
 ```
 
-`test-all.sh` runs strict native C tests, ASan/UBSan, PlatformIO native build,
-and the resulting program. `build-all.sh` builds six firmware roles, verifies
-limits and expected artifacts, and creates ignored `dist/` manifests.
+`test-all.sh` runs strict native C tests, ASan/UBSan, the host motion-gate
+tests, PlatformIO native build, and the resulting program. `build-all.sh`
+builds nine firmware roles, verifies limits and expected artifacts, and creates
+ignored `dist/` manifests.
 `static-checks.sh` checks format, source classification, SPDX/license coverage,
 hardware isolation, shell syntax, pin/break declarations, role source, and ELF
 symbols. **Statically validated**
@@ -47,4 +48,3 @@ manifests record dirty state so uncommitted-source artifacts are evident.
 
 Remote GitHub Actions have not been run for this local-only repository. Workflow
 syntax and every underlying command are validated locally. **Statically validated**
-

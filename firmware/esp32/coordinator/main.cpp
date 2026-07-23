@@ -76,7 +76,8 @@ void print_help() {
   Serial.println("enable | lr LEFT RIGHT | drive SPEED STEER | stop | disable");
   Serial.println("forward VALUE | reverse VALUE | ramp STEP | clearfault");
   Serial.println("shutdown | status | help");
-  Serial.println("Motion requires READY acknowledgment and fresh 100 ms sequence acknowledgment.");
+  Serial.println("Motion requires READY acknowledgment and fresh 100 ms "
+                 "sequence acknowledgment.");
 }
 
 void print_status() {
@@ -97,10 +98,10 @@ void print_status() {
       console_state.target.mode == GS_DRIVE_DIRECT_LR ? "lr" : "drive",
       console_state.target.first, console_state.target.second,
       console_state.current.left, console_state.current.right,
-      feedback.left_applied, feedback.right_applied, console_state.ramp_per_tick,
-      last_sent_sequence, feedback.accepted_esp_sequence,
-      feedback.forwarded_slave_sequence, feedback.accepted_slave_sequence,
-      exact_ack() ? 1u : 0u,
+      feedback.left_applied, feedback.right_applied,
+      console_state.ramp_per_tick, last_sent_sequence,
+      feedback.accepted_esp_sequence, feedback.forwarded_slave_sequence,
+      feedback.accepted_slave_sequence, exact_ack() ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PEER_HEALTHY) != 0u ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PA4_RAW_HIGH) != 0u ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PA4_BYPASS) != 0u ? 1u : 0u,
@@ -297,8 +298,8 @@ void setup() {
   last_feedback_ms = millis();
   last_control_input_ms = millis();
   last_sequence_change_ms = millis();
-  Serial.println(
-      "GAUSSTOP SWD coordinator protocol v2 ready, motors disabled. Type help.");
+  Serial.println("GAUSSTOP SWD coordinator protocol v2 ready, motors disabled. "
+                 "Type help.");
 }
 
 void loop() {

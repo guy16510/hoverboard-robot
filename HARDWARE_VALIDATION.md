@@ -74,7 +74,7 @@ zero/disabled slave commands are emitted.
 ## Stage 7: Single master motor
 
 Install operational master firmware only after Stages 1--6 pass. Lift the wheel
-and use low bounded demand with PWM ceiling 80. Verify Hall ordering, initial
+and use low bounded demand with PWM ceiling 100. Verify Hall ordering, initial
 commutation selection, startup, coast stop, command timeout, PA4/PA6/fault
 behavior, and electrical/mechanical direction. Restore recovery firmware after
 an unexplained result.
@@ -104,4 +104,3 @@ Before connecting an ST-Link or ESP32, run Stage 1 against the
 `gausstop_safe_recovery` manifest and verify its target name, release flags,
 byte size, and SHA-256. Then connect only the Stage 2 SWD wires with both ST-Link
 power pins and the ESP32 disconnected.
-

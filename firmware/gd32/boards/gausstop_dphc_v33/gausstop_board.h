@@ -129,6 +129,7 @@ uint8_t gs_board_read_hall(void);
 void gs_board_hall_exti_service(void);
 bool gs_board_hall_event_read(gs_board_hall_event *event);
 uint32_t gs_board_hall_overflow_count(void);
+bool gs_board_shutdown_raw_high(void);
 bool gs_board_shutdown_clear(void);
 bool gs_board_adc_read(uint16_t *out);
 bool gs_board_watchdog_was_reset(void);

@@ -4,10 +4,14 @@ set -euo pipefail
 
 repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$repo_dir"
+search_roots=(tools)
+if [[ -d .github ]]; then
+  search_roots+=(.github)
+fi
 automatic_files=()
 while IFS= read -r source; do
   automatic_files+=("$source")
-done < <(rg --files .github tools -g '*.sh' -g '*.yml' -g '*.yaml' | \
+done < <(rg --files "${search_roots[@]}" -g '*.sh' -g '*.yml' -g '*.yaml' | \
   rg -v '^tools/hardware/|^tools/check-hardware-isolation\.sh$')
 automatic_files+=(platformio.ini)
 if rg -n '(pio[[:space:]]+device|pio[[:space:]]+run[^\n]*upload|lsusb|system_profiler[[:space:]]+USB|/dev/(cu|tty)|st-flash|OpenOCD|openocd|STM32_Programmer_CLI|chip_id|flash_id|write_flash|erase_flash)' "${automatic_files[@]}"; then

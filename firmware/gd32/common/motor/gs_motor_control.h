@@ -32,6 +32,7 @@ typedef struct {
   uint32_t last_step_ms;
   uint32_t dwell_until_ms;
   uint16_t compare_offset;
+  uint16_t ramp_remainder;
   uint8_t previous_hall;
   int8_t direction;
   bool hall_seen;
@@ -58,6 +59,7 @@ void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
                    uint32_t now_ms);
 gs_motor_output gs_motor_step(gs_motor_controller *motor,
                               const gs_motor_input *input);
+bool gs_motor_bridge_active(const gs_motor_controller *motor);
 void gs_motor_force_off(gs_motor_controller *motor);
 void gs_motor_clear_fault(gs_motor_controller *motor, uint32_t now_ms);
 

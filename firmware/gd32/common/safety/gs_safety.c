@@ -31,9 +31,6 @@ void gs_safety_set_enabled(gs_safety_supervisor *supervisor, bool enabled) {
     return;
   }
   supervisor->enabled = enabled;
-  if (!enabled) {
-    supervisor->demand_active = false;
-  }
 }
 
 void gs_safety_note_command(gs_safety_supervisor *supervisor, uint32_t now_ms) {

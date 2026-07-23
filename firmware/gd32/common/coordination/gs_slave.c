@@ -8,8 +8,7 @@
 #include "gs_safety.h"
 #include "gs_wheel_mix.h"
 
-static void stop_slave(gs_slave_coordinator *slave,
-                       gs_controller_state state) {
+static void stop_slave(gs_slave_coordinator *slave, gs_controller_state state) {
   slave->demanded_electrical = 0;
   slave->applied_electrical = 0;
   slave->state = state;
@@ -102,7 +101,7 @@ bool gs_slave_accept_master_frame(gs_slave_coordinator *slave,
   slave->demanded_electrical =
       gs_normalize_wheel_command(command.electrical_command);
   slave->state = slave->demanded_electrical == 0 ? GS_CONTROLLER_READY
-                                                  : GS_CONTROLLER_ACTIVE;
+                                                 : GS_CONTROLLER_ACTIVE;
   return true;
 }
 
@@ -135,6 +134,18 @@ void gs_slave_finish_fault_clear(gs_slave_coordinator *slave, bool success) {
   stop_slave(slave, GS_CONTROLLER_DISABLED);
 }
 
+void gs_slave_set_motor_status(gs_slave_coordinator *slave, uint8_t hall,
+                               uint16_t compare_offset, bool bridge_enabled,
+                               bool pa4_raw_high) {
+  if (slave == NULL) {
+    return;
+  }
+  slave->hall = hall;
+  slave->compare_offset = compare_offset;
+  slave->bridge_enabled = bridge_enabled;
+  slave->pa4_raw_high = pa4_raw_high;
+}
+
 bool gs_slave_make_feedback(const gs_slave_coordinator *slave,
                             uint8_t out[GS_SLAVE_FEEDBACK_SIZE],
                             uint32_t now_ms) {
@@ -152,6 +163,16 @@ bool gs_slave_make_feedback(const gs_slave_coordinator *slave,
           slave->master_seen
               ? gs_age_ms_u16(now_ms, slave->last_master_command_ms)
               : UINT16_MAX,
+      .hall = slave->hall,
+      .status_flags =
+          (uint8_t)((slave->bridge_enabled ? GS_MOTOR_FEEDBACK_BRIDGE_ENABLED
+                                           : 0u) |
+                    (slave->pa4_raw_high ? GS_MOTOR_FEEDBACK_PA4_RAW_HIGH
+                                         : 0u) |
+                    (slave->clear_fault_pending
+                         ? GS_MOTOR_FEEDBACK_CLEAR_PENDING
+                         : 0u)),
+      .compare_offset = slave->compare_offset,
   };
   return gs_encode_slave_feedback(out, &feedback);
 }

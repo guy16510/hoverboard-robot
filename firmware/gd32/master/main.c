@@ -8,6 +8,7 @@
 #include "gs_master.h"
 #include "gs_motor_control.h"
 #include "gs_safety.h"
+#include "gs_wheel_mix.h"
 
 static gs_master_coordinator master;
 static gs_motor_controller motor;
@@ -117,6 +118,8 @@ static void apply_motor_step(uint8_t hall, bool hall_changed,
   }
   master.applied.left = output.demand.logical_command;
   master.local_odometer = motor.odometer;
+  gs_master_set_motor_status(&master, hall, output.demand.compare_offset,
+                             output.demand.bridge_enabled);
 }
 
 static void service_motor(void) {
@@ -145,20 +148,18 @@ static void service_motor(void) {
     force_master_fault(GS_FAULT_HALL_CAPTURE_OVERFLOW);
   }
   const uint8_t hall = gs_board_read_hall();
-  const bool pa4_raw_high = gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
+  const bool pa4_raw_high = gs_board_shutdown_raw_high();
   gs_master_set_runtime_status(&master, pa4_raw_high, pa4_bypass_compiled());
   gs_safety_set_enabled(&safety, master.state == GS_CONTROLLER_READY ||
                                      master.state == GS_CONTROLLER_ACTIVE);
-  gs_safety_note_demand(
-      &safety, master.demanded.left != 0 || motor.applied_command != 0, now_ms);
+  gs_safety_note_demand(&safety, gs_motor_bridge_active(&motor), now_ms);
   const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
                                    adc_value, hall != 0u && hall != 7u};
-  if (gs_master_fault_clear_requested(&master) &&
-      master.requested.left == 0 && master.requested.right == 0 &&
-      master.demanded.left == 0 && master.demanded.right == 0 &&
-      master.applied.left == 0 && master.applied.right == 0 &&
-      motor.requested_command == 0 && motor.applied_command == 0 &&
-      gs_safety_clear(&safety, &sample, now_ms)) {
+  if (gs_master_fault_clear_requested(&master) && master.requested.left == 0 &&
+      master.requested.right == 0 && master.demanded.left == 0 &&
+      master.demanded.right == 0 && master.applied.left == 0 &&
+      master.applied.right == 0 && motor.requested_command == 0 &&
+      motor.applied_command == 0 && gs_safety_clear(&safety, &sample, now_ms)) {
     gs_motor_clear_fault(&motor, now_ms);
     gs_master_finish_fault_clear(&master, true);
   }
@@ -216,7 +217,7 @@ int main(void) {
     if ((int32_t)(now - next_link_ms) >= 0) {
       uint8_t frame[GS_SLAVE_COMMAND_SIZE];
       next_link_ms = now + 20u;
-      if (gs_master_make_slave_frame(&master, frame) &&
+      if (gs_master_make_slave_frame(&master, frame, now) &&
           !gs_board_uart_write(GS_UART_LINK, frame, sizeof(frame))) {
         force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
       }

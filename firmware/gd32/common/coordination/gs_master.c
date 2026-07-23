@@ -160,14 +160,16 @@ void gs_master_tick(gs_master_coordinator *master, uint32_t now_ms) {
   }
   if (master->slave_feedback.accepted_sequence !=
           master->last_forwarded_sequence &&
-      (uint32_t)(now_ms - master->last_esp_command_ms) > GS_SLAVE_TIMEOUT_MS) {
+      (uint32_t)(now_ms - master->last_forwarded_sequence_ms) >
+          GS_SLAVE_TIMEOUT_MS) {
     master->faults |= GS_FAULT_MASTER_LINK_TIMEOUT;
     stop_master(master, GS_CONTROLLER_FAULTED);
   }
 }
 
 bool gs_master_make_slave_frame(gs_master_coordinator *master,
-                                uint8_t out[GS_SLAVE_COMMAND_SIZE]) {
+                                uint8_t out[GS_SLAVE_COMMAND_SIZE],
+                                uint32_t now_ms) {
   if (master == NULL || out == NULL) {
     return false;
   }
@@ -185,13 +187,16 @@ bool gs_master_make_slave_frame(gs_master_coordinator *master,
   if (!gs_encode_slave_command(out, &command)) {
     return false;
   }
+  if (command.sequence != master->last_forwarded_sequence) {
+    master->last_forwarded_sequence_ms = now_ms;
+  }
   master->last_forwarded_sequence = command.sequence;
   return true;
 }
 
 bool gs_master_accept_slave_feedback(
-    gs_master_coordinator *master,
-    const uint8_t frame[GS_SLAVE_FEEDBACK_SIZE], uint32_t now_ms) {
+    gs_master_coordinator *master, const uint8_t frame[GS_SLAVE_FEEDBACK_SIZE],
+    uint32_t now_ms) {
   gs_slave_feedback feedback;
   if (master == NULL || !gs_decode_slave_feedback(&feedback, frame)) {
     if (master != NULL) {
@@ -209,8 +214,8 @@ bool gs_master_accept_slave_feedback(
 
   if (master->state == GS_CONTROLLER_ACTIVE &&
       (!slave_state_healthy(feedback.state) || feedback.faults != 0u)) {
-    master->faults |= feedback.faults != 0u ? feedback.faults
-                                           : GS_FAULT_MASTER_LINK_TIMEOUT;
+    master->faults |=
+        feedback.faults != 0u ? feedback.faults : GS_FAULT_MASTER_LINK_TIMEOUT;
     stop_master(master, GS_CONTROLLER_FAULTED);
   }
   return true;
@@ -245,6 +250,16 @@ void gs_master_set_runtime_status(gs_master_coordinator *master,
                 (pa4_bypass ? GS_FEEDBACK_PA4_BYPASS : 0u));
 }
 
+void gs_master_set_motor_status(gs_master_coordinator *master, uint8_t hall,
+                                uint16_t compare_offset, bool bridge_enabled) {
+  if (master == NULL) {
+    return;
+  }
+  master->local_hall = hall;
+  master->local_compare_offset = compare_offset;
+  master->local_bridge_enabled = bridge_enabled;
+}
+
 bool gs_master_make_feedback(const gs_master_coordinator *master,
                              uint8_t out[GS_MASTER_FEEDBACK_SIZE],
                              uint32_t now_ms) {
@@ -255,7 +270,8 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
   if (gs_master_peer_healthy(master, now_ms)) {
     flags |= GS_FEEDBACK_PEER_HEALTHY;
   }
-  if (master->clear_fault_pending) {
+  if (master->clear_fault_pending || (master->slave_feedback.status_flags &
+                                      GS_MOTOR_FEEDBACK_CLEAR_PENDING) != 0u) {
     flags |= GS_FEEDBACK_CLEAR_PENDING;
   }
   const gs_master_feedback feedback = {
@@ -263,7 +279,8 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
       .master_state = (uint8_t)master->state,
       .slave_state = master->slave_feedback.state,
       .status_flags = flags,
-      .accepted_esp_sequence = master->esp_seen ? master->last_esp_sequence : 0u,
+      .accepted_esp_sequence =
+          master->esp_seen ? master->last_esp_sequence : 0u,
       .forwarded_slave_sequence = master->last_forwarded_sequence,
       .accepted_slave_sequence = master->slave_feedback.accepted_sequence,
       .left_applied = master->applied.left,
@@ -274,14 +291,29 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
       .master_faults = master->faults,
       .slave_faults = master->slave_feedback.faults,
       .master_command_age_ms =
-          master->esp_seen
-              ? gs_age_ms_u16(now_ms, master->last_esp_command_ms)
-              : UINT16_MAX,
+          master->esp_seen ? gs_age_ms_u16(now_ms, master->last_esp_command_ms)
+                           : UINT16_MAX,
       .slave_feedback_age_ms =
           master->slave_feedback_seen
               ? gs_age_ms_u16(now_ms, master->last_slave_feedback_ms)
               : UINT16_MAX,
       .slave_command_age_ms = master->slave_feedback.command_age_ms,
+      .left_hall = master->local_hall,
+      .right_hall = master->slave_feedback.hall,
+      .left_compare_offset = master->local_compare_offset,
+      .right_compare_offset = master->slave_feedback.compare_offset,
+      .motor_status_flags =
+          (uint8_t)((master->local_bridge_enabled
+                         ? GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED
+                         : 0u) |
+                    ((master->slave_feedback.status_flags &
+                      GS_MOTOR_FEEDBACK_BRIDGE_ENABLED) != 0u
+                         ? GS_MASTER_MOTOR_RIGHT_BRIDGE_ENABLED
+                         : 0u) |
+                    ((master->slave_feedback.status_flags &
+                      GS_MOTOR_FEEDBACK_PA4_RAW_HIGH) != 0u
+                         ? GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH
+                         : 0u)),
   };
   return gs_encode_master_feedback(out, &feedback);
 }

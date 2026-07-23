@@ -8,8 +8,6 @@
 #include "gs_types.h"
 
 enum {
-  GS_PWM_OFFSET_MAX = 80,
-  GS_PWM_OFFSET_START = 40,
   GS_ESP_TIMEOUT_MS = 400,
   GS_SLAVE_TIMEOUT_MS = 100,
   GS_STARTUP_TIMEOUT_MS = 700,

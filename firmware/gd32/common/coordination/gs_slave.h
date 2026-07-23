@@ -23,6 +23,10 @@ typedef struct {
   bool master_seen;
   bool shutdown;
   bool clear_fault_pending;
+  uint8_t hall;
+  uint16_t compare_offset;
+  bool bridge_enabled;
+  bool pa4_raw_high;
 } gs_slave_coordinator;
 
 void gs_slave_init(gs_slave_coordinator *slave, uint32_t now_ms);
@@ -32,6 +36,9 @@ bool gs_slave_accept_master_frame(gs_slave_coordinator *slave,
 void gs_slave_tick(gs_slave_coordinator *slave, uint32_t now_ms);
 bool gs_slave_fault_clear_requested(const gs_slave_coordinator *slave);
 void gs_slave_finish_fault_clear(gs_slave_coordinator *slave, bool success);
+void gs_slave_set_motor_status(gs_slave_coordinator *slave, uint8_t hall,
+                               uint16_t compare_offset, bool bridge_enabled,
+                               bool pa4_raw_high);
 bool gs_slave_make_feedback(const gs_slave_coordinator *slave,
                             uint8_t out[GS_SLAVE_FEEDBACK_SIZE],
                             uint32_t now_ms);

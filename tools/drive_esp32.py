@@ -1,4 +1,5 @@
 #!/usr/bin/env python3
+# SPDX-License-Identifier: GPL-3.0-only
 """Run a bounded, acknowledged ESP32 dual-wheel bench command.
 
 Requires: python -m pip install pyserial
@@ -32,6 +33,7 @@ READY = 1
 ACTIVE = 2
 FAULTED = 3
 SHUTDOWN = 4
+COMMAND_DEADBAND = 50
 
 
 def command_value(value: str) -> int:
@@ -151,7 +153,9 @@ class SerialMonitor:
         predicate: Callable[[dict[str, Any]], bool],
         timeout: float,
         description: str,
+        allow_faults: bool = False,
     ) -> dict[str, Any]:
+        started = time.monotonic()
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
             self.request_status()
@@ -160,7 +164,9 @@ class SerialMonitor:
                 event = self.events.get(timeout=wait)
             except queue.Empty:
                 continue
-            validate_status(event.payload)
+            if event.received_monotonic < started:
+                continue
+            validate_status(event.payload, allow_faults=allow_faults)
             if predicate(event.payload):
                 return event.payload
         raise RuntimeError(f"Timed out waiting for {description}")
@@ -176,25 +182,131 @@ def faults(status: dict[str, Any]) -> tuple[int, int]:
     return int(raw[0]), int(raw[1])
 
 
-def validate_status(status: dict[str, Any]) -> None:
+def integer_pair(status: dict[str, Any], name: str, default: int) -> tuple[int, int]:
+    raw = status.get(name, [default, default])
+    if not isinstance(raw, list) or len(raw) != 2:
+        raise RuntimeError(f"Malformed {name} telemetry: {raw!r}")
+    return int(raw[0]), int(raw[1])
+
+
+def validate_status(status: dict[str, Any], allow_faults: bool = False) -> None:
     if int(status.get("protocol", -1)) != 2:
         raise RuntimeError(f"Unexpected protocol version: {status.get('protocol')}")
     master_state, slave_state = states(status)
     master_fault, slave_fault = faults(status)
-    if master_fault or slave_fault:
+    if not allow_faults and (master_fault or slave_fault):
         raise RuntimeError(
             f"Controller fault, master=0x{master_fault:08x}, slave=0x{slave_fault:08x}"
         )
-    if master_state in (FAULTED, SHUTDOWN) or slave_state in (FAULTED, SHUTDOWN):
+    if master_state == SHUTDOWN or slave_state == SHUTDOWN:
+        raise RuntimeError(
+            f"Unsafe controller state, master={master_state}, slave={slave_state}"
+        )
+    if not allow_faults and (
+        master_state == FAULTED or slave_state == FAULTED
+    ):
         raise RuntimeError(
             f"Unsafe controller state, master={master_state}, slave={slave_state}"
         )
     if int(status.get("esp_feedback_age_ms", 999999)) > 150:
         raise RuntimeError("ESP32 feedback is stale")
+    if not bool(status.get("pa4_raw_high")) and not bool(status.get("pa4_bypass")):
+        raise RuntimeError("MASTER PA4 is low without the explicit bypass")
+    if not bool(status.get("slave_pa4_raw_high")):
+        raise RuntimeError("SLAVE PA4 is low")
+    halls = integer_pair(status, "halls", 0)
+    if any(hall < 1 or hall > 6 for hall in halls):
+        raise RuntimeError(f"Invalid Hall telemetry: {halls}")
+    compare = integer_pair(status, "compare", -1)
+    bridge = integer_pair(status, "bridge", -1)
+    applied = integer_pair(status, "applied", 1001)
+    for wheel, (command, offset, enabled) in enumerate(
+        zip(applied, compare, bridge), start=1
+    ):
+        if offset < 0 or offset > 100:
+            raise RuntimeError(f"Wheel {wheel} compare offset is invalid: {offset}")
+        if enabled not in (0, 1) or enabled != int(offset > 0):
+            raise RuntimeError(
+                f"Wheel {wheel} bridge/compare disagreement: bridge={enabled}, "
+                f"compare={offset}"
+            )
+        magnitude = abs(command)
+        applied_matches_bridge = (
+            magnitude >= COMMAND_DEADBAND
+            if enabled
+            else magnitude < COMMAND_DEADBAND
+        )
+        if magnitude > 1000 or not applied_matches_bridge:
+            raise RuntimeError(
+                f"Wheel {wheel} applied/bridge disagreement: applied={command}, "
+                f"bridge={enabled}"
+            )
+
+
+def validate_motion_result(
+    commands: tuple[int, int],
+    bridge_seen: tuple[bool, bool],
+    odometer_delta: tuple[int, int],
+) -> None:
+    for wheel, (command, bridge_enabled, delta) in enumerate(
+        zip(commands, bridge_seen, odometer_delta), start=1
+    ):
+        if command == 0:
+            continue
+        if not bridge_enabled:
+            raise RuntimeError(f"Wheel {wheel} bridge never enabled")
+        if delta == 0:
+            raise RuntimeError(f"Wheel {wheel} produced no Hall movement")
+        if command * delta < 0:
+            raise RuntimeError(
+                f"Wheel {wheel} moved opposite the commanded direction: "
+                f"command={command}, odometer_delta={delta}"
+            )
+
+
+def validate_transport_progress(
+    baseline: dict[str, Any], current: dict[str, Any]
+) -> None:
+    baseline_crc = int(baseline.get("crc_errors", -1))
+    current_crc = int(current.get("crc_errors", -1))
+    if baseline_crc < 0 or current_crc != baseline_crc:
+        raise RuntimeError(
+            f"ESP32 CRC errors increased: baseline={baseline_crc}, "
+            f"current={current_crc}"
+        )
+    baseline_timeouts = int(baseline.get("ack_timeouts", -1))
+    current_timeouts = int(current.get("ack_timeouts", -1))
+    if baseline_timeouts < 0 or current_timeouts != baseline_timeouts:
+        raise RuntimeError(
+            "ESP32 acknowledgment timeout count increased: "
+            f"baseline={baseline_timeouts}, current={current_timeouts}"
+        )
+    baseline_tx = int(baseline.get("tx", -1))
+    baseline_rx = int(baseline.get("rx", -1))
+    current_tx = int(current.get("tx", -1))
+    current_rx = int(current.get("rx", -1))
+    if (
+        baseline_tx < 0
+        or baseline_rx < 0
+        or current_tx <= baseline_tx
+        or current_rx <= baseline_rx
+    ):
+        raise RuntimeError(
+            "Bidirectional transport did not progress: "
+            f"tx={baseline_tx}->{current_tx}, rx={baseline_rx}->{current_rx}"
+        )
 
 
 def acknowledged(status: dict[str, Any]) -> bool:
     return bool(status.get("exact_ack"))
+
+
+def outputs_off(status: dict[str, Any]) -> bool:
+    return (
+        integer_pair(status, "applied", 1) == (0, 0)
+        and integer_pair(status, "compare", 1) == (0, 0)
+        and integer_pair(status, "bridge", 1) == (0, 0)
+    )
 
 
 def zero_ready(status: dict[str, Any]) -> bool:
@@ -203,30 +315,52 @@ def zero_ready(status: dict[str, Any]) -> bool:
         and bool(status.get("peer_healthy"))
         and acknowledged(status)
         and states(status) == (READY, READY)
-        and list(status.get("applied", [1, 1])) == [0, 0]
+        and outputs_off(status)
+    )
+
+
+def motion_session_healthy(status: dict[str, Any]) -> bool:
+    operational_states = {READY, ACTIVE}
+    return (
+        bool(status.get("session_ready"))
+        and bool(status.get("peer_healthy"))
+        and all(state in operational_states for state in states(status))
     )
 
 
 def disabled(status: dict[str, Any]) -> bool:
-    return states(status) == (0, 0) and list(status.get("applied", [1, 1])) == [0, 0]
+    return states(status) == (0, 0) and outputs_off(status)
+
+
+def fault_clear_confirmed(status: dict[str, Any]) -> bool:
+    return (
+        disabled(status)
+        and acknowledged(status)
+        and faults(status) == (0, 0)
+        and not bool(status.get("clear_pending"))
+    )
 
 
 def run_test(
     args: argparse.Namespace, port: serial.Serial, monitor: SerialMonitor
-) -> tuple[int, float, float]:
+) -> tuple[int, float, float, tuple[int, int]]:
     monitor.set_stage("pre_enable")
     send_line(port, "disable")
     send_line(port, f"ramp {args.ramp}")
     send_line(port, "clearfault")
     monitor.wait_for(
-        lambda status: disabled(status) and not bool(status.get("clear_pending")),
+        fault_clear_confirmed,
         args.ready_timeout,
         "fault-clear confirmation while disabled",
+        allow_faults=True,
     )
 
     monitor.set_stage("zero_enable")
     send_line(port, "enable")
-    monitor.wait_for(zero_ready, args.ready_timeout, "READY,READY zero-demand acknowledgment")
+    ready_status = monitor.wait_for(
+        zero_ready, args.ready_timeout, "READY,READY zero-demand acknowledgment"
+    )
+    baseline_odometers = integer_pair(ready_status, "odometers", 0)
 
     moving = args.left != 0 or args.right != 0
     monitor.set_stage("demand")
@@ -235,6 +369,7 @@ def run_test(
     next_send = start
     next_status = start
     send_times: list[float] = []
+    bridge_seen = [False, False]
 
     while time.monotonic() - start < args.duration:
         now = time.monotonic()
@@ -250,19 +385,36 @@ def run_test(
         if latest is not None:
             status = latest.payload
             validate_status(status)
+            for wheel, enabled in enumerate(integer_pair(status, "bridge", 0)):
+                bridge_seen[wheel] = bridge_seen[wheel] or bool(enabled)
             if not acknowledged(status) and now - latest.received_monotonic > 0.10:
                 raise RuntimeError("Command acknowledgment is missing")
             master_state, slave_state = states(status)
-            if moving and bool(status.get("session_ready")):
-                if master_state not in (READY, ACTIVE) or slave_state not in (READY, ACTIVE):
-                    raise RuntimeError(
-                        f"Unexpected demand state, master={master_state}, slave={slave_state}"
-                    )
+            if moving and not motion_session_healthy(status):
+                raise RuntimeError(
+                    "Motion session lost readiness or peer health: "
+                    f"master={master_state}, slave={slave_state}"
+                )
         sleep_for = min(0.002, max(0.0, next_send - time.monotonic()))
         if sleep_for:
             time.sleep(sleep_for)
 
-    monitor.request_status()
+    final_status = monitor.wait_for(
+        acknowledged, min(args.ready_timeout, 1.0), "final command acknowledgment"
+    )
+    validate_transport_progress(ready_status, final_status)
+    for wheel, enabled in enumerate(integer_pair(final_status, "bridge", 0)):
+        bridge_seen[wheel] = bridge_seen[wheel] or bool(enabled)
+    final_odometers = integer_pair(final_status, "odometers", 0)
+    odometer_delta = tuple(
+        final - baseline
+        for final, baseline in zip(final_odometers, baseline_odometers)
+    )
+    validate_motion_result(
+        (args.left, args.right),
+        (bridge_seen[0], bridge_seen[1]),
+        odometer_delta,
+    )
     if send_times:
         intervals = [b - a for a, b in zip(send_times, send_times[1:])]
         elapsed = max(send_times[-1] - send_times[0], interval)
@@ -271,7 +423,12 @@ def run_test(
     else:
         achieved_rate = 0.0
         worst_interval = 0.0
-    return len(send_times), max(worst_interval, 0.0), achieved_rate
+    return (
+        len(send_times),
+        max(worst_interval, 0.0),
+        achieved_rate,
+        odometer_delta,
+    )
 
 
 def main() -> int:
@@ -289,6 +446,7 @@ def main() -> int:
     sent = 0
     worst_interval = 0.0
     achieved_rate = 0.0
+    odometer_delta = (0, 0)
     failure: BaseException | None = None
 
     with serial.Serial(args.port, 115200, timeout=0.05, write_timeout=0.5) as port:
@@ -297,7 +455,9 @@ def main() -> int:
         monitor = SerialMonitor(port, log_path)
         monitor.start()
         try:
-            sent, worst_interval, achieved_rate = run_test(args, port, monitor)
+            sent, worst_interval, achieved_rate, odometer_delta = run_test(
+                args, port, monitor
+            )
         except BaseException as exc:
             failure = exc
         finally:
@@ -320,7 +480,8 @@ def main() -> int:
 
     print(
         f"sent={sent} achieved_rate_hz={achieved_rate:.2f} "
-        f"worst_command_interval_ms={worst_interval * 1000.0:.2f} log={log_path}"
+        f"worst_command_interval_ms={worst_interval * 1000.0:.2f} "
+        f"odometer_delta={odometer_delta[0]},{odometer_delta[1]} log={log_path}"
     )
     if failure is not None:
         raise failure

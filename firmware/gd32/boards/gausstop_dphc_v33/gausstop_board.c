@@ -14,8 +14,8 @@ enum {
   GS_UART_TX_BUFFER_SIZE = 128,
 };
 
-_Static_assert((GS_HALL_EVENT_BUFFER_SIZE &
-                (GS_HALL_EVENT_BUFFER_SIZE - 1u)) == 0u,
+_Static_assert((GS_HALL_EVENT_BUFFER_SIZE & (GS_HALL_EVENT_BUFFER_SIZE - 1u)) ==
+                   0u,
                "Hall event buffer size must be a power of two");
 _Static_assert((GS_UART_TX_BUFFER_SIZE & (GS_UART_TX_BUFFER_SIZE - 1u)) == 0u,
                "UART TX buffer size must be a power of two");
@@ -34,6 +34,8 @@ static volatile uint8_t uart_tx_buffers[GS_BOARD_UART_COUNT]
 static volatile uint8_t uart_tx_heads[GS_BOARD_UART_COUNT];
 static volatile uint8_t uart_tx_tails[GS_BOARD_UART_COUNT];
 static volatile gs_board_uart_stats uart_stats[GS_BOARD_UART_COUNT];
+static bool bridge_active;
+static uint8_t bridge_enabled_phase_mask;
 
 void SysTick_Handler(void) { ++milliseconds; }
 
@@ -157,11 +159,11 @@ static void adc_init(void) {
 }
 
 uint8_t gs_board_read_hall(void) {
-  return (uint8_t)(((gpio_input_bit_get(GPIOC, GPIO_PIN_14) == SET ? 1u : 0u)
-                    << 2) |
-                   ((gpio_input_bit_get(GPIOA, GPIO_PIN_0) == SET ? 1u : 0u)
-                    << 1) |
-                   (gpio_input_bit_get(GPIOB, GPIO_PIN_11) == SET ? 1u : 0u));
+  return (
+      uint8_t)(((gpio_input_bit_get(GPIOC, GPIO_PIN_14) == SET ? 1u : 0u)
+                << 2) |
+               ((gpio_input_bit_get(GPIOA, GPIO_PIN_0) == SET ? 1u : 0u) << 1) |
+               (gpio_input_bit_get(GPIOB, GPIO_PIN_11) == SET ? 1u : 0u));
 }
 
 uint32_t gs_board_micros(void) {
@@ -259,8 +261,7 @@ bool gs_board_hall_event_read(gs_board_hall_event *event) {
   event->hall = hall_events[tail].hall;
   event->timestamp_us = hall_events[tail].timestamp_us;
   event->interval_us = hall_events[tail].interval_us;
-  hall_event_tail =
-      (uint8_t)((tail + 1u) & (GS_HALL_EVENT_BUFFER_SIZE - 1u));
+  hall_event_tail = (uint8_t)((tail + 1u) & (GS_HALL_EVENT_BUFFER_SIZE - 1u));
   return true;
 }
 
@@ -285,51 +286,61 @@ void gs_board_bridge_off(void *context) {
     timer_channel_complementary_output_state_config(TIMER0, pwm_channels[index],
                                                     TIMER_CCXN_DISABLE);
   }
+  bridge_active = false;
+  bridge_enabled_phase_mask = 0u;
+}
+
+static void write_bridge_plan(const gs_bridge_drive_plan *plan) {
+  for (uint8_t phase = 0u; phase < GS_BRIDGE_PHASE_COUNT; ++phase) {
+    const uint8_t channel = channel_for_phase((gs_phase)phase);
+    timer_channel_output_pulse_value_config(TIMER0, pwm_channels[channel],
+                                            plan->compare[phase]);
+  }
+}
+
+static void start_bridge_plan(const gs_bridge_drive_plan *plan) {
+  gs_board_bridge_off(NULL);
+  for (uint8_t index = 0u; index < GS_BRIDGE_PHASE_COUNT; ++index) {
+    timer_channel_output_shadow_config(TIMER0, pwm_channels[index],
+                                       TIMER_OC_SHADOW_DISABLE);
+  }
+  write_bridge_plan(plan);
+  for (uint8_t phase = 0u; phase < GS_BRIDGE_PHASE_COUNT; ++phase) {
+    const uint8_t channel = channel_for_phase((gs_phase)phase);
+    timer_channel_output_shadow_config(TIMER0, pwm_channels[channel],
+                                       TIMER_OC_SHADOW_ENABLE);
+    if ((plan->enabled_phase_mask & (uint8_t)(1u << phase)) == 0u) {
+      continue;
+    }
+    timer_channel_output_state_config(TIMER0, pwm_channels[channel],
+                                      TIMER_CCX_ENABLE);
+    timer_channel_complementary_output_state_config(
+        TIMER0, pwm_channels[channel], TIMER_CCXN_ENABLE);
+  }
+  timer_primary_output_config(TIMER0, ENABLE);
+  bridge_enabled_phase_mask = plan->enabled_phase_mask;
+  bridge_active = true;
 }
 
 bool gs_board_bridge_apply(void *context, const gs_commutation_vector *vector,
                            uint16_t compare_offset) {
   (void)context;
   const gs_motor_power_profile *power = gs_motor_power_profile_current();
-  if (vector == NULL || compare_offset == 0u ||
-      compare_offset > power->maximum_compare || !gs_board_shutdown_clear()) {
+  gs_bridge_drive_plan plan;
+  if (!gs_bridge_make_drive_plan(vector, GS_PWM_MIDPOINT, compare_offset,
+                                 power->maximum_compare, &plan) ||
+      !gs_board_shutdown_clear()) {
     gs_board_bridge_off(NULL);
     return false;
   }
 
-  const uint8_t source = channel_for_phase(vector->source);
-  const uint8_t sink = channel_for_phase(vector->sink);
-  const uint8_t floating = channel_for_phase(vector->floating);
-  timer_primary_output_config(TIMER0, DISABLE);
-  for (uint8_t index = 0u; index < 3u; ++index) {
-    timer_channel_output_state_config(TIMER0, pwm_channels[index],
-                                      TIMER_CCX_DISABLE);
-    timer_channel_complementary_output_state_config(TIMER0, pwm_channels[index],
-                                                    TIMER_CCXN_DISABLE);
+  if (!bridge_active || bridge_enabled_phase_mask != plan.enabled_phase_mask) {
+    start_bridge_plan(&plan);
+    return true;
   }
-
-  timer_channel_output_pulse_value_config(TIMER0, pwm_channels[source],
-                                          GS_PWM_MIDPOINT + compare_offset);
-  timer_channel_output_pulse_value_config(TIMER0, pwm_channels[sink],
-                                          GS_PWM_MIDPOINT - compare_offset);
-  timer_channel_output_pulse_value_config(TIMER0, pwm_channels[floating],
-                                          GS_PWM_MIDPOINT);
-  timer_channel_output_state_config(TIMER0, pwm_channels[source],
-                                    TIMER_CCX_ENABLE);
-  timer_channel_complementary_output_state_config(TIMER0, pwm_channels[source],
-                                                  TIMER_CCXN_ENABLE);
-  timer_channel_output_state_config(TIMER0, pwm_channels[sink],
-                                    TIMER_CCX_ENABLE);
-  timer_channel_complementary_output_state_config(TIMER0, pwm_channels[sink],
-                                                  TIMER_CCXN_ENABLE);
-#if GS_BRIDGE_PROFILE_ID == 2
-  timer_channel_output_state_config(TIMER0, pwm_channels[floating],
-                                    TIMER_CCX_ENABLE);
-  timer_channel_complementary_output_state_config(TIMER0,
-                                                  pwm_channels[floating],
-                                                  TIMER_CCXN_ENABLE);
-#endif
-  timer_primary_output_config(TIMER0, ENABLE);
+  timer_update_event_disable(TIMER0);
+  write_bridge_plan(&plan);
+  timer_update_event_enable(TIMER0);
   return true;
 }
 
@@ -343,11 +354,15 @@ gs_bridge_profile_id gs_board_bridge_profile_id(void) {
   return gs_bridge_profile_current();
 }
 
+bool gs_board_shutdown_raw_high(void) {
+  return gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
+}
+
 bool gs_board_shutdown_clear(void) {
 #if defined(GS_BYPASS_PA4_SHUTDOWN) && GS_BYPASS_PA4_SHUTDOWN == 1
   return true;
 #else
-  return gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
+  return gs_board_shutdown_raw_high();
 #endif
 }
 
@@ -456,8 +471,7 @@ bool gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
   }
   const uint8_t head = uart_tx_heads[index];
   const uint8_t tail = uart_tx_tails[index];
-  const uint8_t used =
-      (uint8_t)((head - tail) & (GS_UART_TX_BUFFER_SIZE - 1u));
+  const uint8_t used = (uint8_t)((head - tail) & (GS_UART_TX_BUFFER_SIZE - 1u));
   const uint32_t available = GS_UART_TX_BUFFER_SIZE - 1u - used;
   if (length > available) {
     ++uart_stats[index].tx_overflows;
@@ -485,8 +499,7 @@ static void service_uart_tx(gs_board_uart uart) {
     return;
   }
   usart_data_transmit(peripheral, uart_tx_buffers[index][tail]);
-  uart_tx_tails[index] =
-      (uint8_t)((tail + 1u) & (GS_UART_TX_BUFFER_SIZE - 1u));
+  uart_tx_tails[index] = (uint8_t)((tail + 1u) & (GS_UART_TX_BUFFER_SIZE - 1u));
   ++uart_stats[index].tx_bytes;
 }
 

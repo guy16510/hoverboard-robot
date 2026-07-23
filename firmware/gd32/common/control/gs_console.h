@@ -33,5 +33,7 @@ void gs_console_init(gs_console_state *state);
 gs_console_result gs_console_execute(gs_console_state *state, const char *line,
                                      size_t length);
 void gs_console_ramp_tick(gs_console_state *state);
+void gs_console_ramp_tick_when_ready(gs_console_state *state,
+                                     bool motion_ready);
 
 #endif

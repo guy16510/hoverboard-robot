@@ -25,19 +25,28 @@ static int16_t clamp_command(int16_t value) {
 }
 
 static int16_t advance_toward(int16_t current, int16_t target,
-                              uint32_t elapsed_ms, uint16_t rate_per_second) {
-  int32_t step = (int32_t)rate_per_second * elapsed_ms / 1000;
+                              uint32_t elapsed_ms, uint16_t rate_per_second,
+                              uint16_t *remainder) {
   const int32_t delta = (int32_t)target - current;
-  if (step == 0 && delta != 0) {
-    step = 1;
+  if (delta == 0 || remainder == NULL) {
+    if (remainder != NULL) {
+      *remainder = 0u;
+    }
+    return target;
   }
-  if (delta > step) {
-    return (int16_t)(current + step);
+  const uint64_t scaled = (uint64_t)rate_per_second * elapsed_ms + *remainder;
+  const uint64_t step = scaled / 1000u;
+  *remainder = (uint16_t)(scaled % 1000u);
+  if (step == 0u) {
+    return current;
   }
-  if (delta < -step) {
-    return (int16_t)(current - step);
+  const uint32_t magnitude = (uint32_t)(delta < 0 ? -delta : delta);
+  if (step >= magnitude) {
+    *remainder = 0u;
+    return target;
   }
-  return target;
+  return delta > 0 ? (int16_t)(current + (int32_t)step)
+                   : (int16_t)(current - (int32_t)step);
 }
 
 static void disable_bridge(gs_motor_controller *motor) {
@@ -46,6 +55,11 @@ static void disable_bridge(gs_motor_controller *motor) {
   if (motor->bridge.disable != NULL) {
     motor->bridge.disable(motor->bridge.context);
   }
+}
+
+static void reset_hall_tracking(gs_motor_controller *motor) {
+  motor->previous_hall = 0u;
+  motor->hall_seen = false;
 }
 
 void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
@@ -60,6 +74,10 @@ void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
   disable_bridge(motor);
 }
 
+bool gs_motor_bridge_active(const gs_motor_controller *motor) {
+  return motor != NULL && motor->bridge_enabled && motor->compare_offset != 0u;
+}
+
 void gs_motor_force_off(gs_motor_controller *motor) {
   if (motor == NULL) {
     return;
@@ -67,7 +85,9 @@ void gs_motor_force_off(gs_motor_controller *motor) {
   motor->applied_command = 0;
   motor->requested_command = 0;
   motor->direction = 0;
+  motor->ramp_remainder = 0u;
   motor->state = GS_MOTOR_DISABLED;
+  reset_hall_tracking(motor);
   disable_bridge(motor);
 }
 
@@ -130,7 +150,10 @@ gs_motor_output gs_motor_step(gs_motor_controller *motor,
       return motor_output(motor, GS_HALL_REPEATED, false);
     }
     motor->state = GS_MOTOR_DISABLED;
-    motor->direction = command_direction(motor->requested_command);
+    motor->direction = 0;
+    motor->last_step_ms = input->now_ms;
+    motor->ramp_remainder = 0u;
+    return motor_output(motor, GS_HALL_REPEATED, false);
   }
 
   const uint32_t elapsed_ms = input->now_ms - motor->last_step_ms;
@@ -140,11 +163,13 @@ gs_motor_output gs_motor_step(gs_motor_controller *motor,
   if (applied_direction != 0 && requested_direction != 0 &&
       applied_direction != requested_direction) {
     motor->applied_command = advance_toward(
-        motor->applied_command, 0, elapsed_ms, profile->deceleration_per_second);
+        motor->applied_command, 0, elapsed_ms, profile->deceleration_per_second,
+        &motor->ramp_remainder);
     motor->last_step_ms = input->now_ms;
     if (motor->applied_command == 0) {
       motor->state = GS_MOTOR_REVERSAL_DWELL;
       motor->dwell_until_ms = input->now_ms + GS_DIRECTION_DWELL_MS;
+      reset_hall_tracking(motor);
       disable_bridge(motor);
       return motor_output(motor, GS_HALL_REPEATED, false);
     }
@@ -154,13 +179,15 @@ gs_motor_output gs_motor_step(gs_motor_controller *motor,
     motor->applied_command = advance_toward(
         motor->applied_command, motor->requested_command, elapsed_ms,
         increasing ? profile->acceleration_per_second
-                   : profile->deceleration_per_second);
+                   : profile->deceleration_per_second,
+        &motor->ramp_remainder);
     motor->last_step_ms = input->now_ms;
   }
 
   if (motor->applied_command == 0) {
     motor->state = GS_MOTOR_DISABLED;
     motor->direction = 0;
+    reset_hall_tracking(motor);
     disable_bridge(motor);
     return motor_output(motor, GS_HALL_REPEATED, false);
   }
@@ -182,8 +209,7 @@ gs_motor_output gs_motor_step(gs_motor_controller *motor,
     motor->state = GS_MOTOR_RUNNING;
   }
 
-  const uint16_t compare =
-      gs_motor_compare_for_command(motor->applied_command);
+  const uint16_t compare = gs_motor_compare_for_command(motor->applied_command);
   if (compare == 0u) {
     disable_bridge(motor);
     return motor_output(motor, hall_result, false);

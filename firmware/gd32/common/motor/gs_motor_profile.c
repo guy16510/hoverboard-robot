@@ -13,7 +13,7 @@ static const gs_motor_power_profile current_profile = {
     .command_deadband = GS_COMMAND_DEADBAND,
     .command_full_scale = 250,
     .startup_compare = 40u,
-    .maximum_compare = 80u,
+    .maximum_compare = 100u,
     .acceleration_per_second = 400u,
     .deceleration_per_second = 800u,
 };
@@ -49,10 +49,10 @@ uint16_t gs_motor_compare_for_command(int16_t command) {
   if (magnitude >= current_profile.command_full_scale) {
     return current_profile.maximum_compare;
   }
-  const int32_t compare_span =
-      (int32_t)current_profile.maximum_compare - current_profile.startup_compare;
-  const int32_t command_span =
-      (int32_t)current_profile.command_full_scale - current_profile.command_deadband;
+  const int32_t compare_span = (int32_t)current_profile.maximum_compare -
+                               current_profile.startup_compare;
+  const int32_t command_span = (int32_t)current_profile.command_full_scale -
+                               current_profile.command_deadband;
   const int32_t scaled =
       ((int32_t)magnitude - current_profile.command_deadband) * compare_span /
       command_span;

@@ -87,8 +87,9 @@ int main(void) {
     while (gs_board_uart_read(GS_UART_REMOTE, &byte)) {
       const uint32_t recent_index =
           gs_communication_diagnostic.recent_write_index;
-      gs_communication_diagnostic.recent_remote_bytes
-          [recent_index % GS_DIAGNOSTIC_RECENT_BYTES] = byte;
+      gs_communication_diagnostic
+          .recent_remote_bytes[recent_index % GS_DIAGNOSTIC_RECENT_BYTES] =
+          byte;
       gs_communication_diagnostic.recent_write_index = recent_index + 1u;
       ++gs_communication_diagnostic.remote_raw_bytes;
       const gs_parse_result result =
@@ -103,8 +104,7 @@ int main(void) {
         }
         if (send_remote_feedback(&slave_status, diagnostic_faults,
                                  accepted_esp_sequence,
-                                 forwarded_slave_sequence,
-                                 gs_board_millis())) {
+                                 forwarded_slave_sequence, gs_board_millis())) {
           ++gs_communication_diagnostic.remote_replies;
         }
       } else if (result == GS_PARSE_BAD_CRC) {
@@ -125,8 +125,8 @@ int main(void) {
     if ((int32_t)(now - next_beacon_ms) >= 0) {
       next_beacon_ms = now + 100u;
       if (send_remote_feedback(&slave_status, diagnostic_faults,
-                               accepted_esp_sequence,
-                               forwarded_slave_sequence, now)) {
+                               accepted_esp_sequence, forwarded_slave_sequence,
+                               now)) {
         ++gs_communication_diagnostic.remote_beacons;
       }
     }

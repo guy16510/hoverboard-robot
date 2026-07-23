@@ -169,3 +169,15 @@ void gs_console_ramp_tick(gs_console_state *state) {
   state->current.right =
       ramp_axis(state->current.right, target.right, state->ramp_per_tick);
 }
+
+void gs_console_ramp_tick_when_ready(gs_console_state *state,
+                                     bool motion_ready) {
+  if (state == NULL) {
+    return;
+  }
+  if (!motion_ready) {
+    state->current = (gs_wheel_pair){0, 0};
+    return;
+  }
+  gs_console_ramp_tick(state);
+}

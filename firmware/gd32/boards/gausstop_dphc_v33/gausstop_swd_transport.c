@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "gausstop_board.h"
+#include "gausstop_swd_timing.h"
 
 #include <stdbool.h>
 #include <stddef.h>
@@ -12,14 +13,21 @@
 #endif
 
 enum {
-  GS_SWD_UART_BAUD = 19200,
-  GS_SWD_UART_BIT_TICKS = 52,
-  GS_SWD_UART_FIRST_SAMPLE_TICKS = 78,
+  GS_SWD_UART_TIMER_HZ = GS_SWD_UART_TIMER_HZ_FOR(GS_SYSTEM_CLOCK_HZ),
+  GS_SWD_UART_BIT_TICKS = GS_SWD_UART_BIT_TICKS_FOR(GS_SYSTEM_CLOCK_HZ),
+  GS_SWD_UART_FIRST_SAMPLE_TICKS =
+      GS_SWD_UART_FIRST_SAMPLE_TICKS_FOR(GS_SYSTEM_CLOCK_HZ),
   GS_SWD_UART_RX_BUFFER_SIZE = 64,
   GS_SWD_UART_TX_BUFFER_SIZE = 128,
   GS_SWD_TAKEOVER_DELAY_MS = 2000,
 };
 
+_Static_assert(GS_SWD_UART_TIMER_HZ == 1000000u,
+               "SWD UART timer must run at 1 MHz");
+_Static_assert(GS_SWD_UART_BIT_TICKS == 52u,
+               "19,200 baud must use 52 timer ticks");
+_Static_assert(GS_SWD_UART_FIRST_SAMPLE_TICKS == 78u,
+               "first UART sample must occur at 1.5 bit times");
 _Static_assert((GS_SWD_UART_RX_BUFFER_SIZE &
                 (GS_SWD_UART_RX_BUFFER_SIZE - 1u)) == 0u,
                "RX buffer size must be a power of two");
@@ -64,12 +72,13 @@ static void configure_tx_timer(void) {
   rcu_periph_clock_enable(RCU_TIMER13);
   timer_deinit(TIMER13);
   timer_parameter_struct timer = {0};
-  timer.prescaler = 7u;
+  timer.prescaler = GS_SWD_UART_TIMER_DIVIDER - 1u;
   timer.alignedmode = TIMER_COUNTER_EDGE;
   timer.counterdirection = TIMER_COUNTER_UP;
   timer.period = GS_SWD_UART_BIT_TICKS - 1u;
   timer.clockdivision = TIMER_CKDIV_DIV1;
   timer_init(TIMER13, &timer);
+  timer_auto_reload_shadow_disable(TIMER13);
   timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
   timer_interrupt_enable(TIMER13, TIMER_INT_UP);
   timer_disable(TIMER13);
@@ -80,12 +89,19 @@ static void configure_rx_timer(void) {
   rcu_periph_clock_enable(RCU_TIMER14);
   timer_deinit(TIMER14);
   timer_parameter_struct timer = {0};
-  timer.prescaler = 7u;
+  timer.prescaler = GS_SWD_UART_TIMER_DIVIDER - 1u;
   timer.alignedmode = TIMER_COUNTER_EDGE;
   timer.counterdirection = TIMER_COUNTER_UP;
   timer.period = GS_SWD_UART_FIRST_SAMPLE_TICKS - 1u;
   timer.clockdivision = TIMER_CKDIV_DIV1;
   timer_init(TIMER14, &timer);
+  /*
+   * RX changes ARR after the 1.5-bit first sample. If ARR shadowing is left
+   * enabled, the old period can remain active for another cycle, and the next
+   * byte can begin with the one-bit period still active. Both cases shift every
+   * following sample and present as continuous framing and CRC failures.
+   */
+  timer_auto_reload_shadow_disable(TIMER14);
   timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
   timer_interrupt_enable(TIMER14, TIMER_INT_UP);
   timer_disable(TIMER14);
@@ -232,7 +248,6 @@ static void init_remote(bool transmit_enabled) {
   NVIC_SetPriority(SysTick_IRQn, 3u);
   nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
   (void)transmit_enabled;
-  (void)GS_SWD_UART_BAUD;
 }
 
 void __wrap_gs_board_uart_init(gs_board_uart uart, bool transmit_enabled) {

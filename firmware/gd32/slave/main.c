@@ -52,6 +52,20 @@ static void service_link_rx(void) {
   (void)gs_frame_parser_poll(&parser, gs_board_millis());
 }
 
+static void service_transport_health(void) {
+  static uint32_t link_rx_overflows;
+  static uint32_t link_tx_overflows;
+  gs_board_uart_stats link = {0};
+  gs_board_uart_get_stats(GS_UART_LINK, &link);
+  const bool overflowed = link.rx_overflows != link_rx_overflows ||
+                          link.tx_overflows != link_tx_overflows;
+  link_rx_overflows = link.rx_overflows;
+  link_tx_overflows = link.tx_overflows;
+  if (overflowed) {
+    force_slave_fault(GS_FAULT_TRANSPORT_OVERFLOW);
+  }
+}
+
 static void apply_motor_step(uint8_t hall, bool hall_changed,
                              uint32_t interval_us, bool permitted,
                              uint32_t now_ms) {
@@ -94,13 +108,11 @@ static void service_motor(void) {
       last_adc_ms = now_ms;
     }
   }
-
   const uint32_t hall_overflows = gs_board_hall_overflow_count();
   if (hall_overflows != observed_hall_overflows) {
     observed_hall_overflows = hall_overflows;
     force_slave_fault(GS_FAULT_HALL_CAPTURE_OVERFLOW);
   }
-
   const uint8_t hall = gs_board_read_hall();
   gs_safety_set_enabled(&safety, slave.state == GS_CONTROLLER_READY ||
                                      slave.state == GS_CONTROLLER_ACTIVE);
@@ -109,7 +121,6 @@ static void service_motor(void) {
       now_ms);
   const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
                                    adc_value, hall != 0u && hall != 7u};
-
   if (gs_slave_fault_clear_requested(&slave) &&
       slave.demanded_electrical == 0 && slave.applied_electrical == 0 &&
       motor.requested_command == 0 && motor.applied_command == 0 &&
@@ -117,7 +128,6 @@ static void service_motor(void) {
     gs_motor_clear_fault(&motor, now_ms);
     gs_slave_finish_fault_clear(&slave, true);
   }
-
   gs_safety_evaluate(&safety, &sample, now_ms);
   slave.faults |= safety.faults.bits;
   if (safety.faults.bits != 0u) {
@@ -127,7 +137,6 @@ static void service_motor(void) {
   }
   const bool permitted =
       safety.enabled && safety.adc_ready && safety.faults.bits == 0u;
-
   bool processed_event = false;
   if (event_available) {
     processed_event = true;
@@ -156,10 +165,10 @@ int main(void) {
   const uint8_t marker[] = {GS_COMMAND_MARKER};
   gs_frame_parser_init(&parser, marker, 1, GS_SLAVE_COMMAND_SIZE);
   gs_board_watchdog_start();
-
   uint32_t next_feedback_ms = 0;
   for (;;) {
     service_link_rx();
+    service_transport_health();
     gs_slave_tick(&slave, gs_board_millis());
     service_motor();
     const uint32_t now = gs_board_millis();

@@ -36,6 +36,7 @@ typedef enum {
 static volatile uint8_t rx_buffer[GS_SWD_UART_RX_BUFFER_SIZE];
 static volatile uint8_t rx_head;
 static volatile uint8_t rx_tail;
+static volatile uint32_t rx_byte_count;
 static volatile uint32_t rx_overflow_count;
 static volatile uint32_t rx_framing_error_count;
 static volatile gs_swd_rx_state rx_state;
@@ -45,6 +46,7 @@ static volatile uint8_t rx_bit;
 static volatile uint8_t tx_buffer[GS_SWD_UART_TX_BUFFER_SIZE];
 static volatile uint8_t tx_head;
 static volatile uint8_t tx_tail;
+static volatile uint32_t tx_byte_count;
 static volatile uint32_t tx_overflow_count;
 static volatile bool tx_active;
 static volatile bool tx_timer_running;
@@ -55,6 +57,8 @@ void __real_gs_board_uart_init(gs_board_uart uart, bool transmit_enabled);
 bool __real_gs_board_uart_read(gs_board_uart uart, uint8_t *byte);
 bool __real_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
                                 uint32_t length);
+void __real_gs_board_uart_get_stats(gs_board_uart uart,
+                                    gs_board_uart_stats *stats);
 
 static void configure_tx_timer(void) {
   rcu_periph_clock_enable(RCU_TIMER13);
@@ -97,6 +101,7 @@ static void push_rx_byte(uint8_t byte) {
   }
   rx_buffer[rx_head] = byte;
   rx_head = next;
+  ++rx_byte_count;
 }
 
 static bool pop_tx_byte(uint8_t *byte) {
@@ -139,7 +144,6 @@ void TIMER14_IRQHandler(void) {
     return;
   }
   timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
-
   if (rx_state == GS_SWD_RX_DATA) {
     if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
       rx_byte |= (uint8_t)(1u << rx_bit);
@@ -152,7 +156,6 @@ void TIMER14_IRQHandler(void) {
     }
     return;
   }
-
   timer_disable(TIMER14);
   if (rx_state == GS_SWD_RX_STOP &&
       gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
@@ -177,7 +180,6 @@ static void drive_tx_bit(void) {
     tx_active = true;
     tx_bit = 0u;
   }
-
   if (tx_bit == 0u) {
     gpio_bit_reset(GPIOA, GPIO_PIN_14);
   } else if (tx_bit <= 8u) {
@@ -189,10 +191,10 @@ static void drive_tx_bit(void) {
   } else {
     gpio_bit_set(GPIOA, GPIO_PIN_14);
   }
-
   ++tx_bit;
   if (tx_bit > 9u) {
     tx_active = false;
+    ++tx_byte_count;
   }
 }
 
@@ -207,35 +209,31 @@ void TIMER13_IRQHandler(void) {
 static void init_remote(bool transmit_enabled) {
   while (gs_board_millis() < GS_SWD_TAKEOVER_DELAY_MS) {
   }
-
   rx_head = 0u;
   rx_tail = 0u;
+  rx_byte_count = 0u;
   rx_overflow_count = 0u;
   rx_framing_error_count = 0u;
   rx_state = GS_SWD_RX_IDLE;
   tx_head = 0u;
   tx_tail = 0u;
+  tx_byte_count = 0u;
   tx_overflow_count = 0u;
   tx_active = false;
   tx_timer_running = false;
-
   rcu_periph_clock_enable(RCU_GPIOA);
   rcu_periph_clock_enable(RCU_CFGCMP);
-
   gpio_bit_set(GPIOA, GPIO_PIN_14);
   gpio_mode_set(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_PULLUP, GPIO_PIN_14);
   gpio_output_options_set(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, GPIO_PIN_14);
-
   gpio_mode_set(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_13);
   syscfg_exti_line_config(EXTI_SOURCE_GPIOA, EXTI_SOURCE_PIN13);
   exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
   exti_interrupt_flag_clear(EXTI_13);
-
   configure_tx_timer();
   configure_rx_timer();
   NVIC_SetPriority(SysTick_IRQn, 3u);
   nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
-
   (void)transmit_enabled;
   (void)GS_SWD_UART_BAUD;
 }
@@ -269,7 +267,6 @@ bool __wrap_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
   if (bytes == NULL || length == 0u) {
     return false;
   }
-
   const uint8_t head = tx_head;
   const uint8_t tail = tx_tail;
   const uint8_t used =
@@ -279,14 +276,12 @@ bool __wrap_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
     ++tx_overflow_count;
     return false;
   }
-
   uint8_t next = head;
   for (uint32_t index = 0u; index < length; ++index) {
     tx_buffer[next] = bytes[index];
     next = (uint8_t)((next + 1u) & (GS_SWD_UART_TX_BUFFER_SIZE - 1u));
   }
   tx_head = next;
-
   if (!tx_timer_running) {
     tx_timer_running = true;
     timer_counter_value_config(TIMER13, 0u);
@@ -294,4 +289,20 @@ bool __wrap_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
     timer_enable(TIMER13);
   }
   return true;
+}
+
+void __wrap_gs_board_uart_get_stats(gs_board_uart uart,
+                                    gs_board_uart_stats *stats) {
+  if (uart != GS_UART_REMOTE) {
+    __real_gs_board_uart_get_stats(uart, stats);
+    return;
+  }
+  if (stats == NULL) {
+    return;
+  }
+  stats->rx_bytes = rx_byte_count;
+  stats->tx_bytes = tx_byte_count;
+  stats->rx_overflows = rx_overflow_count;
+  stats->tx_overflows = tx_overflow_count;
+  stats->framing_errors = rx_framing_error_count;
 }

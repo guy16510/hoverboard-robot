@@ -68,6 +68,28 @@ static void service_slave_rx(void) {
   (void)gs_frame_parser_poll(&slave_parser, gs_board_millis());
 }
 
+static void service_transport_health(void) {
+  static uint32_t remote_rx_overflows;
+  static uint32_t remote_tx_overflows;
+  static uint32_t link_rx_overflows;
+  static uint32_t link_tx_overflows;
+  gs_board_uart_stats remote = {0};
+  gs_board_uart_stats link = {0};
+  gs_board_uart_get_stats(GS_UART_REMOTE, &remote);
+  gs_board_uart_get_stats(GS_UART_LINK, &link);
+  const bool overflowed = remote.rx_overflows != remote_rx_overflows ||
+                          remote.tx_overflows != remote_tx_overflows ||
+                          link.rx_overflows != link_rx_overflows ||
+                          link.tx_overflows != link_tx_overflows;
+  remote_rx_overflows = remote.rx_overflows;
+  remote_tx_overflows = remote.tx_overflows;
+  link_rx_overflows = link.rx_overflows;
+  link_tx_overflows = link.tx_overflows;
+  if (overflowed) {
+    force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
+  }
+}
+
 static bool pa4_bypass_compiled(void) {
 #if defined(GS_BYPASS_PA4_SHUTDOWN) && GS_BYPASS_PA4_SHUTDOWN == 1
   return true;
@@ -117,13 +139,11 @@ static void service_motor(void) {
       last_adc_ms = now_ms;
     }
   }
-
   const uint32_t hall_overflows = gs_board_hall_overflow_count();
   if (hall_overflows != observed_hall_overflows) {
     observed_hall_overflows = hall_overflows;
     force_master_fault(GS_FAULT_HALL_CAPTURE_OVERFLOW);
   }
-
   const uint8_t hall = gs_board_read_hall();
   const bool pa4_raw_high = gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
   gs_master_set_runtime_status(&master, pa4_raw_high, pa4_bypass_compiled());
@@ -133,7 +153,6 @@ static void service_motor(void) {
       &safety, master.demanded.left != 0 || motor.applied_command != 0, now_ms);
   const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
                                    adc_value, hall != 0u && hall != 7u};
-
   if (gs_master_fault_clear_requested(&master) &&
       master.requested.left == 0 && master.requested.right == 0 &&
       master.demanded.left == 0 && master.demanded.right == 0 &&
@@ -143,7 +162,6 @@ static void service_motor(void) {
     gs_motor_clear_fault(&motor, now_ms);
     gs_master_finish_fault_clear(&master, true);
   }
-
   gs_safety_evaluate(&safety, &sample, now_ms);
   master.faults |= safety.faults.bits;
   if (safety.faults.bits != 0u) {
@@ -154,7 +172,6 @@ static void service_motor(void) {
   }
   const bool permitted =
       safety.enabled && safety.adc_ready && safety.faults.bits == 0u;
-
   bool processed_event = false;
   if (event_available) {
     processed_event = true;
@@ -187,12 +204,12 @@ int main(void) {
   gs_frame_parser_init(&slave_parser, slave_feedback_marker, 1,
                        GS_SLAVE_FEEDBACK_SIZE);
   gs_board_watchdog_start();
-
   uint32_t next_link_ms = 0;
   uint32_t next_feedback_ms = 0;
   for (;;) {
     service_esp_rx();
     service_slave_rx();
+    service_transport_health();
     gs_master_tick(&master, gs_board_millis());
     service_motor();
     const uint32_t now = gs_board_millis();

@@ -108,6 +108,14 @@ typedef struct {
   uint32_t interval_us;
 } gs_board_hall_event;
 
+typedef struct {
+  uint32_t rx_bytes;
+  uint32_t tx_bytes;
+  uint32_t rx_overflows;
+  uint32_t tx_overflows;
+  uint32_t framing_errors;
+} gs_board_uart_stats;
+
 void gs_board_safe_gpio_init(void);
 void gs_board_time_init(void);
 void gs_board_operational_init(void);
@@ -130,5 +138,6 @@ void gs_board_uart_init(gs_board_uart uart, bool transmit_enabled);
 bool gs_board_uart_read(gs_board_uart uart, uint8_t *byte);
 bool gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
                          uint32_t length);
+void gs_board_uart_get_stats(gs_board_uart uart, gs_board_uart_stats *stats);
 
 #endif

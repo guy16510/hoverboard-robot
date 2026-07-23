@@ -15,8 +15,19 @@ read -r -p "Type FLASH AND VERIFY GAUSSTOP to continue: " confirmation
 [[ "$confirmation" == "FLASH AND VERIFY GAUSSTOP" ]] || { echo "cancelled"; exit 1; }
 readback="${image}.readback.bin"
 [[ ! -e "$readback" ]] || { echo "refusing to overwrite $readback" >&2; exit 2; }
-openocd -f "$interface_cfg" -f "$target_cfg" \
-  -c "adapter speed 100; reset_config srst_only srst_nogate connect_assert_srst; init; reset halt; program $image 0x08000000 verify; dump_image $readback 0x08000000 $image_size; shutdown"
+reset_mode="${GAUSSTOP_RESET_MODE:-srst}"
+case "$reset_mode" in
+  srst)
+    openocd_command="adapter speed 100; reset_config srst_only srst_nogate connect_assert_srst; init; reset halt; program $image 0x08000000 verify; dump_image $readback 0x08000000 $image_size; shutdown"
+    ;;
+  none)
+    openocd_command="adapter speed 100; reset_config none; init; halt; program $image 0x08000000 verify; dump_image $readback 0x08000000 $image_size; shutdown"
+    ;;
+  *)
+    echo "invalid GAUSSTOP_RESET_MODE: $reset_mode (expected srst or none)" >&2
+    exit 2
+    ;;
+esac
+openocd -f "$interface_cfg" -f "$target_cfg" -c "$openocd_command"
 cmp "$image" "$readback"
 shasum -a 256 "$image" "$readback"
-

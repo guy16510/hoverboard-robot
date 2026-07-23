@@ -1,0 +1,14 @@
+# Local build environments and downloaded toolchains
+.venv/
+.pio/
+.platformio/
+.toolchains/
+
+# Local hardware evidence and original firmware backups
+hardware_backups/
+hardware_logs/
+hardware_readbacks/
+dist/**/*.readback.bin
+
+# macOS metadata
+.DS_Store

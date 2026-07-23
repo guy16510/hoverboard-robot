@@ -1,6 +1,7 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "gausstop_board.h"
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -15,30 +16,108 @@ enum {
   GS_SWD_UART_BIT_TICKS = 52,
   GS_SWD_UART_FIRST_SAMPLE_TICKS = 78,
   GS_SWD_UART_RX_BUFFER_SIZE = 64,
+  GS_SWD_UART_TX_BUFFER_SIZE = 128,
   GS_SWD_TAKEOVER_DELAY_MS = 2000,
 };
+
+_Static_assert((GS_SWD_UART_RX_BUFFER_SIZE &
+                (GS_SWD_UART_RX_BUFFER_SIZE - 1u)) == 0u,
+               "RX buffer size must be a power of two");
+_Static_assert((GS_SWD_UART_TX_BUFFER_SIZE &
+                (GS_SWD_UART_TX_BUFFER_SIZE - 1u)) == 0u,
+               "TX buffer size must be a power of two");
+
+typedef enum {
+  GS_SWD_RX_IDLE = 0,
+  GS_SWD_RX_DATA,
+  GS_SWD_RX_STOP,
+} gs_swd_rx_state;
 
 static volatile uint8_t rx_buffer[GS_SWD_UART_RX_BUFFER_SIZE];
 static volatile uint8_t rx_head;
 static volatile uint8_t rx_tail;
+static volatile uint32_t rx_overflow_count;
+static volatile uint32_t rx_framing_error_count;
+static volatile gs_swd_rx_state rx_state;
+static volatile uint8_t rx_byte;
+static volatile uint8_t rx_bit;
+
+static volatile uint8_t tx_buffer[GS_SWD_UART_TX_BUFFER_SIZE];
+static volatile uint8_t tx_head;
+static volatile uint8_t tx_tail;
+static volatile uint32_t tx_overflow_count;
+static volatile bool tx_active;
+static volatile uint8_t tx_byte;
+static volatile uint8_t tx_bit;
 
 void __real_gs_board_uart_init(gs_board_uart uart, bool transmit_enabled);
 bool __real_gs_board_uart_read(gs_board_uart uart, uint8_t *byte);
 bool __real_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
                                 uint32_t length);
 
-static void wait_timer1_offset(uint16_t start, uint16_t offset) {
-  while ((uint16_t)((uint16_t)timer_counter_read(TIMER1) - start) < offset) {
-  }
+static void configure_tx_timer(void) {
+  rcu_periph_clock_enable(RCU_TIMER13);
+  timer_deinit(TIMER13);
+  timer_parameter_struct timer = {0};
+  timer.prescaler = 7u;
+  timer.alignedmode = TIMER_COUNTER_EDGE;
+  timer.counterdirection = TIMER_COUNTER_UP;
+  timer.period = GS_SWD_UART_BIT_TICKS - 1u;
+  timer.clockdivision = TIMER_CKDIV_DIV1;
+  timer_init(TIMER13, &timer);
+  timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
+  timer_interrupt_enable(TIMER13, TIMER_INT_UP);
+  timer_disable(TIMER13);
+  nvic_irq_enable(TIMER13_IRQn, 2u, 0u);
 }
 
-static void push_byte(uint8_t byte) {
+static void configure_rx_timer(void) {
+  rcu_periph_clock_enable(RCU_TIMER14);
+  timer_deinit(TIMER14);
+  timer_parameter_struct timer = {0};
+  timer.prescaler = 7u;
+  timer.alignedmode = TIMER_COUNTER_EDGE;
+  timer.counterdirection = TIMER_COUNTER_UP;
+  timer.period = GS_SWD_UART_FIRST_SAMPLE_TICKS - 1u;
+  timer.clockdivision = TIMER_CKDIV_DIV1;
+  timer_init(TIMER14, &timer);
+  timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
+  timer_interrupt_enable(TIMER14, TIMER_INT_UP);
+  timer_disable(TIMER14);
+  nvic_irq_enable(TIMER14_IRQn, 1u, 0u);
+}
+
+static void push_rx_byte(uint8_t byte) {
   const uint8_t next =
       (uint8_t)((rx_head + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
-  if (next != rx_tail) {
-    rx_buffer[rx_head] = byte;
-    rx_head = next;
+  if (next == rx_tail) {
+    ++rx_overflow_count;
+    return;
   }
+  rx_buffer[rx_head] = byte;
+  rx_head = next;
+}
+
+static bool pop_tx_byte(uint8_t *byte) {
+  if (byte == NULL || tx_tail == tx_head) {
+    return false;
+  }
+  *byte = tx_buffer[tx_tail];
+  tx_tail =
+      (uint8_t)((tx_tail + 1u) & (GS_SWD_UART_TX_BUFFER_SIZE - 1u));
+  return true;
+}
+
+static void start_rx_sampling(void) {
+  rx_state = GS_SWD_RX_DATA;
+  rx_byte = 0u;
+  rx_bit = 0u;
+  timer_disable(TIMER14);
+  timer_autoreload_value_config(TIMER14,
+                                GS_SWD_UART_FIRST_SAMPLE_TICKS - 1u);
+  timer_counter_value_config(TIMER14, 0u);
+  timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
+  timer_enable(TIMER14);
 }
 
 void EXTI4_15_IRQHandler(void) {
@@ -46,22 +125,78 @@ void EXTI4_15_IRQHandler(void) {
     return;
   }
   exti_interrupt_flag_clear(EXTI_13);
-  if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
+  if (rx_state != GS_SWD_RX_IDLE ||
+      gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
+    return;
+  }
+  start_rx_sampling();
+}
+
+void TIMER14_IRQHandler(void) {
+  if (timer_interrupt_flag_get(TIMER14, TIMER_INT_FLAG_UP) == RESET) {
+    return;
+  }
+  timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
+
+  if (rx_state == GS_SWD_RX_DATA) {
+    if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
+      rx_byte |= (uint8_t)(1u << rx_bit);
+    }
+    ++rx_bit;
+    timer_autoreload_value_config(TIMER14, GS_SWD_UART_BIT_TICKS - 1u);
+    timer_counter_value_config(TIMER14, 0u);
+    if (rx_bit >= 8u) {
+      rx_state = GS_SWD_RX_STOP;
+    }
     return;
   }
 
-  const uint16_t start = (uint16_t)timer_counter_read(TIMER1);
-  uint8_t value = 0u;
-  for (uint8_t bit = 0u; bit < 8u; ++bit) {
-    wait_timer1_offset(start,
-                       (uint16_t)(GS_SWD_UART_FIRST_SAMPLE_TICKS +
-                                  (uint16_t)bit * GS_SWD_UART_BIT_TICKS));
-    if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
-      value |= (uint8_t)(1u << bit);
-    }
+  timer_disable(TIMER14);
+  if (rx_state == GS_SWD_RX_STOP &&
+      gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
+    push_rx_byte(rx_byte);
+  } else if (rx_state == GS_SWD_RX_STOP) {
+    ++rx_framing_error_count;
   }
-  push_byte(value);
+  rx_state = GS_SWD_RX_IDLE;
   exti_interrupt_flag_clear(EXTI_13);
+}
+
+static void drive_tx_bit(void) {
+  if (!tx_active) {
+    if (!pop_tx_byte((uint8_t *)&tx_byte)) {
+      gpio_bit_set(GPIOA, GPIO_PIN_14);
+      timer_disable(TIMER13);
+      return;
+    }
+    tx_active = true;
+    tx_bit = 0u;
+  }
+
+  if (tx_bit == 0u) {
+    gpio_bit_reset(GPIOA, GPIO_PIN_14);
+  } else if (tx_bit <= 8u) {
+    if ((tx_byte & (uint8_t)(1u << (tx_bit - 1u))) != 0u) {
+      gpio_bit_set(GPIOA, GPIO_PIN_14);
+    } else {
+      gpio_bit_reset(GPIOA, GPIO_PIN_14);
+    }
+  } else {
+    gpio_bit_set(GPIOA, GPIO_PIN_14);
+  }
+
+  ++tx_bit;
+  if (tx_bit > 9u) {
+    tx_active = false;
+  }
+}
+
+void TIMER13_IRQHandler(void) {
+  if (timer_interrupt_flag_get(TIMER13, TIMER_INT_FLAG_UP) == RESET) {
+    return;
+  }
+  timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
+  drive_tx_bit();
 }
 
 static void init_remote(bool transmit_enabled) {
@@ -70,27 +205,33 @@ static void init_remote(bool transmit_enabled) {
 
   rx_head = 0u;
   rx_tail = 0u;
+  rx_overflow_count = 0u;
+  rx_framing_error_count = 0u;
+  rx_state = GS_SWD_RX_IDLE;
+  tx_head = 0u;
+  tx_tail = 0u;
+  tx_overflow_count = 0u;
+  tx_active = false;
+
   rcu_periph_clock_enable(RCU_GPIOA);
   rcu_periph_clock_enable(RCU_CFGCMP);
 
-  /*
-   * PA14's UART function is USART1_TX on the GD32F130C8, but USART1 is
-   * already used by the master/slave link on PA2/PA3. Drive the remote TX
-   * waveform in software so both links can operate simultaneously.
-   */
   gpio_bit_set(GPIOA, GPIO_PIN_14);
   gpio_mode_set(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_PULLUP, GPIO_PIN_14);
   gpio_output_options_set(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, GPIO_PIN_14);
 
-  /* MASTER RX is PA13/SWDIO using an interrupt-sampled software receiver. */
   gpio_mode_set(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_13);
   syscfg_exti_line_config(EXTI_SOURCE_GPIOA, EXTI_SOURCE_PIN13);
   exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
   exti_interrupt_flag_clear(EXTI_13);
+
+  configure_tx_timer();
+  configure_rx_timer();
   NVIC_SetPriority(SysTick_IRQn, 3u);
-  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
+  nvic_irq_enable(EXTI4_15_IRQn, 1u, 0u);
 
   (void)transmit_enabled;
+  (void)GS_SWD_UART_BAUD;
 }
 
 void __wrap_gs_board_uart_init(gs_board_uart uart, bool transmit_enabled) {
@@ -109,7 +250,8 @@ bool __wrap_gs_board_uart_read(gs_board_uart uart, uint8_t *byte) {
     return false;
   }
   *byte = rx_buffer[rx_tail];
-  rx_tail = (uint8_t)((rx_tail + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
+  rx_tail =
+      (uint8_t)((rx_tail + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
   return true;
 }
 
@@ -118,42 +260,29 @@ bool __wrap_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
   if (uart != GS_UART_REMOTE) {
     return __real_gs_board_uart_write(uart, bytes, length);
   }
-  if (bytes == NULL) {
+  if (bytes == NULL || length == 0u) {
     return false;
   }
 
-  /*
-   * Ignore remote RX edges while emitting a feedback frame. An ESP32 command
-   * that overlaps the 6.8 ms transmission is safely dropped and retried by
-   * the 20 ms heartbeat; sampling a partial byte would instead create a
-   * protocol fault. SysTick remains enabled and is short relative to a bit.
-   */
-  nvic_irq_disable(EXTI4_15_IRQn);
-  for (uint32_t index = 0u; index < length; ++index) {
-    const uint16_t start = (uint16_t)timer_counter_read(TIMER1);
-    gpio_bit_reset(GPIOA, GPIO_PIN_14);
-    wait_timer1_offset(start, GS_SWD_UART_BIT_TICKS);
-    for (uint8_t bit = 0u; bit < 8u; ++bit) {
-      if ((bytes[index] & (uint8_t)(1u << bit)) != 0u) {
-        gpio_bit_set(GPIOA, GPIO_PIN_14);
-      } else {
-        gpio_bit_reset(GPIOA, GPIO_PIN_14);
-      }
-      wait_timer1_offset(
-          start, (uint16_t)((uint16_t)(bit + 2u) * GS_SWD_UART_BIT_TICKS));
-    }
-    gpio_bit_set(GPIOA, GPIO_PIN_14);
-    wait_timer1_offset(start, (uint16_t)(10u * GS_SWD_UART_BIT_TICKS));
+  const uint8_t head = tx_head;
+  const uint8_t tail = tx_tail;
+  const uint8_t used =
+      (uint8_t)((head - tail) & (GS_SWD_UART_TX_BUFFER_SIZE - 1u));
+  const uint32_t available = GS_SWD_UART_TX_BUFFER_SIZE - 1u - used;
+  if (length > available) {
+    ++tx_overflow_count;
+    return false;
   }
 
-  /*
-   * A command may have started while RX interrupts were masked. Keep RX
-   * masked long enough for that nine-byte frame to finish, then resume from
-   * the next 20 ms heartbeat instead of sampling in the middle of a byte.
-   */
-  const uint16_t guard_start = (uint16_t)timer_counter_read(TIMER1);
-  wait_timer1_offset(guard_start, 6000u);
-  exti_interrupt_flag_clear(EXTI_13);
-  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
+  uint8_t next = head;
+  for (uint32_t index = 0u; index < length; ++index) {
+    tx_buffer[next] = bytes[index];
+    next = (uint8_t)((next + 1u) & (GS_SWD_UART_TX_BUFFER_SIZE - 1u));
+  }
+  tx_head = next;
+
+  timer_counter_value_config(TIMER13, 0u);
+  timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
+  timer_enable(TIMER13);
   return true;
 }

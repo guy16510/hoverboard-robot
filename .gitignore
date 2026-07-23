@@ -4,11 +4,17 @@
 .platformio/
 .toolchains/
 
+# Generated firmware is published as immutable CI artifacts, never committed.
+dist/
+artifacts/
+
 # Local hardware evidence and original firmware backups
 hardware_backups/
 hardware_logs/
 hardware_readbacks/
-dist/**/*.readback.bin
+
+# Host-side structured drive logs
+logs/
 
 # macOS metadata
 .DS_Store

@@ -10,11 +10,10 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
-  build:
-    if: ${{ github.event_name != 'push' || !contains(github.event.head_commit.message || '', '[skip build]') }}
+  verify:
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
@@ -28,85 +27,144 @@ jobs:
       - name: Install PlatformIO
         run: python -m pip install --disable-pip-version-check platformio==6.1.19
 
+      - name: Source checks
+        shell: bash
+        run: |
+          set -euo pipefail
+          git diff --check
+          python -m compileall -q tools
+          if git ls-files 'dist/*' | grep -q .; then
+            echo 'Generated firmware must not be committed under dist/' >&2
+            exit 1
+          fi
+          if grep -R --line-number --fixed-strings 'GS_BYPASS_PA4_SHUTDOWN=1' platformio.ini; then
+            echo 'BENCH WARNING: gausstop_master_swd contains the PA4 bypass.'
+          fi
+
       - name: Run native tests
         shell: bash
         run: |
           set -euo pipefail
           if ! pio run -e native_tests > native-build.log 2>&1; then
-            tail -200 native-build.log
+            tail -250 native-build.log
             exit 1
           fi
-          tail -20 native-build.log
+          tail -30 native-build.log
 
-      - name: Build firmware
+      - name: Build every firmware environment
         shell: bash
         run: |
           set -euo pipefail
-          if ! pio run -e gausstop_master_swd -e gausstop_slave -e esp32_swd_coordinator > firmware-build.log 2>&1; then
-            tail -250 firmware-build.log
+          if ! pio run > firmware-build.log 2>&1; then
+            tail -350 firmware-build.log
             exit 1
           fi
-          tail -50 firmware-build.log
+          tail -80 firmware-build.log
+
+      - name: Check firmware size limits
+        shell: bash
+        run: |
+          set -euo pipefail
+          size_bin="$HOME/.platformio/packages/toolchain-gccarmnoneeabi/bin/arm-none-eabi-size"
+          test -x "$size_bin"
+          for env in gausstop_master gausstop_master_swd gausstop_slave; do
+            test -f ".pio/build/${env}/firmware.elf"
+            "$size_bin" ".pio/build/${env}/firmware.elf"
+          done
+
+      - name: Collect immutable firmware artifact
+        shell: bash
+        run: |
+          set -euo pipefail
+          rm -rf artifacts
+          mkdir -p \
+            artifacts/bench_master_pa4_bypass \
+            artifacts/gausstop_slave \
+            artifacts/esp32_swd_coordinator
+
+          cp .pio/build/gausstop_master_swd/firmware.bin artifacts/bench_master_pa4_bypass/
+          cp .pio/build/gausstop_master_swd/firmware.elf artifacts/bench_master_pa4_bypass/
+          cp .pio/build/gausstop_master_swd/firmware.map artifacts/bench_master_pa4_bypass/
+
+          cp .pio/build/gausstop_slave/firmware.bin artifacts/gausstop_slave/
+          cp .pio/build/gausstop_slave/firmware.elf artifacts/gausstop_slave/
+          cp .pio/build/gausstop_slave/firmware.map artifacts/gausstop_slave/
+
+          cp .pio/build/esp32_swd_coordinator/firmware.bin artifacts/esp32_swd_coordinator/
+          cp .pio/build/esp32_swd_coordinator/firmware.elf artifacts/esp32_swd_coordinator/
+          cp .pio/build/esp32_swd_coordinator/firmware.map artifacts/esp32_swd_coordinator/
+          cp .pio/build/esp32_swd_coordinator/bootloader.bin artifacts/esp32_swd_coordinator/
+          cp .pio/build/esp32_swd_coordinator/partitions.bin artifacts/esp32_swd_coordinator/
+
+          python - <<'PY'
+          import hashlib
+          import json
+          import os
+          from pathlib import Path
+
+          root = Path('artifacts')
+          files = sorted(path for path in root.rglob('*') if path.is_file())
+          manifest = {
+              'source_commit': os.environ['GITHUB_SHA'],
+              'protocol_version': 2,
+              'toolchain': {'platformio': '6.1.19', 'python': '3.12'},
+              'profiles': {
+                  'bench_master_pa4_bypass': {
+                      'environment': 'gausstop_master_swd',
+                      'pa4_bypass': True,
+                      'operational_release_allowed': False,
+                  },
+                  'gausstop_slave': {
+                      'environment': 'gausstop_slave',
+                      'pa4_bypass': False,
+                  },
+                  'esp32_swd_coordinator': {
+                      'environment': 'esp32_swd_coordinator',
+                  },
+              },
+              'files': {},
+          }
+          for path in files:
+              manifest['files'][str(path.relative_to(root))] = {
+                  'sha256': hashlib.sha256(path.read_bytes()).hexdigest(),
+                  'bytes': path.stat().st_size,
+              }
+          (root / 'manifest.json').write_text(
+              json.dumps(manifest, indent=2, sort_keys=True) + '\n', encoding='utf-8'
+          )
+          PY
+          sha256sum $(find artifacts -type f ! -name manifest.json | sort) > artifacts/sha256.txt
+
+      - name: Verify clean-build reproducibility
+        shell: bash
+        run: |
+          set -euo pipefail
+          mkdir -p /tmp/first-build
+          cp .pio/build/gausstop_master_swd/firmware.bin /tmp/first-build/master.bin
+          cp .pio/build/gausstop_slave/firmware.bin /tmp/first-build/slave.bin
+          cp .pio/build/esp32_swd_coordinator/firmware.bin /tmp/first-build/esp32.bin
+          pio run -t clean >/dev/null
+          pio run -e gausstop_master_swd -e gausstop_slave -e esp32_swd_coordinator > reproducibility-build.log 2>&1
+          cmp /tmp/first-build/master.bin .pio/build/gausstop_master_swd/firmware.bin
+          cmp /tmp/first-build/slave.bin .pio/build/gausstop_slave/firmware.bin
+          cmp /tmp/first-build/esp32.bin .pio/build/esp32_swd_coordinator/firmware.bin
 
       - name: Upload build logs
         if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
-          name: swd-build-logs
+          name: swd-build-logs-${{ github.sha }}
           path: |
             native-build.log
             firmware-build.log
+            reproducibility-build.log
           if-no-files-found: ignore
-
-      - name: Collect flashable images
-        shell: bash
-        run: |
-          set -euo pipefail
-          rm -rf dist/gausstop_master_swd dist/gausstop_slave_swd_control dist/esp32_swd_coordinator
-          mkdir -p dist/gausstop_master_swd dist/gausstop_slave_swd_control dist/esp32_swd_coordinator
-          cp .pio/build/gausstop_master_swd/firmware.bin dist/gausstop_master_swd/firmware.bin
-          cp .pio/build/gausstop_master_swd/firmware.elf dist/gausstop_master_swd/firmware.elf
-          cp .pio/build/gausstop_master_swd/firmware.map dist/gausstop_master_swd/firmware.map
-          cp .pio/build/gausstop_slave/firmware.bin dist/gausstop_slave_swd_control/firmware.bin
-          cp .pio/build/gausstop_slave/firmware.elf dist/gausstop_slave_swd_control/firmware.elf
-          cp .pio/build/gausstop_slave/firmware.map dist/gausstop_slave_swd_control/firmware.map
-          cp .pio/build/esp32_swd_coordinator/firmware.bin dist/esp32_swd_coordinator/firmware.bin
-          cp .pio/build/esp32_swd_coordinator/firmware.elf dist/esp32_swd_coordinator/firmware.elf
-          cp .pio/build/esp32_swd_coordinator/firmware.map dist/esp32_swd_coordinator/firmware.map
-          cp .pio/build/esp32_swd_coordinator/bootloader.bin dist/esp32_swd_coordinator/bootloader.bin
-          cp .pio/build/esp32_swd_coordinator/partitions.bin dist/esp32_swd_coordinator/partitions.bin
-          (
-            cd dist
-            sha256sum \
-              gausstop_master_swd/firmware.bin \
-              gausstop_slave_swd_control/firmware.bin \
-              esp32_swd_coordinator/bootloader.bin \
-              esp32_swd_coordinator/partitions.bin \
-              esp32_swd_coordinator/firmware.bin \
-              > swd-control-sha256.txt
-          )
+          retention-days: 30
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4
         with:
-          name: swd-esp32-dual-motor-firmware
-          path: |
-            dist/gausstop_master_swd
-            dist/gausstop_slave_swd_control
-            dist/esp32_swd_coordinator
-            dist/swd-control-sha256.txt
+          name: swd-motor-control-${{ github.sha }}
+          path: artifacts
           if-no-files-found: error
-
-      - name: Commit generated firmware
-        if: ${{ github.event_name == 'push' }}
-        shell: bash
-        run: |
-          set -euo pipefail
-          git config user.name github-actions[bot]
-          git config user.email 41898282+github-actions[bot]@users.noreply.github.com
-          git add dist/gausstop_master_swd dist/gausstop_slave_swd_control dist/esp32_swd_coordinator dist/swd-control-sha256.txt
-          if git diff --cached --quiet; then
-            exit 0
-          fi
-          git commit -m "Build SWD ESP32 motor-control firmware [skip build]"
-          git push
+          retention-days: 30

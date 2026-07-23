@@ -26,7 +26,7 @@ static void test_exact_sizes_and_endianness(void) {
   GS_EXPECT_EQ(11, GS_ESP_COMMAND_SIZE);
   GS_EXPECT_EQ(8, GS_SLAVE_COMMAND_SIZE);
   GS_EXPECT_EQ(18, GS_SLAVE_FEEDBACK_SIZE);
-  GS_EXPECT_EQ(32, GS_MASTER_FEEDBACK_SIZE);
+  GS_EXPECT_EQ(40, GS_MASTER_FEEDBACK_SIZE);
   GS_EXPECT_TRUE(gs_encode_esp_command(frame, &command));
   GS_EXPECT_BYTES(prefix, frame, sizeof(prefix));
   GS_EXPECT_EQ(gs_crc16(frame, GS_ESP_COMMAND_SIZE - 2u),
@@ -107,6 +107,8 @@ static void test_all_frame_round_trips(void) {
                master_out.accepted_slave_sequence);
   GS_EXPECT_EQ(master.left_applied, master_out.left_applied);
   GS_EXPECT_EQ(master.right_applied, master_out.right_applied);
+  GS_EXPECT_EQ(master.left_odometer, master_out.left_odometer);
+  GS_EXPECT_EQ(master.right_odometer, master_out.right_odometer);
   GS_EXPECT_EQ(master.master_faults, master_out.master_faults);
   GS_EXPECT_EQ(master.slave_faults, master_out.slave_faults);
   GS_EXPECT_EQ(master.master_command_age_ms,

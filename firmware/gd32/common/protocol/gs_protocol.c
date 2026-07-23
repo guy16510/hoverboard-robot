@@ -183,11 +183,13 @@ bool gs_encode_master_feedback(uint8_t out[GS_MASTER_FEEDBACK_SIZE],
   write_u16(&out[10], feedback->accepted_slave_sequence);
   write_u16(&out[12], (uint16_t)feedback->left_applied);
   write_u16(&out[14], (uint16_t)feedback->right_applied);
-  write_u32(&out[16], feedback->master_faults);
-  write_u32(&out[20], feedback->slave_faults);
-  write_u16(&out[24], feedback->master_command_age_ms);
-  write_u16(&out[26], feedback->slave_feedback_age_ms);
-  write_u16(&out[28], feedback->slave_command_age_ms);
+  write_u32(&out[16], (uint32_t)feedback->left_odometer);
+  write_u32(&out[20], (uint32_t)feedback->right_odometer);
+  write_u32(&out[24], feedback->master_faults);
+  write_u32(&out[28], feedback->slave_faults);
+  write_u16(&out[32], feedback->master_command_age_ms);
+  write_u16(&out[34], feedback->slave_feedback_age_ms);
+  write_u16(&out[36], feedback->slave_command_age_ms);
   append_crc(out, GS_MASTER_FEEDBACK_SIZE);
   return true;
 }
@@ -210,15 +212,17 @@ bool gs_decode_master_feedback(gs_master_feedback *out,
   out->accepted_slave_sequence = read_u16(&frame[10]);
   out->left_applied = (int16_t)read_u16(&frame[12]);
   out->right_applied = (int16_t)read_u16(&frame[14]);
-  out->master_faults = read_u32(&frame[16]);
-  out->slave_faults = read_u32(&frame[20]);
-  out->master_command_age_ms = read_u16(&frame[24]);
-  out->slave_feedback_age_ms = read_u16(&frame[26]);
-  out->slave_command_age_ms = read_u16(&frame[28]);
+  out->left_odometer = (int32_t)read_u32(&frame[16]);
+  out->right_odometer = (int32_t)read_u32(&frame[20]);
+  out->master_faults = read_u32(&frame[24]);
+  out->slave_faults = read_u32(&frame[28]);
+  out->master_command_age_ms = read_u16(&frame[32]);
+  out->slave_feedback_age_ms = read_u16(&frame[34]);
+  out->slave_command_age_ms = read_u16(&frame[36]);
   return true;
 }
 
 _Static_assert(GS_ESP_COMMAND_SIZE == 11, "ESP32 command wire size changed");
 _Static_assert(GS_SLAVE_COMMAND_SIZE == 8, "slave command wire size changed");
 _Static_assert(GS_SLAVE_FEEDBACK_SIZE == 18, "slave feedback wire size changed");
-_Static_assert(GS_MASTER_FEEDBACK_SIZE == 32, "master feedback wire size changed");
+_Static_assert(GS_MASTER_FEEDBACK_SIZE == 40, "master feedback wire size changed");

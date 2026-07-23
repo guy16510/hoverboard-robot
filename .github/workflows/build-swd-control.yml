@@ -34,20 +34,20 @@ jobs:
         run: |
           set -euo pipefail
           if ! pio run -e native_tests > native-build.log 2>&1; then
-            tail -250 native-build.log
+            tail -300 native-build.log
             exit 1
           fi
-          tail -30 native-build.log
+          tail -40 native-build.log
 
       - name: Build every firmware environment
         shell: bash
         run: |
           set -euo pipefail
           if ! pio run > firmware-build.log 2>&1; then
-            tail -350 firmware-build.log
+            tail -400 firmware-build.log
             exit 1
           fi
-          tail -100 firmware-build.log
+          tail -120 firmware-build.log
 
       - name: Check firmware size limits
         shell: bash
@@ -105,7 +105,7 @@ jobs:
           files = sorted(path for path in root.rglob('*') if path.is_file())
           manifest = {
               'source_commit': os.environ['SOURCE_SHA'],
-              'protocol_version': 2,
+              'protocol_version': 3,
               'toolchain': {'platformio': '6.1.19', 'python': '3.12'},
               'profiles': {
                   'gausstop_master_swd': {
@@ -137,7 +137,7 @@ jobs:
                   },
                   'esp32_swd_coordinator': {
                       'environment': 'esp32_swd_coordinator',
-                      'protocol_version': 2,
+                      'protocol_version': 3,
                   },
               },
               'files': {},

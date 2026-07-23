@@ -35,18 +35,17 @@ static bool send_remote_feedback(const gs_slave_feedback *slave_status,
       .protocol_version = GS_PROTOCOL_VERSION,
       .master_state = GS_CONTROLLER_DISABLED,
       .slave_state = slave_status->state,
-      .status_flags = 0u,
       .accepted_esp_sequence = accepted_esp_sequence,
       .forwarded_slave_sequence = forwarded_slave_sequence,
       .accepted_slave_sequence = slave_status->accepted_sequence,
-      .left_applied = 0,
-      .right_applied = 0,
-      .left_odometer = 0,
+      .slave_enable_epoch = slave_status->enable_epoch,
+      .slave_fault_epoch = slave_status->fault_epoch,
+      .slave_clear_result = slave_status->clear_result,
       .right_odometer = slave_status->odometer,
       .master_faults = diagnostic_faults,
       .slave_faults = slave_status->faults,
-      .master_command_age_ms = 0u,
-      .slave_feedback_age_ms = 0u,
+      .master_first_fault = diagnostic_faults,
+      .slave_first_fault = slave_status->first_fault,
       .slave_command_age_ms = slave_status->command_age_ms,
   };
   uint8_t reply[GS_MASTER_FEEDBACK_SIZE];
@@ -73,10 +72,6 @@ int main(void) {
   uint16_t forwarded_slave_sequence = 0;
   gs_slave_feedback slave_status = {
       .state = GS_CONTROLLER_DISABLED,
-      .odometer = 0,
-      .faults = 0u,
-      .applied_electrical = 0,
-      .accepted_sequence = 0u,
       .command_age_ms = UINT16_MAX,
   };
   uint32_t diagnostic_faults = 0;
@@ -133,6 +128,9 @@ int main(void) {
     if ((int32_t)(now - next_slave_ms) >= 0) {
       uint8_t disabled[GS_SLAVE_COMMAND_SIZE];
       ++forwarded_slave_sequence;
+      if (forwarded_slave_sequence == 0u) {
+        ++forwarded_slave_sequence;
+      }
       const gs_slave_command command = {
           .electrical_command = 0,
           .flags = GS_COMMAND_DISABLE,

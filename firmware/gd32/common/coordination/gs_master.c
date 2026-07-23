@@ -17,16 +17,24 @@ static void stop_master(gs_master_coordinator *master,
   master->slave_flags |= GS_COMMAND_DISABLE;
 }
 
+static uint32_t first_fault_bit(uint32_t faults) {
+  return faults & (uint32_t)(~faults + 1u);
+}
+
 static bool command_equal(const gs_esp_command *first,
                           const gs_esp_command *second) {
   return first->speed == second->speed && first->steer == second->steer &&
          first->master_flags == second->master_flags &&
          first->slave_flags == second->slave_flags &&
-         first->sequence == second->sequence;
+         first->sequence == second->sequence &&
+         first->enable_epoch == second->enable_epoch &&
+         first->master_clear_fault_epoch ==
+             second->master_clear_fault_epoch &&
+         first->slave_clear_fault_epoch == second->slave_clear_fault_epoch;
 }
 
-static bool sequence_is_newer(uint16_t sequence, uint16_t previous) {
-  const uint16_t delta = (uint16_t)(sequence - previous);
+static bool serial_is_newer(uint16_t value, uint16_t previous) {
+  const uint16_t delta = (uint16_t)(value - previous);
   return delta != 0u && delta < 0x8000u;
 }
 
@@ -41,17 +49,87 @@ void gs_master_init(gs_master_coordinator *master, uint32_t now_ms) {
   memset(master, 0, sizeof(*master));
   master->state = GS_CONTROLLER_DISABLED;
   master->last_esp_command_ms = now_ms;
+  master->last_new_esp_sequence_ms = now_ms;
   master->last_slave_feedback_ms = now_ms;
   master->slave_flags = GS_COMMAND_DISABLE;
+  master->last_clear_result = GS_CLEAR_NONE;
+}
+
+void gs_master_latch_fault(gs_master_coordinator *master, uint32_t fault) {
+  if (master == NULL || fault == 0u) {
+    return;
+  }
+  const uint32_t new_faults = fault & ~master->faults;
+  if (new_faults != 0u) {
+    if (master->faults == 0u) {
+      master->first_fault = first_fault_bit(new_faults);
+    }
+    ++master->fault_epoch;
+    if (master->fault_epoch == 0u) {
+      ++master->fault_epoch;
+    }
+  }
+  master->faults |= fault;
+  master->clear_fault_pending = false;
+  master->enable_epoch_valid = false;
+  master->recovery_required = true;
+  master->last_clear_result = GS_CLEAR_NONE;
+  stop_master(master, GS_CONTROLLER_FAULTED);
 }
 
 bool gs_master_peer_healthy(const gs_master_coordinator *master,
                             uint32_t now_ms) {
-  return master != NULL && master->slave_feedback_seen &&
+  return master != NULL && master->enable_epoch_valid &&
+         master->slave_feedback_seen &&
          (uint32_t)(now_ms - master->last_slave_feedback_ms) <=
              GS_SLAVE_TIMEOUT_MS &&
          slave_state_healthy(master->slave_feedback.state) &&
-         master->slave_feedback.faults == 0u;
+         master->slave_feedback.faults == 0u &&
+         master->slave_feedback.enable_epoch == master->enable_epoch;
+}
+
+static bool clear_request_valid(gs_master_coordinator *master,
+                                const gs_esp_command *command) {
+  if ((command->master_flags & GS_COMMAND_CLEAR_FAULT) == 0u) {
+    return true;
+  }
+  if ((command->master_flags & GS_COMMAND_DISABLE) == 0u) {
+    master->last_clear_result = GS_CLEAR_REJECT_STATE;
+    return false;
+  }
+  if (command->master_clear_fault_epoch != master->fault_epoch) {
+    master->last_clear_result = GS_CLEAR_REJECT_STALE_EPOCH;
+    return false;
+  }
+  if ((master->faults &
+       (GS_FAULT_WATCHDOG_LOCKOUT | GS_FAULT_SHUTDOWN)) != 0u) {
+    master->last_clear_result = GS_CLEAR_REQUIRES_RESET;
+    return false;
+  }
+  return true;
+}
+
+static bool session_request_valid(gs_master_coordinator *master,
+                                  const gs_esp_command *command,
+                                  gs_wheel_pair requested, uint32_t now_ms) {
+  if ((command->master_flags &
+       (GS_COMMAND_DISABLE | GS_COMMAND_SHUTDOWN)) != 0u) {
+    return true;
+  }
+  if (master->shutdown || master->faults != 0u || command->enable_epoch == 0u) {
+    return false;
+  }
+  const bool moving = requested.left != 0 || requested.right != 0;
+  if (moving) {
+    return master->enable_epoch_valid && !master->recovery_required &&
+           command->enable_epoch == master->enable_epoch &&
+           gs_master_peer_healthy(master, now_ms);
+  }
+  if (master->enable_epoch_valid) {
+    return command->enable_epoch == master->enable_epoch;
+  }
+  return master->enable_epoch == 0u ||
+         serial_is_newer(command->enable_epoch, master->enable_epoch);
 }
 
 bool gs_master_accept_esp_frame(gs_master_coordinator *master,
@@ -65,6 +143,16 @@ bool gs_master_accept_esp_frame(gs_master_coordinator *master,
     return false;
   }
 
+  const gs_wheel_pair requested =
+      (command.master_flags & GS_COMMAND_DIRECT_LR) != 0u
+          ? gs_direct_wheels(command.speed, command.steer)
+          : gs_mix_wheels(command.speed, command.steer);
+  if (!clear_request_valid(master, &command) ||
+      !session_request_valid(master, &command, requested, now_ms)) {
+    ++master->invalid_esp_frames;
+    return false;
+  }
+
   if (master->esp_seen && command.sequence == master->last_esp_sequence) {
     if (!command_equal(&command, &master->last_esp_command)) {
       ++master->invalid_esp_frames;
@@ -73,23 +161,11 @@ bool gs_master_accept_esp_frame(gs_master_coordinator *master,
     master->last_esp_command_ms = now_ms;
     return true;
   }
-
   if (master->esp_seen &&
-      !sequence_is_newer(command.sequence, master->last_esp_sequence)) {
+      !serial_is_newer(command.sequence, master->last_esp_sequence)) {
     ++master->invalid_esp_frames;
     return false;
   }
-
-  const gs_wheel_pair requested =
-      (command.master_flags & GS_COMMAND_DIRECT_LR) != 0u
-          ? gs_direct_wheels(command.speed, command.steer)
-          : gs_mix_wheels(command.speed, command.steer);
-  if ((requested.left != 0 || requested.right != 0) &&
-      !gs_master_peer_healthy(master, now_ms)) {
-    ++master->invalid_esp_frames;
-    return false;
-  }
-
   if (master->esp_seen) {
     const uint16_t delta =
         (uint16_t)(command.sequence - master->last_esp_sequence);
@@ -101,24 +177,24 @@ bool gs_master_accept_esp_frame(gs_master_coordinator *master,
   master->last_esp_command = command;
   master->last_esp_sequence = command.sequence;
   master->last_esp_command_ms = now_ms;
+  master->last_new_esp_sequence_ms = now_ms;
   master->esp_seen = true;
   ++master->valid_esp_frames;
   master->slave_flags = command.slave_flags;
 
   if ((command.master_flags & GS_COMMAND_SHUTDOWN) != 0u) {
     master->clear_fault_pending = false;
+    master->enable_epoch_valid = false;
     master->shutdown = true;
     master->slave_flags |= GS_COMMAND_SHUTDOWN | GS_COMMAND_DISABLE;
     stop_master(master, GS_CONTROLLER_SHUTDOWN);
     return true;
   }
-  if (master->shutdown) {
-    stop_master(master, GS_CONTROLLER_SHUTDOWN);
-    return true;
-  }
   if ((command.master_flags & GS_COMMAND_DISABLE) != 0u) {
+    master->enable_epoch_valid = false;
     if ((command.master_flags & GS_COMMAND_CLEAR_FAULT) != 0u) {
       master->clear_fault_pending = true;
+      master->last_clear_result = GS_CLEAR_NONE;
     }
     master->slave_flags |= GS_COMMAND_DISABLE;
     stop_master(master, GS_CONTROLLER_DISABLED);
@@ -126,11 +202,10 @@ bool gs_master_accept_esp_frame(gs_master_coordinator *master,
   }
 
   master->clear_fault_pending = false;
-  if (master->faults != 0u) {
-    stop_master(master, GS_CONTROLLER_FAULTED);
-    return true;
+  if (!master->enable_epoch_valid) {
+    master->enable_epoch = command.enable_epoch;
+    master->enable_epoch_valid = true;
   }
-
   master->requested = requested;
   master->demanded = requested;
   master->state = requested.left == 0 && requested.right == 0
@@ -146,23 +221,21 @@ void gs_master_tick(gs_master_coordinator *master, uint32_t now_ms) {
     return;
   }
   if ((uint32_t)(now_ms - master->last_esp_command_ms) > GS_ESP_TIMEOUT_MS) {
-    master->faults |= GS_FAULT_COMMAND_TIMEOUT;
-    stop_master(master, GS_CONTROLLER_FAULTED);
+    gs_master_latch_fault(master, GS_FAULT_COMMAND_TIMEOUT);
     return;
   }
   if (master->state != GS_CONTROLLER_ACTIVE) {
     return;
   }
   if (!gs_master_peer_healthy(master, now_ms)) {
-    master->faults |= GS_FAULT_MASTER_LINK_TIMEOUT;
-    stop_master(master, GS_CONTROLLER_FAULTED);
+    gs_master_latch_fault(master, GS_FAULT_MASTER_LINK_TIMEOUT);
     return;
   }
   if (master->slave_feedback.accepted_sequence !=
           master->last_forwarded_sequence &&
-      (uint32_t)(now_ms - master->last_esp_command_ms) > GS_SLAVE_TIMEOUT_MS) {
-    master->faults |= GS_FAULT_MASTER_LINK_TIMEOUT;
-    stop_master(master, GS_CONTROLLER_FAULTED);
+      (uint32_t)(now_ms - master->last_new_esp_sequence_ms) >
+          GS_SLAVE_TIMEOUT_MS) {
+    gs_master_latch_fault(master, GS_FAULT_MASTER_LINK_TIMEOUT);
   }
 }
 
@@ -175,6 +248,9 @@ bool gs_master_make_slave_frame(gs_master_coordinator *master,
       .electrical_command = gs_slave_electrical_command(master->demanded.right),
       .flags = master->slave_flags,
       .sequence = master->last_esp_sequence,
+      .enable_epoch = master->last_esp_command.enable_epoch,
+      .clear_fault_epoch =
+          master->last_esp_command.slave_clear_fault_epoch,
   };
   if (master->state == GS_CONTROLLER_DISABLED ||
       master->state == GS_CONTROLLER_FAULTED ||
@@ -207,11 +283,21 @@ bool gs_master_accept_slave_feedback(
   master->slave_feedback_seen = true;
   ++master->valid_slave_feedback_frames;
 
+  if (feedback.faults != 0u) {
+    gs_master_latch_fault(master, feedback.faults);
+    return true;
+  }
   if (master->state == GS_CONTROLLER_ACTIVE &&
-      (!slave_state_healthy(feedback.state) || feedback.faults != 0u)) {
-    master->faults |= feedback.faults != 0u ? feedback.faults
-                                           : GS_FAULT_MASTER_LINK_TIMEOUT;
-    stop_master(master, GS_CONTROLLER_FAULTED);
+      (!slave_state_healthy(feedback.state) ||
+       feedback.enable_epoch != master->enable_epoch)) {
+    gs_master_latch_fault(master, GS_FAULT_MASTER_LINK_TIMEOUT);
+    return true;
+  }
+  if (master->recovery_required && master->enable_epoch_valid &&
+      feedback.state == GS_CONTROLLER_READY &&
+      feedback.enable_epoch == master->enable_epoch &&
+      feedback.accepted_sequence == master->last_forwarded_sequence) {
+    master->recovery_required = false;
   }
   return true;
 }
@@ -221,18 +307,20 @@ bool gs_master_fault_clear_requested(const gs_master_coordinator *master) {
          master->state == GS_CONTROLLER_DISABLED;
 }
 
-void gs_master_finish_fault_clear(gs_master_coordinator *master, bool success) {
+void gs_master_finish_fault_clear(gs_master_coordinator *master,
+                                  gs_clear_result result) {
   if (master == NULL) {
     return;
   }
-  if (success) {
+  if (result == GS_CLEAR_OK) {
     master->faults = 0u;
+    master->first_fault = 0u;
+    master->recovery_required = true;
+    master->enable_epoch_valid = false;
   }
+  master->last_clear_result = (uint8_t)result;
   master->clear_fault_pending = false;
-  master->state = GS_CONTROLLER_DISABLED;
-  master->requested = (gs_wheel_pair){0, 0};
-  master->demanded = (gs_wheel_pair){0, 0};
-  master->applied = (gs_wheel_pair){0, 0};
+  stop_master(master, GS_CONTROLLER_DISABLED);
 }
 
 void gs_master_set_runtime_status(gs_master_coordinator *master,
@@ -266,6 +354,12 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
       .accepted_esp_sequence = master->esp_seen ? master->last_esp_sequence : 0u,
       .forwarded_slave_sequence = master->last_forwarded_sequence,
       .accepted_slave_sequence = master->slave_feedback.accepted_sequence,
+      .master_enable_epoch = master->enable_epoch,
+      .slave_enable_epoch = master->slave_feedback.enable_epoch,
+      .master_fault_epoch = master->fault_epoch,
+      .slave_fault_epoch = master->slave_feedback.fault_epoch,
+      .master_clear_result = master->last_clear_result,
+      .slave_clear_result = master->slave_feedback.clear_result,
       .left_applied = master->applied.left,
       .right_applied = master->applied.right,
       .left_odometer = master->local_odometer,
@@ -273,6 +367,8 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
           gs_slave_logical_odometer(master->slave_feedback.odometer),
       .master_faults = master->faults,
       .slave_faults = master->slave_feedback.faults,
+      .master_first_fault = master->first_fault,
+      .slave_first_fault = master->slave_feedback.first_fault,
       .master_command_age_ms =
           master->esp_seen
               ? gs_age_ms_u16(now_ms, master->last_esp_command_ms)

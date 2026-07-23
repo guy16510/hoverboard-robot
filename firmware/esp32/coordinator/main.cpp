@@ -34,6 +34,7 @@ bool command_timeout_announced;
 bool session_ready;
 bool command_sent;
 uint16_t command_sequence;
+uint16_t enable_epoch;
 uint16_t last_sent_sequence;
 uint32_t next_heartbeat_ms;
 uint32_t last_feedback_ms;
@@ -43,6 +44,13 @@ uint32_t command_frames;
 uint32_t feedback_frames;
 uint32_t crc_errors;
 uint32_t ack_timeouts;
+
+void increment_nonzero(uint16_t &value) {
+  ++value;
+  if (value == 0u) {
+    ++value;
+  }
+}
 
 bool motion_requested() {
   return console_state.target.first != 0 || console_state.target.second != 0 ||
@@ -62,6 +70,8 @@ bool exact_ack() {
 bool zero_ready_ack() {
   return exact_ack() && feedback.master_state == 1u &&
          feedback.slave_state == 1u && !feedback_faulted() &&
+         feedback.master_enable_epoch == enable_epoch &&
+         feedback.slave_enable_epoch == enable_epoch &&
          (feedback.status_flags & GS_FEEDBACK_PEER_HEALTHY) != 0u;
 }
 
@@ -76,7 +86,8 @@ void print_help() {
   Serial.println("enable | lr LEFT RIGHT | drive SPEED STEER | stop | disable");
   Serial.println("forward VALUE | reverse VALUE | ramp STEP | clearfault");
   Serial.println("shutdown | status | help");
-  Serial.println("Motion requires READY acknowledgment and fresh 100 ms sequence acknowledgment.");
+  Serial.println(
+      "Motion requires READY acknowledgment for the current enable epoch.");
 }
 
 void print_status() {
@@ -85,12 +96,15 @@ void print_status() {
       "\"session_ready\":%u,\"mode\":\"%s\",\"requested\":[%d,%d],"
       "\"ramped\":[%d,%d],\"applied\":[%d,%d],\"ramp\":%u,"
       "\"sequence\":%u,\"master_ack\":%u,\"slave_forwarded\":%u,"
-      "\"slave_ack\":%u,\"exact_ack\":%u,\"peer_healthy\":%u,"
-      "\"pa4_raw_high\":%u,\"pa4_bypass\":%u,\"clear_pending\":%u,"
-      "\"command_age_ms\":%u,\"slave_feedback_age_ms\":%u,"
-      "\"slave_command_age_ms\":%u,\"esp_feedback_age_ms\":%lu,"
-      "\"states\":[%u,%u],\"faults\":[%lu,%lu],\"tx\":%lu,"
-      "\"rx\":%lu,\"crc_errors\":%lu,\"ack_timeouts\":%lu,"
+      "\"slave_ack\":%u,\"exact_ack\":%u,\"enable_epoch\":%u,"
+      "\"controller_enable_epochs\":[%u,%u],\"fault_epochs\":[%u,%u],"
+      "\"first_faults\":[%lu,%lu],\"clear_results\":[%u,%u],"
+      "\"peer_healthy\":%u,\"pa4_raw_high\":%u,\"pa4_bypass\":%u,"
+      "\"clear_pending\":%u,\"command_age_ms\":%u,"
+      "\"slave_feedback_age_ms\":%u,\"slave_command_age_ms\":%u,"
+      "\"esp_feedback_age_ms\":%lu,\"states\":[%u,%u],"
+      "\"faults\":[%lu,%lu],\"tx\":%lu,\"rx\":%lu,"
+      "\"crc_errors\":%lu,\"ack_timeouts\":%lu,"
       "\"mpu_future\":[%d,%d,%lu]}\n",
       feedback.protocol_version, console_state.enabled ? 1u : 0u,
       console_state.shutdown ? 1u : 0u, session_ready ? 1u : 0u,
@@ -100,7 +114,12 @@ void print_status() {
       feedback.left_applied, feedback.right_applied, console_state.ramp_per_tick,
       last_sent_sequence, feedback.accepted_esp_sequence,
       feedback.forwarded_slave_sequence, feedback.accepted_slave_sequence,
-      exact_ack() ? 1u : 0u,
+      exact_ack() ? 1u : 0u, enable_epoch, feedback.master_enable_epoch,
+      feedback.slave_enable_epoch, feedback.master_fault_epoch,
+      feedback.slave_fault_epoch,
+      static_cast<unsigned long>(feedback.master_first_fault),
+      static_cast<unsigned long>(feedback.slave_first_fault),
+      feedback.master_clear_result, feedback.slave_clear_result,
       (feedback.status_flags & GS_FEEDBACK_PEER_HEALTHY) != 0u ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PA4_RAW_HIGH) != 0u ? 1u : 0u,
       (feedback.status_flags & GS_FEEDBACK_PA4_BYPASS) != 0u ? 1u : 0u,
@@ -124,13 +143,17 @@ void execute_console_line() {
       Serial.println("ERR overlong command");
     }
   } else {
+    const bool was_enabled = console_state.enabled;
     const gs_console_result result =
         gs_console_execute(&console_state, console_line, console_length);
     switch (result) {
     case GS_CONSOLE_APPLIED:
       last_control_input_ms = millis();
       command_timeout_announced = false;
-      if (!console_state.enabled) {
+      if (!was_enabled && console_state.enabled) {
+        increment_nonzero(enable_epoch);
+        session_ready = false;
+      } else if (!console_state.enabled) {
         session_ready = false;
       }
       Serial.println("OK");
@@ -144,7 +167,7 @@ void execute_console_line() {
     case GS_CONSOLE_CLEAR_FAULT:
       clear_fault_pending = true;
       last_control_input_ms = millis();
-      Serial.println("QUEUED clearfault, awaiting controller confirmation");
+      Serial.println("QUEUED clearfault for current fault epochs");
       break;
     case GS_CONSOLE_REJECTED:
     default:
@@ -189,11 +212,15 @@ void enforce_pi_timeout() {
 bool same_payload(const gs_esp_command &first, const gs_esp_command &second) {
   return first.speed == second.speed && first.steer == second.steer &&
          first.master_flags == second.master_flags &&
-         first.slave_flags == second.slave_flags;
+         first.slave_flags == second.slave_flags &&
+         first.enable_epoch == second.enable_epoch &&
+         first.master_clear_fault_epoch == second.master_clear_fault_epoch &&
+         first.slave_clear_fault_epoch == second.slave_clear_fault_epoch;
 }
 
 gs_esp_command desired_command() {
   gs_esp_command command{};
+  command.enable_epoch = enable_epoch;
   if (console_state.shutdown) {
     command.master_flags = GS_COMMAND_DISABLE | GS_COMMAND_SHUTDOWN;
     command.slave_flags = GS_COMMAND_DISABLE | GS_COMMAND_SHUTDOWN;
@@ -203,6 +230,8 @@ gs_esp_command desired_command() {
     if (clear_fault_pending) {
       command.master_flags |= GS_COMMAND_CLEAR_FAULT;
       command.slave_flags |= GS_COMMAND_CLEAR_FAULT;
+      command.master_clear_fault_epoch = feedback.master_fault_epoch;
+      command.slave_clear_fault_epoch = feedback.slave_fault_epoch;
     }
   } else {
     command.master_flags = GS_COMMAND_DIRECT_LR;
@@ -219,10 +248,7 @@ void send_heartbeat() {
   gs_console_ramp_tick(&console_state);
   gs_esp_command command = desired_command();
   if (!command_sent || !same_payload(command, last_command)) {
-    ++command_sequence;
-    if (command_sequence == 0u) {
-      ++command_sequence;
-    }
+    increment_nonzero(command_sequence);
     last_sequence_change_ms = millis();
   }
   command.sequence = command_sequence;
@@ -240,12 +266,20 @@ void enforce_controller_health() {
   const uint32_t now = millis();
   if (console_state.enabled && !session_ready && zero_ready_ack()) {
     session_ready = true;
-    Serial.println("READY acknowledged by MASTER and SLAVE");
+    Serial.println("READY acknowledged for current enable epoch");
   }
-  if (clear_fault_pending && exact_ack() && !feedback_faulted() &&
+  if (clear_fault_pending && exact_ack() &&
       (feedback.status_flags & GS_FEEDBACK_CLEAR_PENDING) == 0u) {
-    clear_fault_pending = false;
-    Serial.println("CLEAR confirmed by MASTER and SLAVE");
+    if (feedback.master_clear_result == GS_CLEAR_OK &&
+        feedback.slave_clear_result == GS_CLEAR_OK && !feedback_faulted()) {
+      clear_fault_pending = false;
+      Serial.println("CLEAR confirmed by MASTER and SLAVE");
+    } else if (feedback.master_clear_result != GS_CLEAR_NONE ||
+               feedback.slave_clear_result != GS_CLEAR_NONE) {
+      clear_fault_pending = false;
+      Serial.printf("CLEAR rejected, master=%u slave=%u\n",
+                    feedback.master_clear_result, feedback.slave_clear_result);
+    }
   }
   if (!console_state.enabled) {
     return;
@@ -298,7 +332,7 @@ void setup() {
   last_control_input_ms = millis();
   last_sequence_change_ms = millis();
   Serial.println(
-      "GAUSSTOP SWD coordinator protocol v2 ready, motors disabled. Type help.");
+      "GAUSSTOP SWD coordinator protocol v3 ready, motors disabled. Type help.");
 }
 
 void loop() {

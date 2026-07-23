@@ -4,8 +4,8 @@
 Requires: python -m pip install pyserial
 
 The tool refuses nonzero demand until MASTER and SLAVE acknowledge a zero-demand
-READY session. It records every structured status line as JSONL and always sends
-stop and disable before closing the serial port.
+READY session for the current enable epoch. It records every structured status
+line as JSONL and always sends stop and disable before closing the serial port.
 """
 
 from __future__ import annotations
@@ -28,10 +28,13 @@ except ImportError as exc:
 
 
 STATUS_PREFIX = "STATUS "
+DISABLED = 0
 READY = 1
 ACTIVE = 2
 FAULTED = 3
 SHUTDOWN = 4
+CLEAR_NONE = 0
+CLEAR_OK = 1
 
 
 def command_value(value: str) -> int:
@@ -68,6 +71,11 @@ def parse_args() -> argparse.Namespace:
         "--allow-high-command",
         action="store_true",
         help="required when either absolute command exceeds 250",
+    )
+    parser.add_argument(
+        "--allow-pa4-bypass",
+        action="store_true",
+        help="required for motion when BENCH_MASTER_PA4_BYPASS is detected",
     )
     parser.add_argument(
         "--confirm-wheels-lifted",
@@ -151,6 +159,8 @@ class SerialMonitor:
         predicate: Callable[[dict[str, Any]], bool],
         timeout: float,
         description: str,
+        *,
+        allow_faults: bool = False,
     ) -> dict[str, Any]:
         deadline = time.monotonic() + timeout
         while time.monotonic() < deadline:
@@ -160,7 +170,7 @@ class SerialMonitor:
                 event = self.events.get(timeout=wait)
             except queue.Empty:
                 continue
-            validate_status(event.payload)
+            validate_status(event.payload, allow_faults=allow_faults)
             if predicate(event.payload):
                 return event.payload
         raise RuntimeError(f"Timed out waiting for {description}")
@@ -176,16 +186,25 @@ def faults(status: dict[str, Any]) -> tuple[int, int]:
     return int(raw[0]), int(raw[1])
 
 
-def validate_status(status: dict[str, Any]) -> None:
-    if int(status.get("protocol", -1)) != 2:
+def clear_results(status: dict[str, Any]) -> tuple[int, int]:
+    raw = status.get("clear_results", [CLEAR_NONE, CLEAR_NONE])
+    return int(raw[0]), int(raw[1])
+
+
+def validate_status(status: dict[str, Any], *, allow_faults: bool = False) -> None:
+    if int(status.get("protocol", -1)) != 3:
         raise RuntimeError(f"Unexpected protocol version: {status.get('protocol')}")
     master_state, slave_state = states(status)
     master_fault, slave_fault = faults(status)
-    if master_fault or slave_fault:
+    if not allow_faults and (master_fault or slave_fault):
         raise RuntimeError(
             f"Controller fault, master=0x{master_fault:08x}, slave=0x{slave_fault:08x}"
         )
-    if master_state in (FAULTED, SHUTDOWN) or slave_state in (FAULTED, SHUTDOWN):
+    if master_state == SHUTDOWN or slave_state == SHUTDOWN:
+        raise RuntimeError(
+            f"Controller shutdown, master={master_state}, slave={slave_state}"
+        )
+    if not allow_faults and (master_state == FAULTED or slave_state == FAULTED):
         raise RuntimeError(
             f"Unsafe controller state, master={master_state}, slave={slave_state}"
         )
@@ -198,8 +217,12 @@ def acknowledged(status: dict[str, Any]) -> bool:
 
 
 def zero_ready(status: dict[str, Any]) -> bool:
+    enable_epoch = int(status.get("enable_epoch", 0))
+    controller_epochs = [int(value) for value in status.get("controller_enable_epochs", [])]
     return (
-        bool(status.get("session_ready"))
+        enable_epoch != 0
+        and controller_epochs == [enable_epoch, enable_epoch]
+        and bool(status.get("session_ready"))
         and bool(status.get("peer_healthy"))
         and acknowledged(status)
         and states(status) == (READY, READY)
@@ -208,7 +231,34 @@ def zero_ready(status: dict[str, Any]) -> bool:
 
 
 def disabled(status: dict[str, Any]) -> bool:
-    return states(status) == (0, 0) and list(status.get("applied", [1, 1])) == [0, 0]
+    return states(status) == (DISABLED, DISABLED) and list(
+        status.get("applied", [1, 1])
+    ) == [0, 0]
+
+
+def wait_for_clear(monitor: SerialMonitor, timeout: float) -> dict[str, Any]:
+    deadline = time.monotonic() + timeout
+    while time.monotonic() < deadline:
+        monitor.request_status()
+        try:
+            event = monitor.events.get(timeout=0.12)
+        except queue.Empty:
+            continue
+        status = event.payload
+        validate_status(status, allow_faults=True)
+        results = clear_results(status)
+        if any(result not in (CLEAR_NONE, CLEAR_OK) for result in results):
+            raise RuntimeError(
+                f"Controller rejected fault clear, master={results[0]}, slave={results[1]}"
+            )
+        if (
+            results == (CLEAR_OK, CLEAR_OK)
+            and faults(status) == (0, 0)
+            and disabled(status)
+            and not bool(status.get("clear_pending"))
+        ):
+            return status
+    raise RuntimeError("Timed out waiting for atomic fault-clear confirmation")
 
 
 def run_test(
@@ -217,18 +267,22 @@ def run_test(
     monitor.set_stage("pre_enable")
     send_line(port, "disable")
     send_line(port, f"ramp {args.ramp}")
+    monitor.wait_for(disabled, args.ready_timeout, "disabled zero-output state", allow_faults=True)
     send_line(port, "clearfault")
-    monitor.wait_for(
-        lambda status: disabled(status) and not bool(status.get("clear_pending")),
-        args.ready_timeout,
-        "fault-clear confirmation while disabled",
-    )
+    wait_for_clear(monitor, args.ready_timeout)
 
     monitor.set_stage("zero_enable")
     send_line(port, "enable")
-    monitor.wait_for(zero_ready, args.ready_timeout, "READY,READY zero-demand acknowledgment")
+    ready_status = monitor.wait_for(
+        zero_ready, args.ready_timeout, "READY,READY zero-demand epoch acknowledgment"
+    )
 
     moving = args.left != 0 or args.right != 0
+    if moving and bool(ready_status.get("pa4_bypass")) and not args.allow_pa4_bypass:
+        raise RuntimeError(
+            "Refusing motion with PA4 bypass firmware, pass --allow-pa4-bypass only for the authorized bench image"
+        )
+
     monitor.set_stage("demand")
     interval = 1.0 / args.rate_hz
     start = time.monotonic()
@@ -248,10 +302,14 @@ def run_test(
             next_status = now + 0.10
         latest = monitor.latest
         if latest is not None:
+            if now - latest.received_monotonic > 0.15:
+                raise RuntimeError("No fresh controller status during demand")
             status = latest.payload
             validate_status(status)
-            if not acknowledged(status) and now - latest.received_monotonic > 0.10:
+            if now - start > 0.15 and not acknowledged(status):
                 raise RuntimeError("Command acknowledgment is missing")
+            if int(status.get("enable_epoch", 0)) == 0:
+                raise RuntimeError("Enable epoch is missing")
             master_state, slave_state = states(status)
             if moving and bool(status.get("session_ready")):
                 if master_state not in (READY, ACTIVE) or slave_state not in (READY, ACTIVE):

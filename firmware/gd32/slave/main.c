@@ -30,10 +30,7 @@ static void calibrate_protection(void) {
 
 static void force_slave_fault(gs_fault_flag fault) {
   gs_safety_latch(&safety, fault);
-  slave.faults |= (uint32_t)fault;
-  slave.demanded_electrical = 0;
-  slave.applied_electrical = 0;
-  slave.state = GS_CONTROLLER_FAULTED;
+  gs_slave_latch_fault(&slave, (uint32_t)fault);
   gs_motor_force_off(&motor);
 }
 
@@ -88,6 +85,24 @@ static void apply_motor_step(uint8_t hall, bool hall_changed,
   slave.odometer = motor.odometer;
 }
 
+static gs_clear_result try_clear_slave_fault(const gs_safety_sample *sample,
+                                              uint32_t now_ms) {
+  if ((slave.faults &
+       (GS_FAULT_WATCHDOG_LOCKOUT | GS_FAULT_SHUTDOWN)) != 0u) {
+    return GS_CLEAR_REQUIRES_RESET;
+  }
+  if (slave.demanded_electrical != 0 || slave.applied_electrical != 0 ||
+      motor.requested_command != 0 || motor.applied_command != 0 ||
+      motor.bridge_enabled) {
+    return GS_CLEAR_REJECT_STATE;
+  }
+  if (!gs_safety_clear(&safety, sample, now_ms)) {
+    return GS_CLEAR_REJECT_SAFETY;
+  }
+  gs_motor_clear_fault(&motor, now_ms);
+  return GS_CLEAR_OK;
+}
+
 static void service_motor(void) {
   static uint32_t last_service_ms;
   static uint32_t last_adc_ms;
@@ -108,11 +123,13 @@ static void service_motor(void) {
       last_adc_ms = now_ms;
     }
   }
+
   const uint32_t hall_overflows = gs_board_hall_overflow_count();
   if (hall_overflows != observed_hall_overflows) {
     observed_hall_overflows = hall_overflows;
     force_slave_fault(GS_FAULT_HALL_CAPTURE_OVERFLOW);
   }
+
   const uint8_t hall = gs_board_read_hall();
   gs_safety_set_enabled(&safety, slave.state == GS_CONTROLLER_READY ||
                                      slave.state == GS_CONTROLLER_ACTIVE);
@@ -121,22 +138,19 @@ static void service_motor(void) {
       now_ms);
   const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
                                    adc_value, hall != 0u && hall != 7u};
-  if (gs_slave_fault_clear_requested(&slave) &&
-      slave.demanded_electrical == 0 && slave.applied_electrical == 0 &&
-      motor.requested_command == 0 && motor.applied_command == 0 &&
-      gs_safety_clear(&safety, &sample, now_ms)) {
-    gs_motor_clear_fault(&motor, now_ms);
-    gs_slave_finish_fault_clear(&slave, true);
+
+  if (gs_slave_fault_clear_requested(&slave)) {
+    gs_slave_finish_fault_clear(&slave,
+                                try_clear_slave_fault(&sample, now_ms));
   }
+
   gs_safety_evaluate(&safety, &sample, now_ms);
-  slave.faults |= safety.faults.bits;
   if (safety.faults.bits != 0u) {
-    slave.demanded_electrical = 0;
-    slave.applied_electrical = 0;
-    slave.state = GS_CONTROLLER_FAULTED;
+    gs_slave_latch_fault(&slave, safety.faults.bits);
   }
   const bool permitted =
       safety.enabled && safety.adc_ready && safety.faults.bits == 0u;
+
   bool processed_event = false;
   if (event_available) {
     processed_event = true;
@@ -165,6 +179,7 @@ int main(void) {
   const uint8_t marker[] = {GS_COMMAND_MARKER};
   gs_frame_parser_init(&parser, marker, 1, GS_SLAVE_COMMAND_SIZE);
   gs_board_watchdog_start();
+
   uint32_t next_feedback_ms = 0;
   for (;;) {
     service_link_rx();

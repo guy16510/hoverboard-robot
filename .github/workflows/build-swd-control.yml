@@ -75,13 +75,16 @@ jobs:
           cp .pio/build/esp32_swd_coordinator/firmware.map dist/esp32_swd_coordinator/firmware.map
           cp .pio/build/esp32_swd_coordinator/bootloader.bin dist/esp32_swd_coordinator/bootloader.bin
           cp .pio/build/esp32_swd_coordinator/partitions.bin dist/esp32_swd_coordinator/partitions.bin
-          sha256sum \
-            dist/gausstop_master_swd/firmware.bin \
-            dist/gausstop_slave_swd_control/firmware.bin \
-            dist/esp32_swd_coordinator/bootloader.bin \
-            dist/esp32_swd_coordinator/partitions.bin \
-            dist/esp32_swd_coordinator/firmware.bin \
-            > dist/swd-control-sha256.txt
+          (
+            cd dist
+            sha256sum \
+              gausstop_master_swd/firmware.bin \
+              gausstop_slave_swd_control/firmware.bin \
+              esp32_swd_coordinator/bootloader.bin \
+              esp32_swd_coordinator/partitions.bin \
+              esp32_swd_coordinator/firmware.bin \
+              > swd-control-sha256.txt
+          )
 
       - name: Upload firmware artifact
         uses: actions/upload-artifact@v4

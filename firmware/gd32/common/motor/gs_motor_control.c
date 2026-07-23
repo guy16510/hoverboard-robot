@@ -4,6 +4,7 @@
 #include <stddef.h>
 
 #include "gs_safety.h"
+#include "gs_wheel_mix.h"
 
 enum {
   GS_ACCELERATION_PER_SECOND = 400,
@@ -97,6 +98,20 @@ void gs_motor_force_off(gs_motor_controller *motor) {
   disable_bridge(motor);
 }
 
+void gs_motor_clear_fault(gs_motor_controller *motor, uint32_t now_ms) {
+  if (motor == NULL) {
+    return;
+  }
+  const gs_bridge_port bridge = motor->bridge;
+  const int32_t odometer = motor->odometer;
+  *motor = (gs_motor_controller){0};
+  motor->bridge = bridge;
+  motor->odometer = odometer;
+  motor->state = GS_MOTOR_DISABLED;
+  motor->last_step_ms = now_ms;
+  disable_bridge(motor);
+}
+
 static gs_motor_output motor_output(const gs_motor_controller *motor,
                                     gs_hall_transition hall_result,
                                     bool bridge_enabled, bool faulted) {
@@ -129,7 +144,8 @@ gs_motor_output gs_motor_step(gs_motor_controller *motor,
     return motor_output(motor, GS_HALL_REPEATED, false, false);
   }
 
-  motor->requested_command = clamp_command(input->requested_command);
+  motor->requested_command =
+      gs_normalize_wheel_command(clamp_command(input->requested_command));
   if (motor->requested_command != 0 &&
       (input->hall == 0u || input->hall == 7u)) {
     return fault_motor(motor, GS_HALL_INVALID);

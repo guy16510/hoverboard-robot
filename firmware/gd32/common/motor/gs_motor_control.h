@@ -56,5 +56,6 @@ void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
 gs_motor_output gs_motor_step(gs_motor_controller *motor,
                               const gs_motor_input *input);
 void gs_motor_force_off(gs_motor_controller *motor);
+void gs_motor_clear_fault(gs_motor_controller *motor, uint32_t now_ms);
 
 #endif

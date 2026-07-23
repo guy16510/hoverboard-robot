@@ -1,7 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Copyright (C) 2026 Chris Burns
- * Clean-room GAUSSTOP implementation informed by RoboDurden upstream.
- */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #ifndef GS_PROTOCOL_H
 #define GS_PROTOCOL_H
 
@@ -10,13 +7,15 @@
 #include <stdint.h>
 
 enum {
-  GS_COMMAND_MARKER = 0x2F,
-  GS_FEEDBACK_MARKER_0 = 0xCD,
-  GS_FEEDBACK_MARKER_1 = 0xAB,
-  GS_ESP_COMMAND_SIZE = 9,
-  GS_SLAVE_COMMAND_SIZE = 6,
-  GS_SLAVE_FEEDBACK_SIZE = 12,
-  GS_MASTER_FEEDBACK_SIZE = 26,
+  GS_PROTOCOL_VERSION = 2,
+  GS_COMMAND_MARKER = 0x30,
+  GS_SLAVE_FEEDBACK_MARKER = 0x31,
+  GS_FEEDBACK_MARKER_0 = 0xCE,
+  GS_FEEDBACK_MARKER_1 = 0xB2,
+  GS_ESP_COMMAND_SIZE = 11,
+  GS_SLAVE_COMMAND_SIZE = 8,
+  GS_SLAVE_FEEDBACK_SIZE = 18,
+  GS_MASTER_FEEDBACK_SIZE = 32,
   GS_MAX_FRAME_SIZE = GS_MASTER_FEEDBACK_SIZE,
   GS_PARTIAL_FRAME_TIMEOUT_MS = 100,
   GS_COMMAND_LIMIT = 1000,
@@ -29,36 +28,57 @@ typedef enum {
   GS_COMMAND_SHUTDOWN = 1u << 7,
 } gs_command_flag;
 
+typedef enum {
+  GS_FEEDBACK_PEER_HEALTHY = 1u << 0,
+  GS_FEEDBACK_PA4_RAW_HIGH = 1u << 1,
+  GS_FEEDBACK_PA4_BYPASS = 1u << 2,
+  GS_FEEDBACK_CLEAR_PENDING = 1u << 3,
+} gs_feedback_flag;
+
 typedef struct {
   int16_t speed;
   int16_t steer;
   uint8_t master_flags;
   uint8_t slave_flags;
+  uint16_t sequence;
 } gs_esp_command;
 
 typedef struct {
   int16_t electrical_command;
   uint8_t flags;
+  uint16_t sequence;
 } gs_slave_command;
 
 typedef struct {
   uint8_t state;
   int32_t odometer;
   uint32_t faults;
+  int16_t applied_electrical;
+  uint16_t accepted_sequence;
+  uint16_t command_age_ms;
 } gs_slave_feedback;
 
 typedef struct {
+  uint8_t protocol_version;
   uint8_t master_state;
   uint8_t slave_state;
+  uint8_t status_flags;
+  uint16_t accepted_esp_sequence;
+  uint16_t forwarded_slave_sequence;
+  uint16_t accepted_slave_sequence;
   int16_t left_applied;
   int16_t right_applied;
   int32_t left_odometer;
   int32_t right_odometer;
   uint32_t master_faults;
   uint32_t slave_faults;
+  uint16_t master_command_age_ms;
+  uint16_t slave_feedback_age_ms;
+  uint16_t slave_command_age_ms;
 } gs_master_feedback;
 
 uint16_t gs_crc16(const uint8_t *data, size_t length);
+uint16_t gs_age_ms_u16(uint32_t now_ms, uint32_t then_ms);
 
 bool gs_encode_esp_command(uint8_t out[GS_ESP_COMMAND_SIZE],
                            const gs_esp_command *command);

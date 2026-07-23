@@ -4,6 +4,8 @@
 
 #include "gs_types.h"
 
+int16_t gs_normalize_wheel_command(int16_t command);
+gs_wheel_pair gs_normalize_wheel_pair(gs_wheel_pair pair);
 gs_wheel_pair gs_mix_wheels(int16_t speed, int16_t steer);
 gs_wheel_pair gs_direct_wheels(int16_t left, int16_t right);
 int16_t gs_slave_electrical_command(int16_t logical_right);

@@ -4,6 +4,9 @@ on:
   push:
     branches:
       - codex/swd-dual-motor-recovery
+  pull_request:
+    branches:
+      - codex/swd-dual-motor-recovery
   workflow_dispatch:
 
 permissions:

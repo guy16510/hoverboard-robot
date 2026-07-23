@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include <stdint.h>
 
+/* Recovery never energizes the bridge, but board identity remains explicit. */
+#define GS_BRIDGE_PROFILE_ID 1
 #include "gausstop_board.h"
 #include "gd32f1x0.h"
 

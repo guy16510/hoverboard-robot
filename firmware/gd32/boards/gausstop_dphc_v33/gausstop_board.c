@@ -1,7 +1,4 @@
-/* SPDX-License-Identifier: GPL-3.0-only
- * Modified from peripheral setup concepts in RoboDurden upstream and retained
- * GAUSSTOP pin/timer behavior from the legacy project.
- */
+/* SPDX-License-Identifier: GPL-3.0-only */
 #include "gausstop_board.h"
 
 #include <stddef.h>
@@ -111,12 +108,13 @@ static void bridge_timer_init(void) {
   timer.clockdivision = TIMER_CKDIV_DIV1;
   timer_init(TIMER0, &timer);
   timer_auto_reload_shadow_disable(TIMER0);
+
   timer_oc_parameter_struct output = {0};
   output.ocpolarity = TIMER_OC_POLARITY_HIGH;
   output.ocnpolarity = TIMER_OCN_POLARITY_LOW;
   output.ocidlestate = TIMER_OC_IDLE_STATE_LOW;
   output.ocnidlestate = TIMER_OCN_IDLE_STATE_HIGH;
-  for (uint8_t index = 0; index < 3u; ++index) {
+  for (uint8_t index = 0u; index < 3u; ++index) {
     timer_channel_output_fast_config(TIMER0, pwm_channels[index],
                                      TIMER_OC_FAST_DISABLE);
     timer_channel_output_config(TIMER0, pwm_channels[index], &output);
@@ -131,6 +129,7 @@ static void bridge_timer_init(void) {
     timer_channel_complementary_output_state_config(TIMER0, pwm_channels[index],
                                                     TIMER_CCXN_DISABLE);
   }
+
   timer_break_parameter_struct safety = {0};
   safety.runoffstate = TIMER_ROS_STATE_DISABLE;
   safety.ideloffstate = TIMER_IOS_STATE_DISABLE;
@@ -158,11 +157,11 @@ static void adc_init(void) {
 }
 
 uint8_t gs_board_read_hall(void) {
-  return (
-      uint8_t)(((gpio_input_bit_get(GPIOC, GPIO_PIN_14) == SET ? 1u : 0u)
-                << 2) |
-               ((gpio_input_bit_get(GPIOA, GPIO_PIN_0) == SET ? 1u : 0u) << 1) |
-               (gpio_input_bit_get(GPIOB, GPIO_PIN_11) == SET ? 1u : 0u));
+  return (uint8_t)(((gpio_input_bit_get(GPIOC, GPIO_PIN_14) == SET ? 1u : 0u)
+                    << 2) |
+                   ((gpio_input_bit_get(GPIOA, GPIO_PIN_0) == SET ? 1u : 0u)
+                    << 1) |
+                   (gpio_input_bit_get(GPIOB, GPIO_PIN_11) == SET ? 1u : 0u));
 }
 
 uint32_t gs_board_micros(void) {
@@ -280,7 +279,7 @@ void gs_board_operational_init(void) {
 void gs_board_bridge_off(void *context) {
   (void)context;
   timer_primary_output_config(TIMER0, DISABLE);
-  for (uint8_t index = 0; index < 3u; ++index) {
+  for (uint8_t index = 0u; index < 3u; ++index) {
     timer_channel_output_state_config(TIMER0, pwm_channels[index],
                                       TIMER_CCX_DISABLE);
     timer_channel_complementary_output_state_config(TIMER0, pwm_channels[index],
@@ -291,21 +290,24 @@ void gs_board_bridge_off(void *context) {
 bool gs_board_bridge_apply(void *context, const gs_commutation_vector *vector,
                            uint16_t compare_offset) {
   (void)context;
-  if (vector == NULL || compare_offset == 0u || compare_offset > 80u ||
-      !gs_board_shutdown_clear()) {
+  const gs_motor_power_profile *power = gs_motor_power_profile_current();
+  if (vector == NULL || compare_offset == 0u ||
+      compare_offset > power->maximum_compare || !gs_board_shutdown_clear()) {
     gs_board_bridge_off(NULL);
     return false;
   }
+
   const uint8_t source = channel_for_phase(vector->source);
   const uint8_t sink = channel_for_phase(vector->sink);
   const uint8_t floating = channel_for_phase(vector->floating);
   timer_primary_output_config(TIMER0, DISABLE);
-  for (uint8_t index = 0; index < 3u; ++index) {
+  for (uint8_t index = 0u; index < 3u; ++index) {
     timer_channel_output_state_config(TIMER0, pwm_channels[index],
                                       TIMER_CCX_DISABLE);
     timer_channel_complementary_output_state_config(TIMER0, pwm_channels[index],
                                                     TIMER_CCXN_DISABLE);
   }
+
   timer_channel_output_pulse_value_config(TIMER0, pwm_channels[source],
                                           GS_PWM_MIDPOINT + compare_offset);
   timer_channel_output_pulse_value_config(TIMER0, pwm_channels[sink],
@@ -320,6 +322,13 @@ bool gs_board_bridge_apply(void *context, const gs_commutation_vector *vector,
                                     TIMER_CCX_ENABLE);
   timer_channel_complementary_output_state_config(TIMER0, pwm_channels[sink],
                                                   TIMER_CCXN_ENABLE);
+#if GS_BRIDGE_PROFILE_ID == 2
+  timer_channel_output_state_config(TIMER0, pwm_channels[floating],
+                                    TIMER_CCX_ENABLE);
+  timer_channel_complementary_output_state_config(TIMER0,
+                                                  pwm_channels[floating],
+                                                  TIMER_CCXN_ENABLE);
+#endif
   timer_primary_output_config(TIMER0, ENABLE);
   return true;
 }
@@ -328,6 +337,10 @@ gs_bridge_port gs_board_bridge_port(void) {
   const gs_bridge_port port = {NULL, gs_board_bridge_off,
                                gs_board_bridge_apply};
   return port;
+}
+
+gs_bridge_profile_id gs_board_bridge_profile_id(void) {
+  return gs_bridge_profile_current();
 }
 
 bool gs_board_shutdown_clear(void) {
@@ -380,11 +393,7 @@ static void reset_uart_state(gs_board_uart uart) {
   const uint8_t index = uart_index(uart);
   uart_tx_heads[index] = 0u;
   uart_tx_tails[index] = 0u;
-  uart_stats[index].rx_bytes = 0u;
-  uart_stats[index].tx_bytes = 0u;
-  uart_stats[index].rx_overflows = 0u;
-  uart_stats[index].tx_overflows = 0u;
-  uart_stats[index].framing_errors = 0u;
+  uart_stats[index] = (gs_board_uart_stats){0};
 }
 
 void gs_board_uart_init(gs_board_uart uart, bool transmit_enabled) {

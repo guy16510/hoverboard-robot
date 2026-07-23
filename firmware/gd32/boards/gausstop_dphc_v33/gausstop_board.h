@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "gausstop_bridge_profile.h"
 #include "gs_motor_control.h"
 
 #if !defined(GD32F130) || GD32F130 != 1
@@ -123,6 +124,7 @@ void gs_board_bridge_off(void *context);
 bool gs_board_bridge_apply(void *context, const gs_commutation_vector *vector,
                            uint16_t compare_offset);
 gs_bridge_port gs_board_bridge_port(void);
+gs_bridge_profile_id gs_board_bridge_profile_id(void);
 uint8_t gs_board_read_hall(void);
 void gs_board_hall_exti_service(void);
 bool gs_board_hall_event_read(gs_board_hall_event *event);

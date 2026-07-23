@@ -5,6 +5,8 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+enum { GS_COMMAND_DEADBAND = 50 };
+
 typedef struct {
   int16_t left;
   int16_t right;

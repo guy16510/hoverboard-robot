@@ -3,8 +3,6 @@
 
 #include <stdint.h>
 
-#include "gs_safety.h"
-
 enum { GS_WHEEL_LIMIT = 1000 };
 
 static int32_t magnitude(int32_t value) { return value < 0 ? -value : value; }

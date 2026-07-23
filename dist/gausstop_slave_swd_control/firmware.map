@@ -630,7 +630,7 @@ LOAD /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/a
                 0x0000000008000000                g_pfnVectors
                 0x0000000008000168                . = ALIGN (0x4)
 
-.text           0x0000000008000168     0x1f58
+.text           0x0000000008000168     0x1f3c
                 0x0000000008000168                . = ALIGN (0x4)
  *(.text)
  *(.text*)
@@ -759,15 +759,14 @@ LOAD /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/a
                 0x0000000008000824       0x18 .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
                 0x0000000008000824                gs_slave_init
  .text.gs_slave_accept_master_frame
-                0x000000000800083c       0x94 .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
+                0x000000000800083c       0x96 .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
                 0x000000000800083c                gs_slave_accept_master_frame
  .text.gs_slave_tick
-                0x00000000080008d0       0x2a .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
-                0x00000000080008d0                gs_slave_tick
+                0x00000000080008d2       0x2a .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
+                0x00000000080008d2                gs_slave_tick
  .text.gs_slave_make_feedback
-                0x00000000080008fa       0x28 .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
-                0x00000000080008fa                gs_slave_make_feedback
- *fill*         0x0000000008000922        0x2 
+                0x00000000080008fc       0x28 .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
+                0x00000000080008fc                gs_slave_make_feedback
  .text.gs_commutation_for_hall
                 0x0000000008000924       0x40 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
                 0x0000000008000924                gs_commutation_for_hall
@@ -775,336 +774,334 @@ LOAD /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/a
                 0x0000000008000964       0x48 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
                 0x0000000008000964                gs_validate_hall_transition
  .text.compare_for_command
-                0x00000000080009ac       0x2e .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
+                0x00000000080009ac       0x26 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
  .text.disable_bridge
-                0x00000000080009da        0xa .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
+                0x00000000080009d2        0xa .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
  .text.gs_motor_init
-                0x00000000080009e4       0x38 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
-                0x00000000080009e4                gs_motor_init
+                0x00000000080009dc       0x38 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
+                0x00000000080009dc                gs_motor_init
  .text.gs_motor_force_off
-                0x0000000008000a1c       0x12 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
-                0x0000000008000a1c                gs_motor_force_off
- *fill*         0x0000000008000a2e        0x2 
+                0x0000000008000a14       0x12 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
+                0x0000000008000a14                gs_motor_force_off
+ *fill*         0x0000000008000a26        0x2 
  .text.gs_motor_step
-                0x0000000008000a30      0x2b4 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
-                0x0000000008000a30                gs_motor_step
+                0x0000000008000a28      0x2b4 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
+                0x0000000008000a28                gs_motor_step
  .text.gs_frame_parser_init
-                0x0000000008000ce4       0x3e .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_frame_parser.o
-                0x0000000008000ce4                gs_frame_parser_init
+                0x0000000008000cdc       0x3e .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_frame_parser.o
+                0x0000000008000cdc                gs_frame_parser_init
  .text.gs_frame_parser_feed
-                0x0000000008000d22       0xda .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_frame_parser.o
-                0x0000000008000d22                gs_frame_parser_feed
+                0x0000000008000d1a       0xda .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_frame_parser.o
+                0x0000000008000d1a                gs_frame_parser_feed
  .text.write_u32
-                0x0000000008000dfc       0x10 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x0000000008000df4       0x10 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_crc16
-                0x0000000008000e0c       0x30 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x0000000008000e0c                gs_crc16
+                0x0000000008000e04       0x30 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x0000000008000e04                gs_crc16
  .text.append_crc
-                0x0000000008000e3c       0x16 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x0000000008000e34       0x16 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.crc_matches
-                0x0000000008000e52       0x1e .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x0000000008000e4a       0x1e .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_decode_slave_command
-                0x0000000008000e70       0x42 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x0000000008000e70                gs_decode_slave_command
+                0x0000000008000e68       0x42 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x0000000008000e68                gs_decode_slave_command
  .text.gs_encode_slave_feedback
-                0x0000000008000eb2       0x34 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x0000000008000eb2                gs_encode_slave_feedback
+                0x0000000008000eaa       0x34 .pio/build/gausstop_slave/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x0000000008000eaa                gs_encode_slave_feedback
  .text.gs_safety_init
-                0x0000000008000ee6       0x2e .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000ee6                gs_safety_init
+                0x0000000008000ede       0x2e .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000ede                gs_safety_init
  .text.gs_safety_set_enabled
-                0x0000000008000f14        0xe .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000f14                gs_safety_set_enabled
+                0x0000000008000f0c        0xe .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000f0c                gs_safety_set_enabled
  .text.gs_safety_note_command
-                0x0000000008000f22        0x6 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000f22                gs_safety_note_command
+                0x0000000008000f1a        0x6 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000f1a                gs_safety_note_command
  .text.gs_safety_note_demand
-                0x0000000008000f28       0x20 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000f28                gs_safety_note_demand
+                0x0000000008000f20       0x20 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000f20                gs_safety_note_demand
  .text.gs_safety_note_hall
-                0x0000000008000f48        0xc .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000f48                gs_safety_note_hall
+                0x0000000008000f40        0xc .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000f40                gs_safety_note_hall
  .text.gs_safety_latch
-                0x0000000008000f54        0xa .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000f54                gs_safety_latch
+                0x0000000008000f4c        0xa .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000f4c                gs_safety_latch
  .text.gs_safety_sample_adc_off
-                0x0000000008000f5e       0x58 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000f5e                gs_safety_sample_adc_off
+                0x0000000008000f56       0x58 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000f56                gs_safety_sample_adc_off
  .text.gs_safety_evaluate
-                0x0000000008000fb6       0xc0 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
-                0x0000000008000fb6                gs_safety_evaluate
- *fill*         0x0000000008001076        0x2 
- .text.protocol_fault
-                0x0000000008001078       0x34 .pio/build/gausstop_slave/src/firmware/gd32/slave/main.o
+                0x0000000008000fae       0xc0 .pio/build/gausstop_slave/src/firmware/gd32/common/safety/gs_safety.o
+                0x0000000008000fae                gs_safety_evaluate
+ *fill*         0x000000000800106e        0x2 
  .text.startup.main
-                0x00000000080010ac      0x2b8 .pio/build/gausstop_slave/src/firmware/gd32/slave/main.o
-                0x00000000080010ac                main
+                0x0000000008001070      0x2d8 .pio/build/gausstop_slave/src/firmware/gd32/slave/main.o
+                0x0000000008001070                main
  .text.__libc_init_array
-                0x0000000008001364       0x48 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-init.o)
-                0x0000000008001364                __libc_init_array
- .text.memcmp   0x00000000080013ac       0x1c /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memcmp.o)
-                0x00000000080013ac                memcmp
- .text.memcpy   0x00000000080013c8       0x1c /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memcpy-stub.o)
-                0x00000000080013c8                memcpy
- .text.memmove  0x00000000080013e4       0x34 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memmove.o)
-                0x00000000080013e4                memmove
- .text.memset   0x0000000008001418       0x10 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memset.o)
-                0x0000000008001418                memset
+                0x0000000008001348       0x48 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-init.o)
+                0x0000000008001348                __libc_init_array
+ .text.memcmp   0x0000000008001390       0x1c /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memcmp.o)
+                0x0000000008001390                memcmp
+ .text.memcpy   0x00000000080013ac       0x1c /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memcpy-stub.o)
+                0x00000000080013ac                memcpy
+ .text.memmove  0x00000000080013c8       0x34 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memmove.o)
+                0x00000000080013c8                memmove
+ .text.memset   0x00000000080013fc       0x10 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(lib_a-memset.o)
+                0x00000000080013fc                memset
  .text.SystemInit
-                0x0000000008001428       0x94 .pio/build/gausstop_slave/libFrameworkCMSISVariant.a(system_gd32f1x0.o)
-                0x0000000008001428                SystemInit
+                0x000000000800140c       0x94 .pio/build/gausstop_slave/libFrameworkCMSISVariant.a(system_gd32f1x0.o)
+                0x000000000800140c                SystemInit
  .text.adc_deinit
-                0x00000000080014bc       0x16 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x00000000080014bc                adc_deinit
- *fill*         0x00000000080014d2        0x2 
+                0x00000000080014a0       0x16 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x00000000080014a0                adc_deinit
+ *fill*         0x00000000080014b6        0x2 
  .text.adc_enable
-                0x00000000080014d4       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x00000000080014d4                adc_enable
+                0x00000000080014b8       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x00000000080014b8                adc_enable
  .text.adc_calibration_enable
-                0x00000000080014ec       0x24 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x00000000080014ec                adc_calibration_enable
+                0x00000000080014d0       0x24 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x00000000080014d0                adc_calibration_enable
  .text.adc_data_alignment_config
-                0x0000000008001510       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x0000000008001510                adc_data_alignment_config
+                0x00000000080014f4       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x00000000080014f4                adc_data_alignment_config
  .text.adc_channel_length_config
-                0x0000000008001528       0x44 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x0000000008001528                adc_channel_length_config
+                0x000000000800150c       0x44 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x000000000800150c                adc_channel_length_config
  .text.adc_regular_channel_config
-                0x000000000800156c       0x94 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x000000000800156c                adc_regular_channel_config
+                0x0000000008001550       0x94 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x0000000008001550                adc_regular_channel_config
  .text.adc_external_trigger_config
-                0x0000000008001600       0x44 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x0000000008001600                adc_external_trigger_config
+                0x00000000080015e4       0x44 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x00000000080015e4                adc_external_trigger_config
  .text.adc_external_trigger_source_config
-                0x0000000008001644       0x2c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x0000000008001644                adc_external_trigger_source_config
+                0x0000000008001628       0x2c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x0000000008001628                adc_external_trigger_source_config
  .text.adc_software_trigger_enable
-                0x0000000008001670       0x24 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x0000000008001670                adc_software_trigger_enable
+                0x0000000008001654       0x24 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x0000000008001654                adc_software_trigger_enable
  .text.adc_regular_data_read
-                0x0000000008001694        0xc .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x0000000008001694                adc_regular_data_read
+                0x0000000008001678        0xc .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x0000000008001678                adc_regular_data_read
  .text.adc_flag_get
-                0x00000000080016a0       0x14 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x00000000080016a0                adc_flag_get
+                0x0000000008001684       0x14 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x0000000008001684                adc_flag_get
  .text.adc_flag_clear
-                0x00000000080016b4       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
-                0x00000000080016b4                adc_flag_clear
+                0x0000000008001698       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_adc.o)
+                0x0000000008001698                adc_flag_clear
  .text.fwdgt_enable
-                0x00000000080016c4       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_fwdgt.o)
-                0x00000000080016c4                fwdgt_enable
+                0x00000000080016a8       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_fwdgt.o)
+                0x00000000080016a8                fwdgt_enable
  .text.fwdgt_counter_reload
-                0x00000000080016d4       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_fwdgt.o)
-                0x00000000080016d4                fwdgt_counter_reload
+                0x00000000080016b8       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_fwdgt.o)
+                0x00000000080016b8                fwdgt_counter_reload
  .text.fwdgt_config
-                0x00000000080016e4       0x68 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_fwdgt.o)
-                0x00000000080016e4                fwdgt_config
+                0x00000000080016c8       0x68 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_fwdgt.o)
+                0x00000000080016c8                fwdgt_config
  .text.gpio_mode_set
-                0x000000000800174c       0x44 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x000000000800174c                gpio_mode_set
+                0x0000000008001730       0x44 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x0000000008001730                gpio_mode_set
  .text.gpio_output_options_set
-                0x0000000008001790       0x38 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x0000000008001790                gpio_output_options_set
+                0x0000000008001774       0x38 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x0000000008001774                gpio_output_options_set
  .text.gpio_bit_set
-                0x00000000080017c8        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x00000000080017c8                gpio_bit_set
+                0x00000000080017ac        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x00000000080017ac                gpio_bit_set
  .text.gpio_bit_reset
-                0x00000000080017cc        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x00000000080017cc                gpio_bit_reset
+                0x00000000080017b0        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x00000000080017b0                gpio_bit_reset
  .text.gpio_input_bit_get
-                0x00000000080017d0        0xc .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x00000000080017d0                gpio_input_bit_get
+                0x00000000080017b4        0xc .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x00000000080017b4                gpio_input_bit_get
  .text.gpio_af_set
-                0x00000000080017dc       0x5c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x00000000080017dc                gpio_af_set
+                0x00000000080017c0       0x5c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x00000000080017c0                gpio_af_set
  .text.nvic_vector_table_set
-                0x0000000008001838       0x14 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_misc.o)
-                0x0000000008001838                nvic_vector_table_set
+                0x000000000800181c       0x14 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_misc.o)
+                0x000000000800181c                nvic_vector_table_set
  .text.rcu_periph_clock_enable
-                0x000000000800184c       0x1c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x000000000800184c                rcu_periph_clock_enable
+                0x0000000008001830       0x1c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x0000000008001830                rcu_periph_clock_enable
  .text.rcu_periph_clock_disable
-                0x0000000008001868       0x1e .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x0000000008001868                rcu_periph_clock_disable
+                0x000000000800184c       0x1e .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x000000000800184c                rcu_periph_clock_disable
  .text.rcu_periph_reset_enable
-                0x0000000008001886        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x0000000008001886                rcu_periph_reset_enable
+                0x000000000800186a        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x000000000800186a                rcu_periph_reset_enable
  .text.rcu_periph_reset_disable
-                0x000000000800188a        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x000000000800188a                rcu_periph_reset_disable
- *fill*         0x000000000800188e        0x2 
+                0x000000000800186e        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x000000000800186e                rcu_periph_reset_disable
+ *fill*         0x0000000008001872        0x2 
  .text.rcu_adc_clock_config
-                0x0000000008001890       0x58 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x0000000008001890                rcu_adc_clock_config
+                0x0000000008001874       0x58 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x0000000008001874                rcu_adc_clock_config
  .text.rcu_flag_get
-                0x00000000080018e8       0x1a .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x00000000080018e8                rcu_flag_get
- *fill*         0x0000000008001902        0x2 
+                0x00000000080018cc       0x1a .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x00000000080018cc                rcu_flag_get
+ *fill*         0x00000000080018e6        0x2 
  .text.rcu_all_reset_flag_clear
-                0x0000000008001904       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x0000000008001904                rcu_all_reset_flag_clear
+                0x00000000080018e8       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x00000000080018e8                rcu_all_reset_flag_clear
  .text.rcu_clock_freq_get
-                0x0000000008001914      0x14c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x0000000008001914                rcu_clock_freq_get
+                0x00000000080018f8      0x14c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x00000000080018f8                rcu_clock_freq_get
  .text.timer_deinit
-                0x0000000008001a60       0xc4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001a60                timer_deinit
+                0x0000000008001a44       0xc4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001a44                timer_deinit
  .text.timer_init
-                0x0000000008001b24       0x98 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001b24                timer_init
+                0x0000000008001b08       0x98 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001b08                timer_init
  .text.timer_enable
-                0x0000000008001bbc        0xa .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001bbc                timer_enable
+                0x0000000008001ba0        0xa .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001ba0                timer_enable
  .text.timer_auto_reload_shadow_disable
-                0x0000000008001bc6        0xa .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001bc6                timer_auto_reload_shadow_disable
+                0x0000000008001baa        0xa .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001baa                timer_auto_reload_shadow_disable
  .text.timer_counter_read
-                0x0000000008001bd0        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001bd0                timer_counter_read
+                0x0000000008001bb4        0x4 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001bb4                timer_counter_read
  .text.timer_break_config
-                0x0000000008001bd4       0x1e .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001bd4                timer_break_config
+                0x0000000008001bb8       0x1e .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001bb8                timer_break_config
  .text.timer_primary_output_config
-                0x0000000008001bf2       0x12 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001bf2                timer_primary_output_config
+                0x0000000008001bd6       0x12 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001bd6                timer_primary_output_config
  .text.timer_channel_output_config
-                0x0000000008001c04      0x1fc .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001c04                timer_channel_output_config
+                0x0000000008001be8      0x1fc .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001be8                timer_channel_output_config
  .text.timer_channel_output_mode_config
-                0x0000000008001e00       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001e00                timer_channel_output_mode_config
+                0x0000000008001de4       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001de4                timer_channel_output_mode_config
  .text.timer_channel_output_pulse_value_config
-                0x0000000008001e4c       0x1c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001e4c                timer_channel_output_pulse_value_config
+                0x0000000008001e30       0x1c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001e30                timer_channel_output_pulse_value_config
  .text.timer_channel_output_shadow_config
-                0x0000000008001e68       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001e68                timer_channel_output_shadow_config
+                0x0000000008001e4c       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001e4c                timer_channel_output_shadow_config
  .text.timer_channel_output_fast_config
-                0x0000000008001eb4       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001eb4                timer_channel_output_fast_config
+                0x0000000008001e98       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001e98                timer_channel_output_fast_config
  .text.timer_channel_output_state_config
-                0x0000000008001f00       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001f00                timer_channel_output_state_config
+                0x0000000008001ee4       0x4c .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001ee4                timer_channel_output_state_config
  .text.timer_channel_complementary_output_state_config
-                0x0000000008001f4c       0x3a .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0000000008001f4c                timer_channel_complementary_output_state_config
- *fill*         0x0000000008001f86        0x2 
+                0x0000000008001f30       0x3a .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0000000008001f30                timer_channel_complementary_output_state_config
+ *fill*         0x0000000008001f6a        0x2 
  .text.usart_deinit
-                0x0000000008001f88       0x38 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008001f88                usart_deinit
+                0x0000000008001f6c       0x38 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0000000008001f6c                usart_deinit
  .text.usart_baudrate_set
-                0x0000000008001fc0       0x54 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008001fc0                usart_baudrate_set
+                0x0000000008001fa4       0x54 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0000000008001fa4                usart_baudrate_set
  .text.usart_parity_config
-                0x0000000008002014       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008002014                usart_parity_config
+                0x0000000008001ff8       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0000000008001ff8                usart_parity_config
  .text.usart_word_length_set
-                0x000000000800202c       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x000000000800202c                usart_word_length_set
+                0x0000000008002010       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0000000008002010                usart_word_length_set
  .text.usart_stop_bit_set
-                0x0000000008002044       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008002044                usart_stop_bit_set
+                0x0000000008002028       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0000000008002028                usart_stop_bit_set
  .text.usart_enable
-                0x000000000800205c        0xa .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x000000000800205c                usart_enable
+                0x0000000008002040        0xa .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0000000008002040                usart_enable
  .text.usart_transmit_config
-                0x0000000008002066       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008002066                usart_transmit_config
+                0x000000000800204a       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x000000000800204a                usart_transmit_config
  .text.usart_receive_config
-                0x0000000008002076       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008002076                usart_receive_config
+                0x000000000800205a       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x000000000800205a                usart_receive_config
  .text.usart_data_transmit
-                0x0000000008002086        0x8 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008002086                usart_data_transmit
+                0x000000000800206a        0x8 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x000000000800206a                usart_data_transmit
  .text.usart_data_receive
-                0x000000000800208e        0x8 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x000000000800208e                usart_data_receive
+                0x0000000008002072        0x8 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0000000008002072                usart_data_receive
  .text.usart_flag_get
-                0x0000000008002096       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0000000008002096                usart_flag_get
+                0x000000000800207a       0x10 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x000000000800207a                usart_flag_get
  *(.glue_7)
- .glue_7        0x00000000080020a6        0x0 linker stubs
+ .glue_7        0x000000000800208a        0x0 linker stubs
  *(.glue_7t)
- .glue_7t       0x00000000080020a6        0x0 linker stubs
+ .glue_7t       0x000000000800208a        0x0 linker stubs
  *(.eh_frame)
- *fill*         0x00000000080020a6        0x2 
- .eh_frame      0x00000000080020a8        0x0 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
+ *fill*         0x000000000800208a        0x2 
+ .eh_frame      0x000000000800208c        0x0 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
  *(.init)
- .init          0x00000000080020a8        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crti.o
-                0x00000000080020a8                _init
- .init          0x00000000080020ac        0x8 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtn.o
+ .init          0x000000000800208c        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crti.o
+                0x000000000800208c                _init
+ .init          0x0000000008002090        0x8 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtn.o
  *(.fini)
- .fini          0x00000000080020b4        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crti.o
-                0x00000000080020b4                _fini
- .fini          0x00000000080020b8        0x8 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtn.o
-                0x00000000080020c0                . = ALIGN (0x4)
-                0x00000000080020c0                _etext = .
+ .fini          0x0000000008002098        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crti.o
+                0x0000000008002098                _fini
+ .fini          0x000000000800209c        0x8 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtn.o
+                0x00000000080020a4                . = ALIGN (0x4)
+                0x00000000080020a4                _etext = .
 
-.vfp11_veneer   0x00000000080020c0        0x0
- .vfp11_veneer  0x00000000080020c0        0x0 linker stubs
+.vfp11_veneer   0x00000000080020a4        0x0
+ .vfp11_veneer  0x00000000080020a4        0x0 linker stubs
 
-.v4_bx          0x00000000080020c0        0x0
- .v4_bx         0x00000000080020c0        0x0 linker stubs
+.v4_bx          0x00000000080020a4        0x0
+ .v4_bx         0x00000000080020a4        0x0 linker stubs
 
-.iplt           0x00000000080020c0        0x0
- .iplt          0x00000000080020c0        0x0 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
+.iplt           0x00000000080020a4        0x0
+ .iplt          0x00000000080020a4        0x0 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
 
-.rodata         0x00000000080020c0       0x60
-                0x00000000080020c0                . = ALIGN (0x4)
+.rodata         0x00000000080020a4       0x60
+                0x00000000080020a4                . = ALIGN (0x4)
  *(.rodata)
- .rodata        0x00000000080020c0       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
+ .rodata        0x00000000080020a4       0x18 .pio/build/gausstop_slave/libFrameworkSPL.a(gd32f1x0_rcu.o)
  *(.rodata*)
  .rodata.phase_to_channel.6577
-                0x00000000080020d8        0x3 .pio/build/gausstop_slave/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
- *fill*         0x00000000080020db        0x1 
+                0x00000000080020bc        0x3 .pio/build/gausstop_slave/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+ *fill*         0x00000000080020bf        0x1 
  .rodata.port.6626
-                0x00000000080020dc        0xc .pio/build/gausstop_slave/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x00000000080020c0        0xc .pio/build/gausstop_slave/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .rodata.pwm_channels
-                0x00000000080020e8        0x6 .pio/build/gausstop_slave/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x00000000080020cc        0x6 .pio/build/gausstop_slave/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .rodata.forward_map
-                0x00000000080020ee        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
+                0x00000000080020d2        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
  .rodata.forward_next.4063
-                0x00000000080020f6        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
+                0x00000000080020da        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
  .rodata.reverse_map
-                0x00000000080020fe        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
+                0x00000000080020e2        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
  .rodata.reverse_next.4064
-                0x0000000008002106        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
+                0x00000000080020ea        0x8 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
  .rodata.vectors
-                0x000000000800210e       0x12 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
-                0x0000000008002120                . = ALIGN (0x4)
+                0x00000000080020f2       0x12 .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
+                0x0000000008002104                . = ALIGN (0x4)
 
-.rel.dyn        0x0000000008002120        0x0
- .rel.iplt      0x0000000008002120        0x0 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
+.rel.dyn        0x0000000008002104        0x0
+ .rel.iplt      0x0000000008002104        0x0 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
 
 .ARM.extab
  *(.ARM.extab* .gnu.linkonce.armextab.*)
 
-.ARM            0x0000000008002120        0x0
-                0x0000000008002120                __exidx_start = .
+.ARM            0x0000000008002104        0x0
+                0x0000000008002104                __exidx_start = .
  *(.ARM.exidx*)
-                0x0000000008002120                __exidx_end = .
+                0x0000000008002104                __exidx_end = .
 
-.preinit_array  0x0000000008002120        0x0
-                0x0000000008002120                PROVIDE (__preinit_array_start = .)
+.preinit_array  0x0000000008002104        0x0
+                0x0000000008002104                PROVIDE (__preinit_array_start = .)
  *(.preinit_array*)
-                0x0000000008002120                PROVIDE (__preinit_array_end = .)
+                0x0000000008002104                PROVIDE (__preinit_array_end = .)
 
-.init_array     0x0000000008002120        0x4
-                0x0000000008002120                PROVIDE (__init_array_start = .)
+.init_array     0x0000000008002104        0x4
+                0x0000000008002104                PROVIDE (__init_array_start = .)
  *(SORT_BY_NAME(.init_array.*))
  *(.init_array*)
- .init_array    0x0000000008002120        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
-                0x0000000008002124                PROVIDE (__init_array_end = .)
+ .init_array    0x0000000008002104        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
+                0x0000000008002108                PROVIDE (__init_array_end = .)
 
-.fini_array     0x0000000008002124        0x4
+.fini_array     0x0000000008002108        0x4
                 [!provide]                        PROVIDE (__fini_array_start = .)
  *(SORT_BY_NAME(.fini_array.*))
  *(.fini_array*)
- .fini_array    0x0000000008002124        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
+ .fini_array    0x0000000008002108        0x4 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
                 [!provide]                        PROVIDE (__fini_array_end = .)
-                0x0000000008002128                _sidata = LOADADDR (.data)
+                0x000000000800210c                _sidata = LOADADDR (.data)
 
-.data           0x0000000020000000        0x0 load address 0x0000000008002128
+.data           0x0000000020000000        0x0 load address 0x000000000800210c
                 0x0000000020000000                . = ALIGN (0x4)
                 0x0000000020000000                _sdata = .
  *(.data)
@@ -1112,10 +1109,10 @@ LOAD /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/a
                 0x0000000020000000                . = ALIGN (0x4)
                 0x0000000020000000                _edata = .
 
-.igot.plt       0x0000000020000000        0x0 load address 0x0000000008002128
+.igot.plt       0x0000000020000000        0x0 load address 0x000000000800210c
  .igot.plt      0x0000000020000000        0x0 /home/runner/.platformio/packages/toolchain-gccarmnoneeabi/bin/../lib/gcc/arm-none-eabi/9.2.1/thumb/v7-m/nofp/crtbegin.o
 
-.bss            0x0000000020000000       0xcc load address 0x0000000008002128
+.bss            0x0000000020000000       0xcc load address 0x000000000800210c
                 0x0000000020000000                . = ALIGN (0x4)
                 0x0000000020000000                _sbss = .
                 0x0000000020000000                __bss_start__ = .

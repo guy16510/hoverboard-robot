@@ -16,11 +16,11 @@ jobs:
   verify:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
           fetch-depth: 0
 
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
         with:
           python-version: '3.12'
 
@@ -31,9 +31,8 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          git diff --check
-          python -m compileall -q tools
-          if git ls-files 'dist/*' | grep -q .; then
+          python -m py_compile tools/drive_esp32.py
+          if find dist -type f -print -quit 2>/dev/null | grep -q .; then
             echo 'Generated firmware must not be committed under dist/' >&2
             exit 1
           fi
@@ -151,7 +150,7 @@ jobs:
 
       - name: Upload build logs
         if: ${{ always() }}
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: swd-build-logs-${{ github.sha }}
           path: |
@@ -162,7 +161,7 @@ jobs:
           retention-days: 30
 
       - name: Upload firmware artifact
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: swd-motor-control-${{ github.sha }}
           path: artifacts

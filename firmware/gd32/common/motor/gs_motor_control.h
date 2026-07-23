@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "gs_commutation.h"
+#include "gs_motor_profile.h"
 #include "gs_types.h"
 
 typedef struct {
@@ -30,9 +31,11 @@ typedef struct {
   int32_t odometer;
   uint32_t last_step_ms;
   uint32_t dwell_until_ms;
+  uint16_t compare_offset;
   uint8_t previous_hall;
   int8_t direction;
   bool hall_seen;
+  bool bridge_enabled;
   gs_bridge_port bridge;
 } gs_motor_controller;
 

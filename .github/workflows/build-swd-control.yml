@@ -29,14 +29,24 @@ jobs:
         run: python -m pip install --disable-pip-version-check platformio==6.1.19
 
       - name: Run native tests
-        run: pio run -e native_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! pio run -e native_tests > /tmp/native.log 2>&1; then
+            tail -200 /tmp/native.log
+            exit 1
+          fi
+          tail -20 /tmp/native.log
 
       - name: Build firmware
-        run: >-
-          pio run
-          -e gausstop_master_swd
-          -e gausstop_slave
-          -e esp32_swd_coordinator
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! pio run -e gausstop_master_swd -e gausstop_slave -e esp32_swd_coordinator > /tmp/firmware.log 2>&1; then
+            tail -250 /tmp/firmware.log
+            exit 1
+          fi
+          tail -50 /tmp/firmware.log
 
       - name: Collect flashable images
         shell: bash

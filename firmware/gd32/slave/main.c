@@ -28,35 +28,19 @@ static void calibrate_protection(void) {
   }
 }
 
-static void protocol_fault(void) {
-  slave.faults |= GS_FAULT_PROTOCOL;
-  slave.demanded_electrical = 0;
-  slave.applied_electrical = 0;
-  slave.state = GS_CONTROLLER_FAULTED;
-  gs_safety_latch(&safety, GS_FAULT_PROTOCOL);
-  gs_motor_force_off(&motor);
-}
-
 static void service_link_rx(void) {
   uint8_t byte = 0;
   uint8_t frame[GS_MAX_FRAME_SIZE];
   while (gs_board_uart_read(GS_UART_LINK, &byte)) {
+    const uint32_t now_ms = gs_board_millis();
     const gs_parse_result result =
-        gs_frame_parser_feed(&parser, byte, gs_board_millis(), frame);
-    if (result == GS_PARSE_FRAME) {
-      if (gs_slave_accept_master_frame(&slave, frame, gs_board_millis())) {
-        gs_safety_note_command(&safety, gs_board_millis());
-      } else if (slave.state == GS_CONTROLLER_READY ||
-                 slave.state == GS_CONTROLLER_ACTIVE) {
-        protocol_fault();
-      }
-    } else if (result == GS_PARSE_BAD_CRC) {
-      /*
-       * Do not refresh the link watchdog for corrupt input. Isolated noise is
-       * discarded; sustained corruption trips the 100 ms link timeout.
-       */
+        gs_frame_parser_feed(&parser, byte, now_ms, frame);
+    if (result == GS_PARSE_FRAME &&
+        gs_slave_accept_master_frame(&slave, frame, now_ms)) {
+      gs_safety_note_command(&safety, now_ms);
     }
   }
+  (void)gs_frame_parser_poll(&parser, gs_board_millis());
 }
 
 static void service_motor(void) {
@@ -91,6 +75,15 @@ static void service_motor(void) {
       now_ms);
   const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
                                    adc_value, hall != 0u && hall != 7u};
+
+  if (gs_slave_fault_clear_requested(&slave) &&
+      slave.demanded_electrical == 0 && slave.applied_electrical == 0 &&
+      motor.requested_command == 0 && motor.applied_command == 0 &&
+      gs_safety_clear(&safety, &sample, now_ms)) {
+    gs_motor_clear_fault(&motor, now_ms);
+    gs_slave_finish_fault_clear(&slave, true);
+  }
+
   gs_safety_evaluate(&safety, &sample, now_ms);
   slave.faults |= safety.faults.bits;
   if (safety.faults.bits != 0u) {
@@ -142,7 +135,7 @@ int main(void) {
     if ((int32_t)(now - next_feedback_ms) >= 0) {
       uint8_t frame[GS_SLAVE_FEEDBACK_SIZE];
       next_feedback_ms = now + 20u;
-      if (gs_slave_make_feedback(&slave, frame)) {
+      if (gs_slave_make_feedback(&slave, frame, now)) {
         (void)gs_board_uart_write(GS_UART_LINK, frame, sizeof(frame));
       }
     }

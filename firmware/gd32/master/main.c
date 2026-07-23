@@ -29,69 +29,41 @@ static void calibrate_protection(void) {
   }
 }
 
-static void stop_for_protocol_fault(void) {
-  master.faults |= GS_FAULT_PROTOCOL;
-  master.demanded = (gs_wheel_pair){0, 0};
-  master.applied = (gs_wheel_pair){0, 0};
-  master.state = GS_CONTROLLER_FAULTED;
-  gs_safety_latch(&safety, GS_FAULT_PROTOCOL);
-  gs_motor_force_off(&motor);
-}
-
 static void service_esp_rx(void) {
   uint8_t byte = 0;
   uint8_t frame[GS_MAX_FRAME_SIZE];
   while (gs_board_uart_read(GS_UART_REMOTE, &byte)) {
+    const uint32_t now_ms = gs_board_millis();
     const gs_parse_result result =
-        gs_frame_parser_feed(&esp_parser, byte, gs_board_millis(), frame);
-    if (result == GS_PARSE_FRAME) {
-      gs_esp_command command;
-      if (!gs_decode_esp_command(&command, frame) ||
-          !gs_master_accept_esp_frame(&master, frame, gs_board_millis())) {
-        if (master.state == GS_CONTROLLER_READY ||
-            master.state == GS_CONTROLLER_ACTIVE) {
-          stop_for_protocol_fault();
-        }
-      } else {
-        gs_safety_note_command(&safety, gs_board_millis());
-        if ((command.master_flags & GS_COMMAND_CLEAR_FAULT) != 0u &&
-            (command.master_flags & GS_COMMAND_DISABLE) != 0u) {
-          const gs_safety_sample sample = {gs_board_shutdown_clear(), true,
-                                           safety.adc_baseline, true};
-          (void)gs_safety_clear(&safety, &sample, gs_board_millis());
-        }
-      }
-    } else if (result == GS_PARSE_BAD_CRC) {
-      /*
-       * Do not refresh the command watchdog for a corrupt frame. Isolated
-       * line noise is discarded; sustained corruption reaches the 400 ms
-       * command timeout and forces the bridge off.
-       */
+        gs_frame_parser_feed(&esp_parser, byte, now_ms, frame);
+    if (result == GS_PARSE_FRAME &&
+        gs_master_accept_esp_frame(&master, frame, now_ms)) {
+      gs_safety_note_command(&safety, now_ms);
     }
   }
+  (void)gs_frame_parser_poll(&esp_parser, gs_board_millis());
 }
 
 static void service_slave_rx(void) {
   uint8_t byte = 0;
   uint8_t frame[GS_MAX_FRAME_SIZE];
   while (gs_board_uart_read(GS_UART_LINK, &byte)) {
+    const uint32_t now_ms = gs_board_millis();
     const gs_parse_result result =
-        gs_frame_parser_feed(&slave_parser, byte, gs_board_millis(), frame);
+        gs_frame_parser_feed(&slave_parser, byte, now_ms, frame);
     if (result == GS_PARSE_FRAME) {
-      if (!gs_master_accept_slave_feedback(&master, frame)) {
-        if (master.state == GS_CONTROLLER_READY ||
-            master.state == GS_CONTROLLER_ACTIVE) {
-          stop_for_protocol_fault();
-        }
-      }
-    } else if (result == GS_PARSE_BAD_CRC) {
-      /*
-       * The SLAVE continues to enforce its 100 ms command watchdog. Drop an
-       * isolated corrupt feedback frame instead of permanently faulting both
-       * otherwise healthy controllers.
-       */
+      (void)gs_master_accept_slave_feedback(&master, frame, now_ms);
     }
   }
+  (void)gs_frame_parser_poll(&slave_parser, gs_board_millis());
+}
+
+static bool pa4_bypass_compiled(void) {
+#if defined(GS_BYPASS_PA4_SHUTDOWN) && GS_BYPASS_PA4_SHUTDOWN == 1
+  return true;
+#else
+  return false;
+#endif
 }
 
 static void service_motor(void) {
@@ -119,16 +91,31 @@ static void service_motor(void) {
   }
   previous_hall = hall;
 
+  const bool pa4_raw_high = gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
+  gs_master_set_runtime_status(&master, pa4_raw_high, pa4_bypass_compiled());
   gs_safety_set_enabled(&safety, master.state == GS_CONTROLLER_READY ||
                                      master.state == GS_CONTROLLER_ACTIVE);
   gs_safety_note_demand(
       &safety, master.demanded.left != 0 || motor.applied_command != 0, now_ms);
   const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
                                    adc_value, hall != 0u && hall != 7u};
+
+  if (gs_master_fault_clear_requested(&master) &&
+      master.requested.left == 0 && master.requested.right == 0 &&
+      master.demanded.left == 0 && master.demanded.right == 0 &&
+      master.applied.left == 0 && master.applied.right == 0 &&
+      motor.requested_command == 0 && motor.applied_command == 0 &&
+      gs_safety_clear(&safety, &sample, now_ms)) {
+    gs_motor_clear_fault(&motor, now_ms);
+    gs_master_finish_fault_clear(&master, true);
+  }
+
   gs_safety_evaluate(&safety, &sample, now_ms);
   master.faults |= safety.faults.bits;
   if (safety.faults.bits != 0u) {
+    master.requested = (gs_wheel_pair){0, 0};
     master.demanded = (gs_wheel_pair){0, 0};
+    master.applied = (gs_wheel_pair){0, 0};
     master.state = GS_CONTROLLER_FAULTED;
   }
   const bool permitted =
@@ -144,13 +131,13 @@ static void service_motor(void) {
                                                      : GS_FAULT_HALL_INVALID);
     gs_safety_latch(&safety, fault);
     master.faults |= (uint32_t)fault;
+    master.applied = (gs_wheel_pair){0, 0};
     master.state = GS_CONTROLLER_FAULTED;
   }
   if (output.hall_result == GS_HALL_LEGAL) {
     gs_safety_note_hall(&safety, now_ms);
   }
   master.applied.left = output.demand.logical_command;
-  master.applied.right = master.demanded.right;
   master.local_odometer = motor.odometer;
 }
 
@@ -165,8 +152,9 @@ int main(void) {
   gs_safety_init(&safety, GS_SAFETY_MASTER, watchdog_reset, gs_board_millis());
   calibrate_protection();
   const uint8_t command_marker[] = {GS_COMMAND_MARKER};
+  const uint8_t slave_feedback_marker[] = {GS_SLAVE_FEEDBACK_MARKER};
   gs_frame_parser_init(&esp_parser, command_marker, 1, GS_ESP_COMMAND_SIZE);
-  gs_frame_parser_init(&slave_parser, command_marker, 1,
+  gs_frame_parser_init(&slave_parser, slave_feedback_marker, 1,
                        GS_SLAVE_FEEDBACK_SIZE);
   gs_board_watchdog_start();
 
@@ -188,7 +176,7 @@ int main(void) {
     if ((int32_t)(now - next_feedback_ms) >= 0) {
       uint8_t frame[GS_MASTER_FEEDBACK_SIZE];
       next_feedback_ms = now + 50u;
-      if (gs_master_make_feedback(&master, frame)) {
+      if (gs_master_make_feedback(&master, frame, now)) {
         (void)gs_board_uart_write(GS_UART_REMOTE, frame, sizeof(frame));
       }
     }

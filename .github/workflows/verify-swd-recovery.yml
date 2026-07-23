@@ -40,6 +40,10 @@ jobs:
             tail -250 native-build.log
             exit 1
           fi
+          if ! .pio/build/native_tests/program >> native-build.log 2>&1; then
+            tail -250 native-build.log
+            exit 1
+          fi
           tail -30 native-build.log
 
       - name: Build the ESP32 and both motor controllers

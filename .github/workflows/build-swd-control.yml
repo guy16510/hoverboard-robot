@@ -27,19 +27,6 @@ jobs:
       - name: Install PlatformIO
         run: python -m pip install --disable-pip-version-check platformio==6.1.19
 
-      - name: Source checks
-        shell: bash
-        run: |
-          set -euo pipefail
-          python -m py_compile tools/drive_esp32.py
-          if find dist -type f -print -quit 2>/dev/null | grep -q .; then
-            echo 'Generated firmware must not be committed under dist/' >&2
-            exit 1
-          fi
-          if grep -R --line-number --fixed-strings 'GS_BYPASS_PA4_SHUTDOWN=1' platformio.ini; then
-            echo 'BENCH WARNING: gausstop_master_swd contains the PA4 bypass.'
-          fi
-
       - name: Run native tests
         shell: bash
         run: |

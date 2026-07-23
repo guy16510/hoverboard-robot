@@ -28,12 +28,37 @@ jobs:
         run: python -m pip install --disable-pip-version-check platformio==6.1.19
 
       - name: Run native tests
-        run: pio run -e native_tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! pio run -e native_tests > native-build.log 2>&1; then
+            tail -250 native-build.log
+            exit 1
+          fi
+          tail -30 native-build.log
 
       - name: Build the ESP32 and both motor controllers
-        run: >-
-          pio run
-          -e gausstop_master_swd
-          -e bench_master_pa4_bypass
-          -e gausstop_slave
-          -e esp32_swd_coordinator
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! pio run \
+            -e gausstop_master_swd \
+            -e bench_master_pa4_bypass \
+            -e gausstop_slave \
+            -e esp32_swd_coordinator \
+            > firmware-build.log 2>&1; then
+            tail -300 firmware-build.log
+            exit 1
+          fi
+          tail -80 firmware-build.log
+
+      - name: Upload build logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: swd-recovery-build-logs-${{ github.sha }}
+          path: |
+            native-build.log
+            firmware-build.log
+          if-no-files-found: ignore
+          retention-days: 30

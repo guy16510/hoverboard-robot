@@ -46,11 +46,15 @@ static void service_link_rx(void) {
     if (result == GS_PARSE_FRAME) {
       if (gs_slave_accept_master_frame(&slave, frame, gs_board_millis())) {
         gs_safety_note_command(&safety, gs_board_millis());
-      } else {
+      } else if (slave.state == GS_CONTROLLER_READY ||
+                 slave.state == GS_CONTROLLER_ACTIVE) {
         protocol_fault();
       }
     } else if (result == GS_PARSE_BAD_CRC) {
-      protocol_fault();
+      /*
+       * Do not refresh the link watchdog for corrupt input. Isolated noise is
+       * discarded; sustained corruption trips the 100 ms link timeout.
+       */
     }
   }
 }

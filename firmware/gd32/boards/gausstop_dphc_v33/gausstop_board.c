@@ -200,7 +200,15 @@ uint8_t gs_board_read_hall(void) {
 }
 
 bool gs_board_shutdown_clear(void) {
+#if defined(GS_BYPASS_PA4_SHUTDOWN) && GS_BYPASS_PA4_SHUTDOWN == 1
+  /*
+   * Hardware-specific bench override: PA4 remains low on the powered MASTER
+   * even with the power button released. Other builds retain the interlock.
+   */
+  return true;
+#else
   return gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
+#endif
 }
 
 bool gs_board_adc_read(uint16_t *out) {

@@ -26,7 +26,8 @@ bool gs_slave_accept_master_frame(gs_slave_coordinator *slave,
                                   uint32_t now_ms) {
   gs_slave_command command;
   if (slave == NULL || !gs_decode_slave_command(&command, frame)) {
-    if (slave != NULL && slave->state != GS_CONTROLLER_DISABLED) {
+    if (slave != NULL && (slave->state == GS_CONTROLLER_READY ||
+                          slave->state == GS_CONTROLLER_ACTIVE)) {
       slave->faults |= GS_FAULT_PROTOCOL;
       stop_slave(slave, GS_CONTROLLER_FAULTED);
     }
@@ -63,8 +64,8 @@ bool gs_slave_accept_master_frame(gs_slave_coordinator *slave,
 
 void gs_slave_tick(gs_slave_coordinator *slave, uint32_t now_ms) {
   if (slave == NULL || !slave->master_seen ||
-      slave->state == GS_CONTROLLER_DISABLED ||
-      slave->state == GS_CONTROLLER_SHUTDOWN) {
+      (slave->state != GS_CONTROLLER_READY &&
+       slave->state != GS_CONTROLLER_ACTIVE)) {
     return;
   }
   if ((uint32_t)(now_ms - slave->last_master_command_ms) >

@@ -10,6 +10,15 @@ enum {
   GS_DECELERATION_PER_SECOND = 800,
 };
 
+#ifndef GS_COMMAND_FULL_SCALE
+#define GS_COMMAND_FULL_SCALE 1000
+#endif
+
+_Static_assert(GS_COMMAND_FULL_SCALE > GS_COMMAND_DEADBAND,
+               "command full scale must exceed deadband");
+_Static_assert(GS_COMMAND_FULL_SCALE <= 1000,
+               "command full scale cannot exceed protocol range");
+
 static int16_t absolute_command(int16_t value) {
   return value < 0 ? (int16_t)-value : value;
 }
@@ -49,9 +58,12 @@ static uint16_t compare_for_command(int16_t command) {
   if (magnitude < GS_COMMAND_DEADBAND) {
     return 0;
   }
+  if (magnitude >= GS_COMMAND_FULL_SCALE) {
+    return GS_PWM_OFFSET_MAX;
+  }
   const int32_t span = GS_PWM_OFFSET_MAX - GS_PWM_OFFSET_START;
   const int32_t scaled = (int32_t)(magnitude - GS_COMMAND_DEADBAND) * span /
-                         (1000 - GS_COMMAND_DEADBAND);
+                         (GS_COMMAND_FULL_SCALE - GS_COMMAND_DEADBAND);
   const int32_t compare = GS_PWM_OFFSET_START + scaled;
   return (uint16_t)(compare > GS_PWM_OFFSET_MAX ? GS_PWM_OFFSET_MAX : compare);
 }

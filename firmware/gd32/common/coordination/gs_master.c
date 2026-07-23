@@ -75,8 +75,8 @@ bool gs_master_accept_esp_frame(gs_master_coordinator *master,
 
 void gs_master_tick(gs_master_coordinator *master, uint32_t now_ms) {
   if (master == NULL || !master->esp_seen ||
-      master->state == GS_CONTROLLER_DISABLED ||
-      master->state == GS_CONTROLLER_SHUTDOWN) {
+      (master->state != GS_CONTROLLER_READY &&
+       master->state != GS_CONTROLLER_ACTIVE)) {
     return;
   }
   if ((uint32_t)(now_ms - master->last_esp_command_ms) > GS_ESP_TIMEOUT_MS) {

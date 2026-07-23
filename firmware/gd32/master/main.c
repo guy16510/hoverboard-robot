@@ -48,7 +48,10 @@ static void service_esp_rx(void) {
       gs_esp_command command;
       if (!gs_decode_esp_command(&command, frame) ||
           !gs_master_accept_esp_frame(&master, frame, gs_board_millis())) {
-        stop_for_protocol_fault();
+        if (master.state == GS_CONTROLLER_READY ||
+            master.state == GS_CONTROLLER_ACTIVE) {
+          stop_for_protocol_fault();
+        }
       } else {
         gs_safety_note_command(&safety, gs_board_millis());
         if ((command.master_flags & GS_COMMAND_CLEAR_FAULT) != 0u &&
@@ -59,7 +62,11 @@ static void service_esp_rx(void) {
         }
       }
     } else if (result == GS_PARSE_BAD_CRC) {
-      stop_for_protocol_fault();
+      /*
+       * Do not refresh the command watchdog for a corrupt frame. Isolated
+       * line noise is discarded; sustained corruption reaches the 400 ms
+       * command timeout and forces the bridge off.
+       */
     }
   }
 }
@@ -72,10 +79,17 @@ static void service_slave_rx(void) {
         gs_frame_parser_feed(&slave_parser, byte, gs_board_millis(), frame);
     if (result == GS_PARSE_FRAME) {
       if (!gs_master_accept_slave_feedback(&master, frame)) {
-        stop_for_protocol_fault();
+        if (master.state == GS_CONTROLLER_READY ||
+            master.state == GS_CONTROLLER_ACTIVE) {
+          stop_for_protocol_fault();
+        }
       }
     } else if (result == GS_PARSE_BAD_CRC) {
-      stop_for_protocol_fault();
+      /*
+       * The SLAVE continues to enforce its 100 ms command watchdog. Drop an
+       * isolated corrupt feedback frame instead of permanently faulting both
+       * otherwise healthy controllers.
+       */
     }
   }
 }

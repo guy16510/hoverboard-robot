@@ -11,9 +11,9 @@
 #endif
 
 enum {
-  GS_SWD_UART_BAUD = 38400,
-  GS_SWD_UART_BIT_TICKS = 26,
-  GS_SWD_UART_FIRST_SAMPLE_TICKS = 39,
+  GS_SWD_UART_BAUD = 19200,
+  GS_SWD_UART_BIT_TICKS = 52,
+  GS_SWD_UART_FIRST_SAMPLE_TICKS = 78,
   GS_SWD_UART_RX_BUFFER_SIZE = 64,
   GS_SWD_TAKEOVER_DELAY_MS = 2000,
 };
@@ -53,9 +53,9 @@ void EXTI4_15_IRQHandler(void) {
   const uint16_t start = (uint16_t)timer_counter_read(TIMER1);
   uint8_t value = 0u;
   for (uint8_t bit = 0u; bit < 8u; ++bit) {
-    wait_timer1_offset(
-        start, (uint16_t)(GS_SWD_UART_FIRST_SAMPLE_TICKS +
-                          (uint16_t)bit * GS_SWD_UART_BIT_TICKS));
+    wait_timer1_offset(start,
+                       (uint16_t)(GS_SWD_UART_FIRST_SAMPLE_TICKS +
+                                  (uint16_t)bit * GS_SWD_UART_BIT_TICKS));
     if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
       value |= (uint8_t)(1u << bit);
     }
@@ -72,13 +72,15 @@ static void init_remote(bool transmit_enabled) {
   rx_tail = 0u;
   rcu_periph_clock_enable(RCU_GPIOA);
   rcu_periph_clock_enable(RCU_CFGCMP);
-  rcu_periph_clock_enable(RCU_USART0);
 
-  /* MASTER TX is PA14/SWCLK using USART0_TX alternate function 1. */
-  gpio_af_set(GPIOA, GPIO_AF_1, GPIO_PIN_14);
-  gpio_mode_set(GPIOA, GPIO_MODE_AF, GPIO_PUPD_PULLUP, GPIO_PIN_14);
-  gpio_output_options_set(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ,
-                          GPIO_PIN_14);
+  /*
+   * PA14's UART function is USART1_TX on the GD32F130C8, but USART1 is
+   * already used by the master/slave link on PA2/PA3. Drive the remote TX
+   * waveform in software so both links can operate simultaneously.
+   */
+  gpio_bit_set(GPIOA, GPIO_PIN_14);
+  gpio_mode_set(GPIOA, GPIO_MODE_OUTPUT, GPIO_PUPD_PULLUP, GPIO_PIN_14);
+  gpio_output_options_set(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, GPIO_PIN_14);
 
   /* MASTER RX is PA13/SWDIO using an interrupt-sampled software receiver. */
   gpio_mode_set(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_13);
@@ -88,15 +90,7 @@ static void init_remote(bool transmit_enabled) {
   NVIC_SetPriority(SysTick_IRQn, 3u);
   nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
 
-  usart_deinit(USART0);
-  usart_baudrate_set(USART0, GS_SWD_UART_BAUD);
-  usart_word_length_set(USART0, USART_WL_8BIT);
-  usart_stop_bit_set(USART0, USART_STB_1BIT);
-  usart_parity_config(USART0, USART_PM_NONE);
-  usart_receive_config(USART0, USART_RECEIVE_DISABLE);
-  usart_transmit_config(USART0, transmit_enabled ? USART_TRANSMIT_ENABLE
-                                                 : USART_TRANSMIT_DISABLE);
-  usart_enable(USART0);
+  (void)transmit_enabled;
 }
 
 void __wrap_gs_board_uart_init(gs_board_uart uart, bool transmit_enabled) {
@@ -127,15 +121,39 @@ bool __wrap_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
   if (bytes == NULL) {
     return false;
   }
+
+  /*
+   * Ignore remote RX edges while emitting a feedback frame. An ESP32 command
+   * that overlaps the 6.8 ms transmission is safely dropped and retried by
+   * the 20 ms heartbeat; sampling a partial byte would instead create a
+   * protocol fault. SysTick remains enabled and is short relative to a bit.
+   */
+  nvic_irq_disable(EXTI4_15_IRQn);
   for (uint32_t index = 0u; index < length; ++index) {
-    uint32_t timeout = 100000u;
-    while (usart_flag_get(USART0, USART_FLAG_TBE) == RESET && timeout != 0u) {
-      --timeout;
+    const uint16_t start = (uint16_t)timer_counter_read(TIMER1);
+    gpio_bit_reset(GPIOA, GPIO_PIN_14);
+    wait_timer1_offset(start, GS_SWD_UART_BIT_TICKS);
+    for (uint8_t bit = 0u; bit < 8u; ++bit) {
+      if ((bytes[index] & (uint8_t)(1u << bit)) != 0u) {
+        gpio_bit_set(GPIOA, GPIO_PIN_14);
+      } else {
+        gpio_bit_reset(GPIOA, GPIO_PIN_14);
+      }
+      wait_timer1_offset(
+          start, (uint16_t)((uint16_t)(bit + 2u) * GS_SWD_UART_BIT_TICKS));
     }
-    if (timeout == 0u) {
-      return false;
-    }
-    usart_data_transmit(USART0, bytes[index]);
+    gpio_bit_set(GPIOA, GPIO_PIN_14);
+    wait_timer1_offset(start, (uint16_t)(10u * GS_SWD_UART_BIT_TICKS));
   }
+
+  /*
+   * A command may have started while RX interrupts were masked. Keep RX
+   * masked long enough for that nine-byte frame to finish, then resume from
+   * the next 20 ms heartbeat instead of sampling in the middle of a byte.
+   */
+  const uint16_t guard_start = (uint16_t)timer_counter_read(TIMER1);
+  wait_timer1_offset(guard_start, 6000u);
+  exti_interrupt_flag_clear(EXTI_13);
+  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
   return true;
 }

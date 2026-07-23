@@ -9,7 +9,7 @@ extern "C" {
 
 namespace {
 constexpr uint32_t kConsoleBaud = 115200;
-constexpr uint32_t kControllerBaud = 38400;
+constexpr uint32_t kControllerBaud = 19200;
 constexpr int kControllerRx = 35; // MASTER PA14/SWCLK -> ESP32 GPIO35
 constexpr int kControllerTx = 17; // ESP32 GPIO17 -> MASTER PA13/SWDIO
 constexpr uint32_t kHeartbeatMs = 20;

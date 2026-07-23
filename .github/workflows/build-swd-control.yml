@@ -32,21 +32,31 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-          if ! pio run -e native_tests > /tmp/native.log 2>&1; then
-            tail -200 /tmp/native.log
+          if ! pio run -e native_tests > native-build.log 2>&1; then
+            tail -200 native-build.log
             exit 1
           fi
-          tail -20 /tmp/native.log
+          tail -20 native-build.log
 
       - name: Build firmware
         shell: bash
         run: |
           set -euo pipefail
-          if ! pio run -e gausstop_master_swd -e gausstop_slave -e esp32_swd_coordinator > /tmp/firmware.log 2>&1; then
-            tail -250 /tmp/firmware.log
+          if ! pio run -e gausstop_master_swd -e gausstop_slave -e esp32_swd_coordinator > firmware-build.log 2>&1; then
+            tail -250 firmware-build.log
             exit 1
           fi
-          tail -50 /tmp/firmware.log
+          tail -50 firmware-build.log
+
+      - name: Upload build logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: swd-build-logs
+          path: |
+            native-build.log
+            firmware-build.log
+          if-no-files-found: ignore
 
       - name: Collect flashable images
         shell: bash

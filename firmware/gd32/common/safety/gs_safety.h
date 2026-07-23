@@ -38,6 +38,8 @@ typedef enum {
   GS_FAULT_PROTECTION = 1u << 9,
   GS_FAULT_ADC_CALIBRATION = 1u << 10,
   GS_FAULT_WATCHDOG_LOCKOUT = 1u << 11,
+  GS_FAULT_HALL_CAPTURE_OVERFLOW = 1u << 12,
+  GS_FAULT_TRANSPORT_OVERFLOW = 1u << 13,
 } gs_fault_flag;
 
 typedef struct {

@@ -47,6 +47,7 @@ static volatile uint8_t tx_head;
 static volatile uint8_t tx_tail;
 static volatile uint32_t tx_overflow_count;
 static volatile bool tx_active;
+static volatile bool tx_timer_running;
 static volatile uint8_t tx_byte;
 static volatile uint8_t tx_bit;
 
@@ -121,6 +122,7 @@ static void start_rx_sampling(void) {
 }
 
 void EXTI4_15_IRQHandler(void) {
+  gs_board_hall_exti_service();
   if (exti_interrupt_flag_get(EXTI_13) == RESET) {
     return;
   }
@@ -164,11 +166,14 @@ void TIMER14_IRQHandler(void) {
 
 static void drive_tx_bit(void) {
   if (!tx_active) {
-    if (!pop_tx_byte((uint8_t *)&tx_byte)) {
+    uint8_t next_byte = 0u;
+    if (!pop_tx_byte(&next_byte)) {
       gpio_bit_set(GPIOA, GPIO_PIN_14);
+      tx_timer_running = false;
       timer_disable(TIMER13);
       return;
     }
+    tx_byte = next_byte;
     tx_active = true;
     tx_bit = 0u;
   }
@@ -212,6 +217,7 @@ static void init_remote(bool transmit_enabled) {
   tx_tail = 0u;
   tx_overflow_count = 0u;
   tx_active = false;
+  tx_timer_running = false;
 
   rcu_periph_clock_enable(RCU_GPIOA);
   rcu_periph_clock_enable(RCU_CFGCMP);
@@ -228,7 +234,7 @@ static void init_remote(bool transmit_enabled) {
   configure_tx_timer();
   configure_rx_timer();
   NVIC_SetPriority(SysTick_IRQn, 3u);
-  nvic_irq_enable(EXTI4_15_IRQn, 1u, 0u);
+  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
 
   (void)transmit_enabled;
   (void)GS_SWD_UART_BAUD;
@@ -281,8 +287,11 @@ bool __wrap_gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
   }
   tx_head = next;
 
-  timer_counter_value_config(TIMER13, 0u);
-  timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
-  timer_enable(TIMER13);
+  if (!tx_timer_running) {
+    tx_timer_running = true;
+    timer_counter_value_config(TIMER13, 0u);
+    timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
+    timer_enable(TIMER13);
+  }
   return true;
 }

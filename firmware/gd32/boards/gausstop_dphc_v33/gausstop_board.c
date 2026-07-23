@@ -12,14 +12,31 @@ enum {
   GS_PWM_PERIOD = 999,
   GS_PWM_MIDPOINT = 500,
   GS_PWM_DEADTIME = 120,
+  GS_HALL_EVENT_BUFFER_SIZE = 16,
 };
 
+_Static_assert((GS_HALL_EVENT_BUFFER_SIZE &
+                (GS_HALL_EVENT_BUFFER_SIZE - 1u)) == 0u,
+               "Hall event buffer size must be a power of two");
+
 static const uint16_t pwm_channels[3] = {TIMER_CH_0, TIMER_CH_1, TIMER_CH_2};
-static uint16_t micros_previous;
-static uint32_t micros_high;
+static volatile uint32_t micros_high;
 static volatile uint32_t milliseconds;
+static volatile gs_board_hall_event hall_events[GS_HALL_EVENT_BUFFER_SIZE];
+static volatile uint8_t hall_event_head;
+static volatile uint8_t hall_event_tail;
+static volatile uint32_t hall_event_overflows;
+static volatile uint8_t hall_last_state;
+static volatile uint32_t hall_last_timestamp_us;
 
 void SysTick_Handler(void) { ++milliseconds; }
+
+void TIMER1_IRQHandler(void) {
+  if (timer_interrupt_flag_get(TIMER1, TIMER_INT_FLAG_UP) != RESET) {
+    timer_interrupt_flag_clear(TIMER1, TIMER_INT_FLAG_UP);
+    micros_high += 0x10000u;
+  }
+}
 
 static uint8_t channel_for_phase(gs_phase phase) {
   /* TIMER channels follow legacy electrical order Y, B, G. */
@@ -41,7 +58,8 @@ void gs_board_safe_gpio_init(void) {
 }
 
 void gs_board_time_init(void) {
-  milliseconds = 0;
+  milliseconds = 0u;
+  micros_high = 0u;
   (void)SysTick_Config(GS_SYSTEM_CLOCK_HZ / 1000u);
   rcu_periph_clock_enable(RCU_TIMER1);
   timer_deinit(TIMER1);
@@ -52,6 +70,9 @@ void gs_board_time_init(void) {
   timer.period = 0xFFFFu;
   timer.clockdivision = TIMER_CKDIV_DIV1;
   timer_init(TIMER1, &timer);
+  timer_interrupt_flag_clear(TIMER1, TIMER_INT_FLAG_UP);
+  timer_interrupt_enable(TIMER1, TIMER_INT_UP);
+  nvic_irq_enable(TIMER1_IRQn, 2u, 0u);
   timer_enable(TIMER1);
 }
 
@@ -129,10 +150,122 @@ static void adc_init(void) {
   adc_calibration_enable();
 }
 
+uint8_t gs_board_read_hall(void) {
+  return (
+      uint8_t)(((gpio_input_bit_get(GPIOC, GPIO_PIN_14) == SET ? 1u : 0u)
+                << 2) |
+               ((gpio_input_bit_get(GPIOA, GPIO_PIN_0) == SET ? 1u : 0u) << 1) |
+               (gpio_input_bit_get(GPIOB, GPIO_PIN_11) == SET ? 1u : 0u));
+}
+
+uint32_t gs_board_micros(void) {
+  uint32_t high_before;
+  uint32_t high_after;
+  uint16_t current;
+  do {
+    high_before = micros_high;
+    current = (uint16_t)timer_counter_read(TIMER1);
+    high_after = micros_high;
+  } while (high_before != high_after);
+  if (timer_interrupt_flag_get(TIMER1, TIMER_INT_FLAG_UP) != RESET &&
+      current < 0x8000u) {
+    high_before += 0x10000u;
+  }
+  return high_before | current;
+}
+
+static void push_hall_event(uint8_t hall, uint32_t timestamp_us) {
+  if (hall == hall_last_state) {
+    return;
+  }
+  const uint8_t next =
+      (uint8_t)((hall_event_head + 1u) & (GS_HALL_EVENT_BUFFER_SIZE - 1u));
+  if (next == hall_event_tail) {
+    ++hall_event_overflows;
+    hall_last_state = hall;
+    hall_last_timestamp_us = timestamp_us;
+    return;
+  }
+  hall_events[hall_event_head].hall = hall;
+  hall_events[hall_event_head].timestamp_us = timestamp_us;
+  hall_events[hall_event_head].interval_us =
+      timestamp_us - hall_last_timestamp_us;
+  hall_event_head = next;
+  hall_last_state = hall;
+  hall_last_timestamp_us = timestamp_us;
+}
+
+static void capture_hall_edge(void) {
+  push_hall_event(gs_board_read_hall(), gs_board_micros());
+}
+
+static void hall_capture_init(void) {
+  hall_event_head = 0u;
+  hall_event_tail = 0u;
+  hall_event_overflows = 0u;
+  hall_last_state = gs_board_read_hall();
+  hall_last_timestamp_us = gs_board_micros();
+
+  rcu_periph_clock_enable(RCU_CFGCMP);
+  syscfg_exti_line_config(EXTI_SOURCE_GPIOA, EXTI_SOURCE_PIN0);
+  syscfg_exti_line_config(EXTI_SOURCE_GPIOB, EXTI_SOURCE_PIN11);
+  syscfg_exti_line_config(EXTI_SOURCE_GPIOC, EXTI_SOURCE_PIN14);
+  exti_init(EXTI_0, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+  exti_init(EXTI_11, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+  exti_init(EXTI_14, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
+  exti_interrupt_flag_clear(EXTI_0);
+  exti_interrupt_flag_clear(EXTI_11);
+  exti_interrupt_flag_clear(EXTI_14);
+  nvic_irq_enable(EXTI0_1_IRQn, 0u, 0u);
+  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
+}
+
+void EXTI0_1_IRQHandler(void) {
+  if (exti_interrupt_flag_get(EXTI_0) != RESET) {
+    exti_interrupt_flag_clear(EXTI_0);
+    capture_hall_edge();
+  }
+}
+
+void gs_board_hall_exti_service(void) {
+  bool edge = false;
+  if (exti_interrupt_flag_get(EXTI_11) != RESET) {
+    exti_interrupt_flag_clear(EXTI_11);
+    edge = true;
+  }
+  if (exti_interrupt_flag_get(EXTI_14) != RESET) {
+    exti_interrupt_flag_clear(EXTI_14);
+    edge = true;
+  }
+  if (edge) {
+    capture_hall_edge();
+  }
+}
+
+#if !defined(GS_REMOTE_TRANSPORT_SWD) || GS_REMOTE_TRANSPORT_SWD != 1
+void EXTI4_15_IRQHandler(void) { gs_board_hall_exti_service(); }
+#endif
+
+bool gs_board_hall_event_read(gs_board_hall_event *event) {
+  if (event == NULL || hall_event_tail == hall_event_head) {
+    return false;
+  }
+  const uint8_t tail = hall_event_tail;
+  event->hall = hall_events[tail].hall;
+  event->timestamp_us = hall_events[tail].timestamp_us;
+  event->interval_us = hall_events[tail].interval_us;
+  hall_event_tail =
+      (uint8_t)((tail + 1u) & (GS_HALL_EVENT_BUFFER_SIZE - 1u));
+  return true;
+}
+
+uint32_t gs_board_hall_overflow_count(void) { return hall_event_overflows; }
+
 void gs_board_operational_init(void) {
   gs_board_safe_gpio_init();
   bridge_gpio_init();
   gs_board_time_init();
+  hall_capture_init();
   bridge_timer_init();
   gs_board_bridge_off(NULL);
   adc_init();
@@ -191,20 +324,9 @@ gs_bridge_port gs_board_bridge_port(void) {
   return port;
 }
 
-uint8_t gs_board_read_hall(void) {
-  return (
-      uint8_t)(((gpio_input_bit_get(GPIOC, GPIO_PIN_14) == SET ? 1u : 0u)
-                << 2) |
-               ((gpio_input_bit_get(GPIOA, GPIO_PIN_0) == SET ? 1u : 0u) << 1) |
-               (gpio_input_bit_get(GPIOB, GPIO_PIN_11) == SET ? 1u : 0u));
-}
-
 bool gs_board_shutdown_clear(void) {
 #if defined(GS_BYPASS_PA4_SHUTDOWN) && GS_BYPASS_PA4_SHUTDOWN == 1
-  /*
-   * Hardware-specific bench override: PA4 remains low on the powered MASTER
-   * even with the power button released. Other builds retain the interlock.
-   */
+  /* Bench override remains visible through MASTER telemetry. */
   return true;
 #else
   return gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
@@ -244,15 +366,6 @@ void gs_board_watchdog_start(void) {
 void gs_board_watchdog_reload(void) { fwdgt_counter_reload(); }
 
 uint32_t gs_board_millis(void) { return milliseconds; }
-
-uint32_t gs_board_micros(void) {
-  const uint16_t current = (uint16_t)timer_counter_read(TIMER1);
-  if (current < micros_previous) {
-    micros_high += 0x10000u;
-  }
-  micros_previous = current;
-  return micros_high | current;
-}
 
 static uint32_t uart_peripheral(gs_board_uart uart) {
   return uart == GS_UART_REMOTE ? USART0 : USART1;

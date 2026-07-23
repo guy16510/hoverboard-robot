@@ -102,6 +102,12 @@ typedef enum {
   GS_UART_LINK,
 } gs_board_uart;
 
+typedef struct {
+  uint8_t hall;
+  uint32_t timestamp_us;
+  uint32_t interval_us;
+} gs_board_hall_event;
+
 void gs_board_safe_gpio_init(void);
 void gs_board_time_init(void);
 void gs_board_operational_init(void);
@@ -110,6 +116,9 @@ bool gs_board_bridge_apply(void *context, const gs_commutation_vector *vector,
                            uint16_t compare_offset);
 gs_bridge_port gs_board_bridge_port(void);
 uint8_t gs_board_read_hall(void);
+void gs_board_hall_exti_service(void);
+bool gs_board_hall_event_read(gs_board_hall_event *event);
+uint32_t gs_board_hall_overflow_count(void);
 bool gs_board_shutdown_clear(void);
 bool gs_board_adc_read(uint16_t *out);
 bool gs_board_watchdog_was_reset(void);

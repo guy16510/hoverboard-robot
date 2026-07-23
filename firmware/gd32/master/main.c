@@ -29,6 +29,16 @@ static void calibrate_protection(void) {
   }
 }
 
+static void force_master_fault(gs_fault_flag fault) {
+  gs_safety_latch(&safety, fault);
+  master.faults |= (uint32_t)fault;
+  master.requested = (gs_wheel_pair){0, 0};
+  master.demanded = (gs_wheel_pair){0, 0};
+  master.applied = (gs_wheel_pair){0, 0};
+  master.state = GS_CONTROLLER_FAULTED;
+  gs_motor_force_off(&motor);
+}
+
 static void service_esp_rx(void) {
   uint8_t byte = 0;
   uint8_t frame[GS_MAX_FRAME_SIZE];
@@ -66,31 +76,55 @@ static bool pa4_bypass_compiled(void) {
 #endif
 }
 
+static void apply_motor_step(uint8_t hall, bool hall_changed,
+                             uint32_t interval_us, bool permitted,
+                             uint32_t now_ms) {
+  const gs_motor_input input = {hall,      hall_changed,         interval_us,
+                                permitted, master.demanded.left, now_ms};
+  const gs_motor_output output = gs_motor_step(&motor, &input);
+  if (output.faulted) {
+    const gs_fault_flag fault =
+        output.hall_result == GS_HALL_TOO_FAST
+            ? GS_FAULT_HALL_TOO_FAST
+            : (output.hall_result == GS_HALL_ILLEGAL ? GS_FAULT_HALL_SEQUENCE
+                                                     : GS_FAULT_HALL_INVALID);
+    force_master_fault(fault);
+  }
+  if (output.hall_result == GS_HALL_LEGAL) {
+    gs_safety_note_hall(&safety, now_ms);
+  }
+  master.applied.left = output.demand.logical_command;
+  master.local_odometer = motor.odometer;
+}
+
 static void service_motor(void) {
   static uint32_t last_service_ms;
-  static uint32_t last_hall_us;
-  static uint8_t previous_hall;
   static uint32_t last_adc_ms;
   static uint16_t adc_value;
   static bool adc_valid;
+  static uint32_t observed_hall_overflows;
   const uint32_t now_ms = gs_board_millis();
-  if (now_ms == last_service_ms) {
+  const bool periodic = now_ms != last_service_ms;
+  gs_board_hall_event first_event;
+  const bool event_available = gs_board_hall_event_read(&first_event);
+  if (!periodic && !event_available) {
     return;
   }
-  last_service_ms = now_ms;
-  if ((uint32_t)(now_ms - last_adc_ms) >= GS_ADC_SAMPLE_PERIOD_MS) {
-    adc_valid = gs_board_adc_read(&adc_value);
-    last_adc_ms = now_ms;
+  if (periodic) {
+    last_service_ms = now_ms;
+    if ((uint32_t)(now_ms - last_adc_ms) >= GS_ADC_SAMPLE_PERIOD_MS) {
+      adc_valid = gs_board_adc_read(&adc_value);
+      last_adc_ms = now_ms;
+    }
   }
-  const uint8_t hall = gs_board_read_hall();
-  const uint32_t hall_us = gs_board_micros();
-  const bool hall_changed = previous_hall != 0u && hall != previous_hall;
-  const uint32_t interval_us = hall_us - last_hall_us;
-  if (hall_changed) {
-    last_hall_us = hall_us;
-  }
-  previous_hall = hall;
 
+  const uint32_t hall_overflows = gs_board_hall_overflow_count();
+  if (hall_overflows != observed_hall_overflows) {
+    observed_hall_overflows = hall_overflows;
+    force_master_fault(GS_FAULT_HALL_CAPTURE_OVERFLOW);
+  }
+
+  const uint8_t hall = gs_board_read_hall();
   const bool pa4_raw_high = gpio_input_bit_get(GPIOA, GPIO_PIN_4) == SET;
   gs_master_set_runtime_status(&master, pa4_raw_high, pa4_bypass_compiled());
   gs_safety_set_enabled(&safety, master.state == GS_CONTROLLER_READY ||
@@ -120,25 +154,21 @@ static void service_motor(void) {
   }
   const bool permitted =
       safety.enabled && safety.adc_ready && safety.faults.bits == 0u;
-  const gs_motor_input input = {hall,      hall_changed,         interval_us,
-                                permitted, master.demanded.left, now_ms};
-  const gs_motor_output output = gs_motor_step(&motor, &input);
-  if (output.faulted) {
-    const gs_fault_flag fault =
-        output.hall_result == GS_HALL_TOO_FAST
-            ? GS_FAULT_HALL_TOO_FAST
-            : (output.hall_result == GS_HALL_ILLEGAL ? GS_FAULT_HALL_SEQUENCE
-                                                     : GS_FAULT_HALL_INVALID);
-    gs_safety_latch(&safety, fault);
-    master.faults |= (uint32_t)fault;
-    master.applied = (gs_wheel_pair){0, 0};
-    master.state = GS_CONTROLLER_FAULTED;
+
+  bool processed_event = false;
+  if (event_available) {
+    processed_event = true;
+    apply_motor_step(first_event.hall, true, first_event.interval_us, permitted,
+                     now_ms);
   }
-  if (output.hall_result == GS_HALL_LEGAL) {
-    gs_safety_note_hall(&safety, now_ms);
+  gs_board_hall_event event;
+  while (gs_board_hall_event_read(&event)) {
+    processed_event = true;
+    apply_motor_step(event.hall, true, event.interval_us, permitted, now_ms);
   }
-  master.applied.left = output.demand.logical_command;
-  master.local_odometer = motor.odometer;
+  if (!processed_event) {
+    apply_motor_step(hall, false, 0u, permitted, now_ms);
+  }
 }
 
 int main(void) {
@@ -169,15 +199,17 @@ int main(void) {
     if ((int32_t)(now - next_link_ms) >= 0) {
       uint8_t frame[GS_SLAVE_COMMAND_SIZE];
       next_link_ms = now + 20u;
-      if (gs_master_make_slave_frame(&master, frame)) {
-        (void)gs_board_uart_write(GS_UART_LINK, frame, sizeof(frame));
+      if (gs_master_make_slave_frame(&master, frame) &&
+          !gs_board_uart_write(GS_UART_LINK, frame, sizeof(frame))) {
+        force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
       }
     }
     if ((int32_t)(now - next_feedback_ms) >= 0) {
       uint8_t frame[GS_MASTER_FEEDBACK_SIZE];
       next_feedback_ms = now + 50u;
-      if (gs_master_make_feedback(&master, frame, now)) {
-        (void)gs_board_uart_write(GS_UART_REMOTE, frame, sizeof(frame));
+      if (gs_master_make_feedback(&master, frame, now) &&
+          !gs_board_uart_write(GS_UART_REMOTE, frame, sizeof(frame))) {
+        force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
       }
     }
     gs_board_watchdog_reload();

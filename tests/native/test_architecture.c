@@ -240,6 +240,28 @@ static void test_fault_clear_pending_reports_both_controllers(void) {
   GS_EXPECT_FALSE((feedback.status_flags & GS_FEEDBACK_CLEAR_PENDING) != 0u);
 }
 
+static void test_transport_overflow_sources_are_reported(void) {
+  gs_master_coordinator master;
+  uint8_t frame[GS_MASTER_FEEDBACK_SIZE];
+  gs_master_feedback feedback;
+
+  gs_master_init(&master, 0);
+  gs_master_note_transport_overflow(&master,
+                                    GS_FEEDBACK_TRANSPORT_REMOTE_RX_OVERFLOW |
+                                        GS_FEEDBACK_TRANSPORT_LINK_TX_OVERFLOW);
+
+  GS_EXPECT_TRUE(gs_master_make_feedback(&master, frame, 1));
+  GS_EXPECT_TRUE(gs_decode_master_feedback(&feedback, frame));
+  GS_EXPECT_TRUE(
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_REMOTE_RX_OVERFLOW) != 0u);
+  GS_EXPECT_TRUE(
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_REMOTE_TX_OVERFLOW) == 0u);
+  GS_EXPECT_TRUE(
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_LINK_RX_OVERFLOW) == 0u);
+  GS_EXPECT_TRUE(
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_LINK_TX_OVERFLOW) != 0u);
+}
+
 void gs_test_architecture(void) {
   test_zero_ready_then_sequence_acknowledged_motion();
   test_motion_rejected_until_zero_ready_ack();
@@ -248,4 +270,5 @@ void gs_test_architecture(void) {
   test_duplicate_sequences_are_idempotent();
   test_deadband_normalized_before_state_and_transport();
   test_fault_clear_pending_reports_both_controllers();
+  test_transport_overflow_sources_are_reported();
 }

@@ -159,13 +159,13 @@ int main(void) {
   const bool watchdog_reset = gs_board_watchdog_was_reset();
   rcu_all_reset_flag_clear();
   gs_board_operational_init();
-  gs_board_uart_init(GS_UART_LINK, true);
   gs_slave_init(&slave, gs_board_millis());
   gs_motor_init(&motor, gs_board_bridge_port(), gs_board_millis());
   gs_safety_init(&safety, GS_SAFETY_SLAVE, watchdog_reset, gs_board_millis());
   calibrate_protection();
   const uint8_t marker[] = {GS_COMMAND_MARKER};
   gs_frame_parser_init(&parser, marker, 1, GS_SLAVE_COMMAND_SIZE);
+  gs_board_uart_init(GS_UART_LINK, true);
   gs_board_watchdog_start();
   uint32_t next_feedback_ms = 0;
   for (;;) {

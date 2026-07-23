@@ -250,6 +250,28 @@ void gs_master_set_runtime_status(gs_master_coordinator *master,
                 (pa4_bypass ? GS_FEEDBACK_PA4_BYPASS : 0u));
 }
 
+void gs_master_note_transport_overflow(gs_master_coordinator *master,
+                                       uint8_t sources) {
+  if (master == NULL) {
+    return;
+  }
+  const uint8_t transport_mask = GS_FEEDBACK_TRANSPORT_REMOTE_RX_OVERFLOW |
+                                 GS_FEEDBACK_TRANSPORT_REMOTE_TX_OVERFLOW |
+                                 GS_FEEDBACK_TRANSPORT_LINK_RX_OVERFLOW |
+                                 GS_FEEDBACK_TRANSPORT_LINK_TX_OVERFLOW;
+  master->transport_status_flags |= (uint8_t)(sources & transport_mask);
+}
+
+void gs_master_set_remote_diagnostics(gs_master_coordinator *master,
+                                      uint32_t rx_bytes,
+                                      uint32_t framing_errors) {
+  if (master == NULL) {
+    return;
+  }
+  master->remote_rx_bytes = (uint16_t)rx_bytes;
+  master->remote_framing_errors = (uint16_t)framing_errors;
+}
+
 void gs_master_set_motor_status(gs_master_coordinator *master, uint8_t hall,
                                 uint16_t compare_offset, bool bridge_enabled) {
   if (master == NULL) {
@@ -266,7 +288,8 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
   if (master == NULL || out == NULL) {
     return false;
   }
-  uint8_t flags = master->runtime_status_flags;
+  uint8_t flags =
+      (uint8_t)(master->runtime_status_flags | master->transport_status_flags);
   if (gs_master_peer_healthy(master, now_ms)) {
     flags |= GS_FEEDBACK_PEER_HEALTHY;
   }
@@ -314,6 +337,10 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
                       GS_MOTOR_FEEDBACK_PA4_RAW_HIGH) != 0u
                          ? GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH
                          : 0u)),
+      .remote_rx_bytes = master->remote_rx_bytes,
+      .remote_valid_frames = (uint16_t)master->valid_esp_frames,
+      .remote_invalid_frames = (uint16_t)master->invalid_esp_frames,
+      .remote_framing_errors = master->remote_framing_errors,
   };
   return gs_encode_master_feedback(out, &feedback);
 }

@@ -78,15 +78,27 @@ static void service_transport_health(void) {
   gs_board_uart_stats link = {0};
   gs_board_uart_get_stats(GS_UART_REMOTE, &remote);
   gs_board_uart_get_stats(GS_UART_LINK, &link);
-  const bool overflowed = remote.rx_overflows != remote_rx_overflows ||
-                          remote.tx_overflows != remote_tx_overflows ||
-                          link.rx_overflows != link_rx_overflows ||
-                          link.tx_overflows != link_tx_overflows;
+  gs_master_set_remote_diagnostics(&master, remote.rx_bytes,
+                                   remote.framing_errors);
+  uint8_t overflow_sources = 0u;
+  if (remote.rx_overflows != remote_rx_overflows) {
+    overflow_sources |= GS_FEEDBACK_TRANSPORT_REMOTE_RX_OVERFLOW;
+  }
+  if (remote.tx_overflows != remote_tx_overflows) {
+    overflow_sources |= GS_FEEDBACK_TRANSPORT_REMOTE_TX_OVERFLOW;
+  }
+  if (link.rx_overflows != link_rx_overflows) {
+    overflow_sources |= GS_FEEDBACK_TRANSPORT_LINK_RX_OVERFLOW;
+  }
+  if (link.tx_overflows != link_tx_overflows) {
+    overflow_sources |= GS_FEEDBACK_TRANSPORT_LINK_TX_OVERFLOW;
+  }
   remote_rx_overflows = remote.rx_overflows;
   remote_tx_overflows = remote.tx_overflows;
   link_rx_overflows = link.rx_overflows;
   link_tx_overflows = link.tx_overflows;
-  if (overflowed) {
+  if (overflow_sources != 0u) {
+    gs_master_note_transport_overflow(&master, overflow_sources);
     force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
   }
 }
@@ -193,8 +205,6 @@ int main(void) {
   const bool watchdog_reset = gs_board_watchdog_was_reset();
   rcu_all_reset_flag_clear();
   gs_board_operational_init();
-  gs_board_uart_init(GS_UART_REMOTE, true);
-  gs_board_uart_init(GS_UART_LINK, true);
   gs_master_init(&master, gs_board_millis());
   gs_motor_init(&motor, gs_board_bridge_port(), gs_board_millis());
   gs_safety_init(&safety, GS_SAFETY_MASTER, watchdog_reset, gs_board_millis());
@@ -204,6 +214,8 @@ int main(void) {
   gs_frame_parser_init(&esp_parser, command_marker, 1, GS_ESP_COMMAND_SIZE);
   gs_frame_parser_init(&slave_parser, slave_feedback_marker, 1,
                        GS_SLAVE_FEEDBACK_SIZE);
+  gs_board_uart_init(GS_UART_REMOTE, true);
+  gs_board_uart_init(GS_UART_LINK, true);
   gs_board_watchdog_start();
   uint32_t next_link_ms = 0;
   uint32_t next_feedback_ms = 0;

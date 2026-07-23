@@ -148,7 +148,6 @@ void TIMER14_IRQHandler(void) {
     }
     ++rx_bit;
     timer_autoreload_value_config(TIMER14, GS_SWD_UART_BIT_TICKS - 1u);
-    timer_counter_value_config(TIMER14, 0u);
     if (rx_bit >= 8u) {
       rx_state = GS_SWD_RX_STOP;
     }

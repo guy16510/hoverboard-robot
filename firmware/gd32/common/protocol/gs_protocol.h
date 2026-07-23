@@ -15,7 +15,7 @@ enum {
   GS_ESP_COMMAND_SIZE = 11,
   GS_SLAVE_COMMAND_SIZE = 8,
   GS_SLAVE_FEEDBACK_SIZE = 22,
-  GS_MASTER_FEEDBACK_SIZE = 47,
+  GS_MASTER_FEEDBACK_SIZE = 55,
   GS_MAX_FRAME_SIZE = GS_MASTER_FEEDBACK_SIZE,
   GS_PARTIAL_FRAME_TIMEOUT_MS = 100,
   GS_COMMAND_LIMIT = 1000,
@@ -33,6 +33,10 @@ typedef enum {
   GS_FEEDBACK_PA4_RAW_HIGH = 1u << 1,
   GS_FEEDBACK_PA4_BYPASS = 1u << 2,
   GS_FEEDBACK_CLEAR_PENDING = 1u << 3,
+  GS_FEEDBACK_TRANSPORT_REMOTE_RX_OVERFLOW = 1u << 4,
+  GS_FEEDBACK_TRANSPORT_REMOTE_TX_OVERFLOW = 1u << 5,
+  GS_FEEDBACK_TRANSPORT_LINK_RX_OVERFLOW = 1u << 6,
+  GS_FEEDBACK_TRANSPORT_LINK_TX_OVERFLOW = 1u << 7,
 } gs_feedback_flag;
 
 typedef enum {
@@ -110,6 +114,10 @@ typedef struct {
   uint16_t left_compare_offset;
   uint16_t right_compare_offset;
   uint8_t motor_status_flags;
+  uint16_t remote_rx_bytes;
+  uint16_t remote_valid_frames;
+  uint16_t remote_invalid_frames;
+  uint16_t remote_framing_errors;
 } gs_master_feedback;
 
 uint16_t gs_crc16(const uint8_t *data, size_t length);

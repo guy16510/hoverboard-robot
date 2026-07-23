@@ -23,6 +23,25 @@ if rg -q 'gs_slave_accept_master_frame' firmware/esp32; then
   exit 1
 fi
 
+require_calibration_before_uart() {
+  local source="$1"
+  local calibration_line
+  local uart_line
+  calibration_line="$(rg -n '^[[:space:]]*calibrate_protection\(\);' "$source" |
+    cut -d: -f1)"
+  uart_line="$(rg -n '^[[:space:]]*gs_board_uart_init' "$source" |
+    head -n 1 |
+    cut -d: -f1)"
+  if [[ -z "$calibration_line" || -z "$uart_line" ||
+        "$calibration_line" -ge "$uart_line" ]]; then
+    echo "$source enables UART before blocking calibration completes" >&2
+    exit 1
+  fi
+}
+
+require_calibration_before_uart firmware/gd32/master/main.c
+require_calibration_before_uart firmware/gd32/slave/main.c
+
 nm_tool="$repo_dir/.toolchains/arm-none-eabi/bin/arm-none-eabi-nm"
 if [[ -x "$nm_tool" ]]; then
   recovery_elf="$repo_dir/.pio/build/gausstop_safe_recovery/firmware.elf"
@@ -41,4 +60,3 @@ if [[ -x "$nm_tool" ]]; then
     exit 1
   fi
 fi
-

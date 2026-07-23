@@ -33,9 +33,12 @@ typedef struct {
   bool clear_fault_pending;
   uint8_t slave_flags;
   uint8_t runtime_status_flags;
+  uint8_t transport_status_flags;
   uint8_t local_hall;
   uint16_t local_compare_offset;
   bool local_bridge_enabled;
+  uint16_t remote_rx_bytes;
+  uint16_t remote_framing_errors;
 } gs_master_coordinator;
 
 void gs_master_init(gs_master_coordinator *master, uint32_t now_ms);
@@ -55,6 +58,11 @@ bool gs_master_fault_clear_requested(const gs_master_coordinator *master);
 void gs_master_finish_fault_clear(gs_master_coordinator *master, bool success);
 void gs_master_set_runtime_status(gs_master_coordinator *master,
                                   bool pa4_raw_high, bool pa4_bypass);
+void gs_master_note_transport_overflow(gs_master_coordinator *master,
+                                       uint8_t sources);
+void gs_master_set_remote_diagnostics(gs_master_coordinator *master,
+                                      uint32_t rx_bytes,
+                                      uint32_t framing_errors);
 void gs_master_set_motor_status(gs_master_coordinator *master, uint8_t hall,
                                 uint16_t compare_offset, bool bridge_enabled);
 bool gs_master_make_feedback(const gs_master_coordinator *master,

@@ -316,6 +316,10 @@ bool gs_encode_master_feedback(uint8_t out[GS_MASTER_FEEDBACK_SIZE],
   write_u16(&out[40], feedback->left_compare_offset);
   write_u16(&out[42], feedback->right_compare_offset);
   out[44] = feedback->motor_status_flags;
+  write_u16(&out[45], feedback->remote_rx_bytes);
+  write_u16(&out[47], feedback->remote_valid_frames);
+  write_u16(&out[49], feedback->remote_invalid_frames);
+  write_u16(&out[51], feedback->remote_framing_errors);
   append_crc(out, GS_MASTER_FEEDBACK_SIZE);
   return true;
 }
@@ -350,6 +354,10 @@ bool gs_decode_master_feedback(gs_master_feedback *out,
   out->left_compare_offset = read_u16(&frame[40]);
   out->right_compare_offset = read_u16(&frame[42]);
   out->motor_status_flags = frame[44];
+  out->remote_rx_bytes = read_u16(&frame[45]);
+  out->remote_valid_frames = read_u16(&frame[47]);
+  out->remote_invalid_frames = read_u16(&frame[49]);
+  out->remote_framing_errors = read_u16(&frame[51]);
   return true;
 }
 
@@ -357,5 +365,5 @@ _Static_assert(GS_ESP_COMMAND_SIZE == 11, "ESP32 command wire size changed");
 _Static_assert(GS_SLAVE_COMMAND_SIZE == 8, "slave command wire size changed");
 _Static_assert(GS_SLAVE_FEEDBACK_SIZE == 22,
                "slave feedback wire size changed");
-_Static_assert(GS_MASTER_FEEDBACK_SIZE == 47,
+_Static_assert(GS_MASTER_FEEDBACK_SIZE == 55,
                "master feedback wire size changed");

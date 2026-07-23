@@ -82,6 +82,7 @@ void print_status() {
       "\"sequence\":%u,\"master_ack\":%u,\"slave_forwarded\":%u,"
       "\"slave_ack\":%u,\"exact_ack\":%u,\"peer_healthy\":%u,"
       "\"pa4_raw_high\":%u,\"pa4_bypass\":%u,\"clear_pending\":%u,"
+      "\"transport_overflows\":[%u,%u,%u,%u],"
       "\"slave_pa4_raw_high\":%u,\"halls\":[%u,%u],"
       "\"compare\":[%u,%u],\"bridge\":[%u,%u],"
       "\"odometers\":[%ld,%ld],"
@@ -89,6 +90,7 @@ void print_status() {
       "\"slave_command_age_ms\":%u,\"esp_feedback_age_ms\":%lu,"
       "\"states\":[%u,%u],\"faults\":[%lu,%lu],\"tx\":%lu,"
       "\"rx\":%lu,\"crc_errors\":%lu,\"ack_timeouts\":%lu,"
+      "\"remote_parser\":[%u,%u,%u,%u],"
       "\"mpu_future\":[%d,%d,%lu]}\n",
       feedback.protocol_version, console_state.enabled ? 1u : 0u,
       console_state.shutdown ? 1u : 0u, session_ready ? 1u : 0u,
@@ -104,6 +106,18 @@ void print_status() {
       (feedback.status_flags & GS_FEEDBACK_PA4_BYPASS) != 0u ? 1u : 0u,
       clear_fault_pending ||
               (feedback.status_flags & GS_FEEDBACK_CLEAR_PENDING) != 0u
+          ? 1u
+          : 0u,
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_REMOTE_RX_OVERFLOW) != 0u
+          ? 1u
+          : 0u,
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_REMOTE_TX_OVERFLOW) != 0u
+          ? 1u
+          : 0u,
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_LINK_RX_OVERFLOW) != 0u
+          ? 1u
+          : 0u,
+      (feedback.status_flags & GS_FEEDBACK_TRANSPORT_LINK_TX_OVERFLOW) != 0u
           ? 1u
           : 0u,
       (feedback.motor_status_flags & GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH) != 0u
@@ -128,7 +142,9 @@ void print_status() {
       static_cast<unsigned long>(command_frames),
       static_cast<unsigned long>(feedback_frames),
       static_cast<unsigned long>(crc_errors),
-      static_cast<unsigned long>(ack_timeouts), kMpu6050Sda, kMpu6050Scl,
+      static_cast<unsigned long>(ack_timeouts), feedback.remote_rx_bytes,
+      feedback.remote_valid_frames, feedback.remote_invalid_frames,
+      feedback.remote_framing_errors, kMpu6050Sda, kMpu6050Scl,
       static_cast<unsigned long>(kFutureBalanceLoopHz));
 }
 

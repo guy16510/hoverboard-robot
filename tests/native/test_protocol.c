@@ -26,7 +26,7 @@ static void test_exact_sizes_and_endianness(void) {
   GS_EXPECT_EQ(11, GS_ESP_COMMAND_SIZE);
   GS_EXPECT_EQ(8, GS_SLAVE_COMMAND_SIZE);
   GS_EXPECT_EQ(22, GS_SLAVE_FEEDBACK_SIZE);
-  GS_EXPECT_EQ(47, GS_MASTER_FEEDBACK_SIZE);
+  GS_EXPECT_EQ(55, GS_MASTER_FEEDBACK_SIZE);
   GS_EXPECT_TRUE(gs_encode_esp_command(frame, &command));
   GS_EXPECT_BYTES(prefix, frame, sizeof(prefix));
   GS_EXPECT_EQ(gs_crc16(frame, GS_ESP_COMMAND_SIZE - 2u),
@@ -81,6 +81,10 @@ static void test_all_frame_round_trips(void) {
       .motor_status_flags = GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED |
                             GS_MASTER_MOTOR_RIGHT_BRIDGE_ENABLED |
                             GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH,
+      .remote_rx_bytes = 123u,
+      .remote_valid_frames = 7u,
+      .remote_invalid_frames = 3u,
+      .remote_framing_errors = 2u,
   };
   uint8_t command_frame[GS_SLAVE_COMMAND_SIZE];
   uint8_t slave_frame[GS_SLAVE_FEEDBACK_SIZE];
@@ -127,6 +131,11 @@ static void test_all_frame_round_trips(void) {
   GS_EXPECT_EQ(master.master_command_age_ms, master_out.master_command_age_ms);
   GS_EXPECT_EQ(master.slave_feedback_age_ms, master_out.slave_feedback_age_ms);
   GS_EXPECT_EQ(master.slave_command_age_ms, master_out.slave_command_age_ms);
+  GS_EXPECT_EQ(master.remote_rx_bytes, master_out.remote_rx_bytes);
+  GS_EXPECT_EQ(master.remote_valid_frames, master_out.remote_valid_frames);
+  GS_EXPECT_EQ(master.remote_invalid_frames, master_out.remote_invalid_frames);
+  GS_EXPECT_EQ(master.remote_framing_errors,
+               master_out.remote_framing_errors);
   GS_EXPECT_EQ(master.left_hall, master_out.left_hall);
   GS_EXPECT_EQ(master.right_hall, master_out.right_hall);
   GS_EXPECT_EQ(master.left_compare_offset, master_out.left_compare_offset);

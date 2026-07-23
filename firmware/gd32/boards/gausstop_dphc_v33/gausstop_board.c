@@ -11,6 +11,7 @@ enum {
   GS_PWM_DEADTIME = 120,
   GS_HALL_EVENT_BUFFER_SIZE = 16,
   GS_BOARD_UART_COUNT = 2,
+  GS_UART_RX_BUFFER_SIZE = 128,
   GS_UART_TX_BUFFER_SIZE = 128,
 };
 
@@ -19,6 +20,8 @@ _Static_assert((GS_HALL_EVENT_BUFFER_SIZE & (GS_HALL_EVENT_BUFFER_SIZE - 1u)) ==
                "Hall event buffer size must be a power of two");
 _Static_assert((GS_UART_TX_BUFFER_SIZE & (GS_UART_TX_BUFFER_SIZE - 1u)) == 0u,
                "UART TX buffer size must be a power of two");
+_Static_assert((GS_UART_RX_BUFFER_SIZE & (GS_UART_RX_BUFFER_SIZE - 1u)) == 0u,
+               "UART RX buffer size must be a power of two");
 
 static const uint16_t pwm_channels[3] = {TIMER_CH_0, TIMER_CH_1, TIMER_CH_2};
 static volatile uint32_t micros_high;
@@ -31,6 +34,10 @@ static volatile uint8_t hall_last_state;
 static volatile uint32_t hall_last_timestamp_us;
 static volatile uint8_t uart_tx_buffers[GS_BOARD_UART_COUNT]
                                        [GS_UART_TX_BUFFER_SIZE];
+static volatile uint8_t uart_rx_buffers[GS_BOARD_UART_COUNT]
+                                       [GS_UART_RX_BUFFER_SIZE];
+static volatile uint8_t uart_rx_heads[GS_BOARD_UART_COUNT];
+static volatile uint8_t uart_rx_tails[GS_BOARD_UART_COUNT];
 static volatile uint8_t uart_tx_heads[GS_BOARD_UART_COUNT];
 static volatile uint8_t uart_tx_tails[GS_BOARD_UART_COUNT];
 static volatile gs_board_uart_stats uart_stats[GS_BOARD_UART_COUNT];
@@ -406,6 +413,8 @@ static uint32_t uart_peripheral(gs_board_uart uart) {
 
 static void reset_uart_state(gs_board_uart uart) {
   const uint8_t index = uart_index(uart);
+  uart_rx_heads[index] = 0u;
+  uart_rx_tails[index] = 0u;
   uart_tx_heads[index] = 0u;
   uart_tx_tails[index] = 0u;
   uart_stats[index] = (gs_board_uart_stats){0};
@@ -433,10 +442,26 @@ void gs_board_uart_init(gs_board_uart uart, bool transmit_enabled) {
                                                      : USART_TRANSMIT_DISABLE);
   usart_enable(peripheral);
   USART_CTL0(peripheral) &= ~USART_CTL0_TBEIE;
+  USART_CTL0(peripheral) |= USART_CTL0_RBNEIE;
   nvic_irq_enable(remote ? USART0_IRQn : USART1_IRQn, 2u, 0u);
 }
 
 bool gs_board_uart_read(gs_board_uart uart, uint8_t *byte) {
+  const uint8_t index = uart_index(uart);
+  if (byte == NULL) {
+    return false;
+  }
+  const uint8_t tail = uart_rx_tails[index];
+  if (tail == uart_rx_heads[index]) {
+    return false;
+  }
+  *byte = uart_rx_buffers[index][tail];
+  uart_rx_tails[index] =
+      (uint8_t)((tail + 1u) & (GS_UART_RX_BUFFER_SIZE - 1u));
+  return true;
+}
+
+static void service_uart_rx(gs_board_uart uart) {
   const uint8_t index = uart_index(uart);
   const uint32_t peripheral = uart_peripheral(uart);
   const uint32_t status = USART_STAT(peripheral);
@@ -452,12 +477,20 @@ bool gs_board_uart_read(gs_board_uart uart, uint8_t *byte) {
   if (clear != 0u) {
     USART_INTC(peripheral) = clear;
   }
-  if (byte == NULL || (status & USART_STAT_RBNE) == 0u) {
-    return false;
+  if ((status & USART_STAT_RBNE) == 0u) {
+    return;
   }
-  *byte = (uint8_t)usart_data_receive(peripheral);
+  const uint8_t received = (uint8_t)usart_data_receive(peripheral);
   ++uart_stats[index].rx_bytes;
-  return true;
+  const uint8_t head = uart_rx_heads[index];
+  const uint8_t next =
+      (uint8_t)((head + 1u) & (GS_UART_RX_BUFFER_SIZE - 1u));
+  if (next == uart_rx_tails[index]) {
+    ++uart_stats[index].rx_overflows;
+    return;
+  }
+  uart_rx_buffers[index][head] = received;
+  uart_rx_heads[index] = next;
 }
 
 bool gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
@@ -503,8 +536,14 @@ static void service_uart_tx(gs_board_uart uart) {
   ++uart_stats[index].tx_bytes;
 }
 
-void USART0_IRQHandler(void) { service_uart_tx(GS_UART_REMOTE); }
-void USART1_IRQHandler(void) { service_uart_tx(GS_UART_LINK); }
+void USART0_IRQHandler(void) {
+  service_uart_rx(GS_UART_REMOTE);
+  service_uart_tx(GS_UART_REMOTE);
+}
+void USART1_IRQHandler(void) {
+  service_uart_rx(GS_UART_LINK);
+  service_uart_tx(GS_UART_LINK);
+}
 
 void gs_board_uart_get_stats(gs_board_uart uart, gs_board_uart_stats *stats) {
   if (stats == NULL) {

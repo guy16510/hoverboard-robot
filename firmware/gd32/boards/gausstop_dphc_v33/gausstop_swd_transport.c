@@ -78,7 +78,7 @@ static void configure_tx_timer(void) {
   timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
   timer_interrupt_enable(TIMER13, TIMER_INT_UP);
   timer_disable(TIMER13);
-  nvic_irq_enable(TIMER13_IRQn, 1u, 0u);
+  nvic_irq_enable(TIMER13_IRQn, 0u, 0u);
 }
 
 static bool push_rx_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
@@ -235,7 +235,7 @@ static void init_remote(bool transmit_enabled) {
   exti_interrupt_flag_clear(EXTI_13);
   configure_tx_timer();
   NVIC_SetPriority(SysTick_IRQn, 3u);
-  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
+  nvic_irq_enable(EXTI4_15_IRQn, 1u, 0u);
   (void)transmit_enabled;
 }
 

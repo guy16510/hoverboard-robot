@@ -37,9 +37,12 @@ require_match 'master\.state == GS_CONTROLLER_READY' firmware/gd32/master/main.c
   'transport overflow faults before READY can arm motion'
 require_match 'master\.transport_status_flags = 0u' firmware/gd32/master/main.c \
   'verified clearfault resets the transport latch'
-require_match 'nvic_irq_enable\(TIMER13_IRQn, 1u, 0u\)' \
+require_match 'nvic_irq_enable\(TIMER13_IRQn, 0u, 0u\)' \
   firmware/gd32/boards/gausstop_dphc_v33/gausstop_swd_transport.c \
-  'software feedback TX preserves exact bit timing above the link IRQ priority'
+  'software feedback TX preserves exact bit timing above all runtime IRQs'
+require_match 'nvic_irq_enable\(EXTI4_15_IRQn, 1u, 0u\)' \
+  firmware/gd32/boards/gausstop_dphc_v33/gausstop_swd_transport.c \
+  'command and Hall edges remain above link, PWM, and timebase IRQs'
 
 if grep -Eq 'GS_REMOTE_FEEDBACK_DELAY_MS' firmware/gd32/master/main.c; then
   echo "MASTER feedback reverted to a fixed-delay-only response" >&2

@@ -41,7 +41,8 @@ static void test_all_bytes_at_unit(uint8_t unit_us, bool exhaustive_jitter) {
   uint8_t expected[GS_SWD_PULSE_FRAME_BYTES];
   uint8_t actual[GS_SWD_PULSE_FRAME_BYTES];
   const int32_t tolerance =
-      unit_us / GS_SWD_PULSE_SYMBOL_TOLERANCE_DIVISOR;
+      (unit_us * GS_SWD_PULSE_SYMBOL_TOLERANCE_NUMERATOR) /
+      GS_SWD_PULSE_SYMBOL_TOLERANCE_DENOMINATOR;
   for (uint16_t value = 0u; value <= UINT8_MAX; ++value) {
     memset(expected, (uint8_t)value, sizeof(expected));
     if (exhaustive_jitter) {

@@ -7,7 +7,8 @@
 _Static_assert(GS_SWD_PULSE_MAX_UNIT_US * 4u <
                    GS_SWD_PULSE_MIN_UNIT_US * GS_SWD_PULSE_SYNC_UNITS,
                "sync pulse must not overlap any data symbol");
-_Static_assert(GS_SWD_PULSE_SYMBOL_TOLERANCE_DIVISOR > 2u,
+_Static_assert(GS_SWD_PULSE_SYMBOL_TOLERANCE_NUMERATOR * 2u <
+                   GS_SWD_PULSE_SYMBOL_TOLERANCE_DENOMINATOR,
                "symbol windows must remain disjoint");
 
 static bool within(uint16_t value, uint16_t target, uint16_t tolerance) {
@@ -59,8 +60,9 @@ static bool decode_symbol(uint16_t low_width_us, uint8_t unit_us,
       unit_us > GS_SWD_PULSE_MAX_UNIT_US) {
     return false;
   }
-  const uint16_t tolerance =
-      (uint16_t)(unit_us / GS_SWD_PULSE_SYMBOL_TOLERANCE_DIVISOR);
+  const uint16_t tolerance = (uint16_t)(
+      (unit_us * GS_SWD_PULSE_SYMBOL_TOLERANCE_NUMERATOR) /
+      GS_SWD_PULSE_SYMBOL_TOLERANCE_DENOMINATOR);
   for (uint8_t candidate = 0u; candidate < 4u; ++candidate) {
     const uint16_t target = (uint16_t)((candidate + 1u) * unit_us);
     if (within(low_width_us, target, tolerance)) {

@@ -234,7 +234,7 @@ static void init_remote(bool transmit_enabled) {
   exti_interrupt_flag_clear(EXTI_13);
   configure_tx_timer();
   NVIC_SetPriority(SysTick_IRQn, 3u);
-  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
+  nvic_irq_enable(EXTI4_15_IRQn, 1u, 0u);
   (void)transmit_enabled;
 }
 

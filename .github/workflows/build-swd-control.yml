@@ -36,6 +36,13 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
           ./tools/bootstrap-tools.sh
 
+      - name: Run transport architecture and host tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          ./tools/check-architecture.sh
+          .venv/bin/python -m unittest tests/test_drive_esp32.py
+
       - name: Run native tests
         shell: bash
         run: |

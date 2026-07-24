@@ -83,7 +83,7 @@ static void test_pulse_decoder(void) {
   GS_EXPECT_EQ(GS_SWD_PULSE_MAX_UNIT_US, decoder.unit_us);
 
   GS_EXPECT_EQ(GS_SWD_PULSE_ERROR,
-               gs_swd_pulse_decoder_feed(&decoder, 400u, actual));
+               gs_swd_pulse_decoder_feed(&decoder, 440u, actual));
   GS_EXPECT_FALSE(decoder.active);
   GS_EXPECT_EQ(0u, decoder.unit_us);
   GS_EXPECT_EQ(0u, gs_swd_pulse_symbol_width_us(4u));

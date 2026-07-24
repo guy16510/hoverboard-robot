@@ -1,10 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
 import unittest
+from unittest.mock import patch
 
 from tools.drive_esp32 import (
     disabled,
     fault_clear_confirmed,
     motion_session_healthy,
+    open_serial_without_reset,
     validate_motion_result,
     validate_status,
     validate_transport_progress,
@@ -29,6 +31,29 @@ class ValidateMotionResultTest(unittest.TestCase):
             validate_motion_result((250, -250), (True, True), (-1, 1))
 
 
+class NoResetSerialTest(unittest.TestCase):
+    def test_dtr_and_rts_are_inactive_before_open(self) -> None:
+        class FakeSerial:
+            def __init__(self, **kwargs: object) -> None:
+                self.kwargs = kwargs
+                self.dtr = True
+                self.rts = True
+                self.port = None
+                self.opened_with = None
+
+            def open(self) -> None:
+                self.opened_with = (self.dtr, self.rts, self.port)
+
+        fake = FakeSerial()
+        with patch("tools.drive_esp32.serial.Serial", return_value=fake):
+            result = open_serial_without_reset("/dev/test")
+
+        self.assertIs(result, fake)
+        self.assertEqual((False, False, "/dev/test"), fake.opened_with)
+        self.assertFalse(fake.dtr)
+        self.assertFalse(fake.rts)
+
+
 class ZeroOutputGateTest(unittest.TestCase):
     def setUp(self) -> None:
         self.status = {
@@ -39,12 +64,18 @@ class ZeroOutputGateTest(unittest.TestCase):
             "applied": [0, 0],
             "compare": [0, 0],
             "bridge": [0, 0],
+            "transport_overflows": [0, 0, 0, 0],
         }
 
     def test_ready_requires_zero_compare_and_disabled_bridges(self) -> None:
         self.assertTrue(zero_ready(self.status))
         self.status["compare"] = [40, 0]
         self.status["bridge"] = [1, 0]
+        self.assertFalse(zero_ready(self.status))
+
+    def test_ready_rejects_any_transport_overflow(self) -> None:
+        self.assertTrue(zero_ready(self.status))
+        self.status["transport_overflows"] = [0, 0, 1, 0]
         self.assertFalse(zero_ready(self.status))
 
     def test_disabled_requires_zero_compare_and_disabled_bridges(self) -> None:
@@ -61,6 +92,9 @@ class ZeroOutputGateTest(unittest.TestCase):
         self.assertFalse(motion_session_healthy(self.status))
         self.status["session_ready"] = True
         self.status["states"] = [0, 2]
+        self.assertFalse(motion_session_healthy(self.status))
+        self.status["states"] = [2, 2]
+        self.status["transport_overflows"] = [1, 0, 0, 0]
         self.assertFalse(motion_session_healthy(self.status))
 
     def test_status_rejects_bridge_applied_command_disagreement(self) -> None:
@@ -94,6 +128,40 @@ class ZeroOutputGateTest(unittest.TestCase):
             }
         )
         validate_status(self.status)
+
+    def test_status_allows_normal_feedback_jitter_but_rejects_stale_data(self) -> None:
+        self.status.update(
+            {
+                "protocol": 2,
+                "faults": [0, 0],
+                "esp_feedback_age_ms": 250,
+                "pa4_raw_high": True,
+                "pa4_bypass": True,
+                "slave_pa4_raw_high": True,
+                "halls": [2, 2],
+            }
+        )
+        validate_status(self.status)
+        self.status["esp_feedback_age_ms"] = 301
+        with self.assertRaisesRegex(RuntimeError, "feedback is stale"):
+            validate_status(self.status)
+
+    def test_status_rejects_transport_overflow_outside_clear_stage(self) -> None:
+        self.status.update(
+            {
+                "protocol": 2,
+                "faults": [0, 0],
+                "esp_feedback_age_ms": 0,
+                "pa4_raw_high": True,
+                "pa4_bypass": True,
+                "slave_pa4_raw_high": True,
+                "halls": [2, 2],
+                "transport_overflows": [0, 0, 1, 0],
+            }
+        )
+        with self.assertRaisesRegex(RuntimeError, "Transport overflow"):
+            validate_status(self.status)
+        validate_status(self.status, allow_faults=True)
 
 
 class TransportProgressTest(unittest.TestCase):
@@ -147,6 +215,7 @@ class FaultClearGateTest(unittest.TestCase):
             "applied": [0, 0],
             "exact_ack": True,
             "clear_pending": True,
+            "transport_overflows": [0, 0, 1, 0],
         }
 
     def test_clear_stage_allows_transient_fault_telemetry(self) -> None:
@@ -154,14 +223,15 @@ class FaultClearGateTest(unittest.TestCase):
             validate_status(self.status)
         validate_status(self.status, allow_faults=True)
 
-    def test_clear_confirmation_requires_both_faults_and_pending_to_clear(
+    def test_clear_confirmation_requires_faults_pending_and_overflow_to_clear(
         self,
     ) -> None:
         self.assertFalse(fault_clear_confirmed(self.status))
         self.status["states"] = [0, 0]
         self.status["faults"] = [0, 0]
-        self.assertFalse(fault_clear_confirmed(self.status))
         self.status["clear_pending"] = False
+        self.assertFalse(fault_clear_confirmed(self.status))
+        self.status["transport_overflows"] = [0, 0, 0, 0]
         self.assertTrue(fault_clear_confirmed(self.status))
 
 

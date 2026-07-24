@@ -35,7 +35,8 @@ Perform this group only after agreeing to the physical checkpoint:
    reflash MASTER or SLAVE for this checkpoint.
 5. Open 115200-baud telemetry. Keep the chassis stationary until
    `calibrated:1`; do not touch it during the 400-sample gyro calibration.
-6. Record sensor address (`104` / `0x68` or `105` / `0x69`), WHO_AM_I success,
+6. Record sensor address (`104` / `0x68` or `105` / `0x69`), WHO_AM_I success
+   (`0x68` for MPU-6050 or `0x70` for register-compatible MPU-6500 silicon),
    accepted calibration samples, raw and bias-corrected gyro vectors, calculated
    gyro-bias vector, sample rate, loop
    rate, min/max period, worst jitter, I2C errors, and missed samples for at

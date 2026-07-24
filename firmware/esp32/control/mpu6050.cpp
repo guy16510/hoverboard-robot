@@ -225,8 +225,13 @@ bool Mpu6050Imu::sample(ImuSample &sample) {
 uint8_t Mpu6050Imu::address() const { return address_; }
 
 bool Mpu6050Imu::timedOut(uint64_t now_us) const {
-  return diagnostics_.valid_samples == 0u ||
-         now_us - diagnostics_.last_sample_us > config_.timeout_us;
+  if (diagnostics_.valid_samples == 0u) {
+    return true;
+  }
+  if (now_us <= diagnostics_.last_sample_us) {
+    return false;
+  }
+  return now_us - diagnostics_.last_sample_us > config_.timeout_us;
 }
 
 const Mpu6050Diagnostics &Mpu6050Imu::diagnostics() const {
@@ -237,7 +242,7 @@ bool Mpu6050Imu::detectAddress() {
   for (const uint8_t candidate : {uint8_t{0x68}, uint8_t{0x69}}) {
     uint8_t identity = 0u;
     if (bus_.read(candidate, Mpu6050Registers::kWhoAmI, &identity, 1u) &&
-        (identity & 0x7eu) == 0x68u) {
+        ((identity & 0x7eu) == 0x68u || identity == 0x70u)) {
       address_ = candidate;
       return true;
     }

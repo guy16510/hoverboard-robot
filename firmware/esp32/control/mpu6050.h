@@ -32,7 +32,7 @@ struct Mpu6050Config {
   uint8_t digital_low_pass_filter = 3u;
   uint16_t sample_rate_hz = 200u;
   uint16_t calibration_samples = 400u;
-  float stationary_gyro_limit_dps = 3.0f;
+  float stationary_gyro_limit_dps = 5.0f;
   uint32_t timeout_us = 20000u;
 };
 

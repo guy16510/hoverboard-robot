@@ -700,7 +700,9 @@ void serviceWebControl(uint64_t now_us) {
 SafetySnapshot safetySnapshot(uint64_t now_us, const PitchEstimate &pitch) {
   const auto &diagnostics = imu.diagnostics();
   SafetySnapshot safety;
-  safety.imu_healthy = imu_started && !imu.timedOut(now_us) && pitch.valid;
+  safety.imu_healthy =
+      imu_started && !imu.timedOut(now_us) &&
+      (!diagnostics.calibration_complete || pitch.valid);
   safety.calibrated = diagnostics.calibration_complete;
   safety.approximately_upright =
       std::fabs(balanceFramePitchDeg(pitch.filtered_pitch_deg,

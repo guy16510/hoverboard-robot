@@ -144,6 +144,18 @@ void testMpuRejectsInvalidIdentity() {
   GS_ESP32_EXPECT_EQ(0, imu.address());
 }
 
+void testMpuAcceptsMpu6500CompatibleIdentity() {
+  FakeClock clock;
+  FakeMpuBus bus;
+  bus.responding_address_ = 0x68;
+  bus.who_am_i_ = 0x70;
+  Mpu6050Imu imu(bus, clock, Mpu6050Config{});
+
+  GS_ESP32_EXPECT_TRUE(imu.begin());
+  GS_ESP32_EXPECT_EQ(0x68, imu.address());
+  GS_ESP32_EXPECT_EQ(6, bus.write_count_);
+}
+
 void testMpuRejectsUnsafeOrAmbiguousConfiguration() {
   FakeClock clock;
   FakeMpuBus bus;
@@ -200,6 +212,18 @@ void testGyroCalibrationCompletesOnlyWhileStationary() {
   GS_ESP32_EXPECT_NEAR(0.5, calibrator.bias().z, 0.0001);
 }
 
+void testDefaultCalibrationAllowsBoundedZeroRateOffset() {
+  const Mpu6050Config config;
+  GyroBiasCalibrator calibrator(2u, config.stationary_gyro_limit_dps);
+  ImuSample stationary{};
+  stationary.accel_g = {0.0f, 0.0f, 1.0f};
+  stationary.gyro_dps = {3.25f, 1.25f, -0.25f};
+
+  GS_ESP32_EXPECT_FALSE(calibrator.add(stationary));
+  GS_ESP32_EXPECT_TRUE(calibrator.add(stationary));
+  GS_ESP32_EXPECT_NEAR(3.25, calibrator.bias().x, 0.0001);
+}
+
 void testMpuCountersAndTimeout() {
   FakeClock clock;
   FakeMpuBus bus;
@@ -213,6 +237,7 @@ void testMpuCountersAndTimeout() {
   ImuSample sample{};
   clock.set(5000u);
   GS_ESP32_EXPECT_TRUE(imu.sample(sample));
+  GS_ESP32_EXPECT_FALSE(imu.timedOut(4999u));
   GS_ESP32_EXPECT_FALSE(imu.timedOut(14999u));
   GS_ESP32_EXPECT_TRUE(imu.timedOut(15001u));
 
@@ -514,6 +539,18 @@ void testStateMachineFaultsWhenImuIsUnavailableDuringCalibration() {
   machine.update(unavailable, 0.0f, 0u);
   machine.update(unavailable, 0.0f, 5000u);
   GS_ESP32_EXPECT_EQ(BalanceState::kFault, machine.state());
+  GS_ESP32_EXPECT_FALSE(machine.outputEnabled());
+}
+
+void testStateMachineWaitsSafelyForImuCalibration() {
+  BalanceStateMachine machine({12.0f, 100000u});
+  SafetySnapshot calibrating{};
+  calibrating.imu_healthy = true;
+  calibrating.loop_healthy = true;
+
+  machine.update(calibrating, 0.0f, 0u);
+  machine.update(calibrating, 0.0f, 5000u);
+  GS_ESP32_EXPECT_EQ(BalanceState::kImuCalibrating, machine.state());
   GS_ESP32_EXPECT_FALSE(machine.outputEnabled());
 }
 
@@ -1309,9 +1346,11 @@ void testTransportMetricsModelSustainedCommandsAndLatency() {
 int main() {
   testMpuAddressDetectionAndRegisterConfiguration();
   testMpuRejectsInvalidIdentity();
+  testMpuAcceptsMpu6500CompatibleIdentity();
   testMpuRejectsUnsafeOrAmbiguousConfiguration();
   testSensorByteDecodingAndAxisMapping();
   testGyroCalibrationCompletesOnlyWhileStationary();
+  testDefaultCalibrationAllowsBoundedZeroRateOffset();
   testMpuCountersAndTimeout();
   testMpuDiagnosticsExposeCalibrationProgressAndBias();
   testComplementaryFilterConvergesAndRejectsInvalidDeltaTime();
@@ -1325,6 +1364,7 @@ int main() {
   testStateMachineArmDriveFallAndExplicitRearm();
   testStateMachineFaultDisablesAndRequiresClear();
   testStateMachineFaultsWhenImuIsUnavailableDuringCalibration();
+  testStateMachineWaitsSafelyForImuCalibration();
   testDisarmedDiagnosticAllowsMissingMotorsButArmedBalanceDoesNot();
   testFaultCanClearToDiagnosticWithoutMotorsButCannotArm();
   testSerialLeaseWinsOverWebAndDisconnectZerosMovement();

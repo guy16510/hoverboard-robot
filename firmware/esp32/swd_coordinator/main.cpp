@@ -20,7 +20,7 @@ constexpr uint32_t kAckTimeoutMs = 500;
 constexpr uint32_t kFeedbackTimeoutMs = 500;
 constexpr rmt_channel_t kCommandRmtChannel = RMT_CHANNEL_0;
 constexpr uint8_t kCommandRmtClockDivider = 80;
-constexpr uint16_t kCommandPulseUnitUs = 96;
+constexpr uint16_t kCommandPulseUnitUs = 80;
 constexpr size_t kCommandRmtItems = GS_SWD_PULSE_FRAME_SYMBOLS + 1u;
 
 constexpr int kMpu6050Sda = 21;

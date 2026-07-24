@@ -156,12 +156,11 @@ static void service_rx_edge(void) {
 }
 
 void EXTI4_15_IRQHandler(void) {
-  gs_board_hall_exti_service();
-  if (exti_interrupt_flag_get(EXTI_13) == RESET) {
-    return;
+  if (exti_interrupt_flag_get(EXTI_13) != RESET) {
+    exti_interrupt_flag_clear(EXTI_13);
+    service_rx_edge();
   }
-  exti_interrupt_flag_clear(EXTI_13);
-  service_rx_edge();
+  gs_board_hall_exti_service();
 }
 
 static void drive_tx_bit(void) {
@@ -235,7 +234,7 @@ static void init_remote(bool transmit_enabled) {
   exti_interrupt_flag_clear(EXTI_13);
   configure_tx_timer();
   NVIC_SetPriority(SysTick_IRQn, 3u);
-  nvic_irq_enable(EXTI4_15_IRQn, 1u, 0u);
+  nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
   (void)transmit_enabled;
 }
 

@@ -50,6 +50,12 @@ the ESP32:
 .pio/build/esp32_balance_coordinator/firmware.bin
 ```
 
+For the powered Stage 5 transport benchmark, use the dedicated
+`esp32_stage5_transport` environment. It permits output only through direct
+mode and sends a zero `DIRECT_LR` command while disarmed so the existing
+MASTER/SLAVE controllers can reach `READY` without enabling either bridge.
+Do not use this image for balancing.
+
 If flashing is required for Stage 3, flash only
 `esp32_balance_coordinator` to the ESP32. Do not flash MASTER or SLAVE. Confirm
 the build reports `GS_BALANCE_DRY_RUN=1`; keep motor power removed throughout.

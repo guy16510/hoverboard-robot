@@ -41,6 +41,10 @@ extern "C" {
 #define GS_ENABLE_WEB_CONTROL 0
 #endif
 
+#ifndef GS_STAGE5_TRANSPORT_ONLY
+#define GS_STAGE5_TRANSPORT_ONLY 0
+#endif
+
 #if GS_ENABLE_WEB_CONTROL
 #ifndef GS_WIFI_SSID
 #define GS_WIFI_SSID ""
@@ -80,6 +84,11 @@ static_assert(kCommandRmtItems <= 64u,
               "pulse command must fit one RMT memory block");
 static_assert(GS_BALANCE_DRY_RUN == 0 || GS_BALANCE_DRY_RUN == 1,
               "GS_BALANCE_DRY_RUN must be zero or one");
+static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 ||
+                  GS_STAGE5_TRANSPORT_ONLY == 1,
+              "GS_STAGE5_TRANSPORT_ONLY must be zero or one");
+static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 || GS_BALANCE_DRY_RUN == 0,
+              "Stage 5 transport image must permit bounded direct output");
 
 class EspClock final : public IClock {
 public:
@@ -359,11 +368,25 @@ bool transmitCommandFrame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
 gs_esp_command requestedMotorCommand() {
   gs_esp_command command{};
   const MotorCommand &motor = motor_sink.latest();
-  if (GS_BALANCE_DRY_RUN != 0 || !motor.enabled || scheduler_fault) {
+  if (GS_BALANCE_DRY_RUN != 0 || scheduler_fault) {
     command.master_flags = GS_COMMAND_DISABLE;
     command.slave_flags = GS_COMMAND_DISABLE;
     return command;
   }
+#if GS_STAGE5_TRANSPORT_ONLY
+  command.master_flags = GS_COMMAND_DIRECT_LR;
+  if (operating_mode != 3u || !motor.enabled) {
+    command.speed = 0;
+    command.steer = 0;
+    return command;
+  }
+#else
+  if (!motor.enabled) {
+    command.master_flags = GS_COMMAND_DISABLE;
+    command.slave_flags = GS_COMMAND_DISABLE;
+    return command;
+  }
+#endif
   command.master_flags = GS_COMMAND_DIRECT_LR;
   command.speed = static_cast<int16_t>(motor.left);
   command.steer = static_cast<int16_t>(motor.right);

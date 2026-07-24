@@ -78,7 +78,7 @@ static void configure_tx_timer(void) {
   timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
   timer_interrupt_enable(TIMER13, TIMER_INT_UP);
   timer_disable(TIMER13);
-  nvic_irq_enable(TIMER13_IRQn, 1u, 0u);
+  nvic_irq_enable(TIMER13_IRQn, 3u, 0u);
 }
 
 static bool push_rx_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {

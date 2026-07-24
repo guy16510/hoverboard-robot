@@ -14,6 +14,7 @@ const commands = new Set([
   "disarm",
   "clear-fault",
   "emergency-stop",
+  "upright-offset",
 ]);
 
 function fail(message) {
@@ -69,6 +70,13 @@ export function normalizeStagePlan(value, {
       normalized.right = action.right;
       normalized.lifetimeMs = lifetimeMs;
     }
+    if (action.command === "upright-offset") {
+      if (!Number.isFinite(action.value) ||
+          action.value < -45 || action.value > 45) {
+        fail(`action ${index} upright offset must be from -45 to 45 degrees`);
+      }
+      normalized.value = action.value;
+    }
     return normalized;
   });
 
@@ -82,6 +90,8 @@ export function normalizeStagePlan(value, {
       action.command === "direct" &&
       action.left === 0 && action.right === 0);
     const armIndex = actions.findIndex(action => action.command === "arm");
+    const offsetIndex = actions.findIndex(action =>
+      action.command === "upright-offset");
     const firstNonzero = actions.findIndex(action =>
       action.command === "direct" &&
       (action.left !== 0 || action.right !== 0));
@@ -92,6 +102,9 @@ export function normalizeStagePlan(value, {
     }
     if (armIndex < 0 || modeIndex > armIndex || armIndex > firstNonzero) {
       fail("motor-transport must select mode 3 and arm before nonzero");
+    }
+    if (offsetIndex >= armIndex) {
+      fail("motor-transport upright offset must be set before arming");
     }
   }
   if (stage === "lifted-wheel") {

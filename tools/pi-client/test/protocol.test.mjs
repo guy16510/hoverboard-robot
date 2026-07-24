@@ -11,6 +11,7 @@ import {
   encodeDirectMotor,
   encodeFrame,
   encodeMovement,
+  encodeUprightOffset,
 } from "../protocol.mjs";
 import {
   PollingSerialStream,
@@ -405,6 +406,7 @@ test("capture normalization retains malformed device text for later review", () 
 test("motor transport plans are bounded, ordered, and fail-safe", () => {
   const plan = normalizeStagePlan({
     actions: [
+      { atMs: 500, command: "upright-offset", value: -16.3 },
       { atMs: 1000, command: "mode", value: 3 },
       { atMs: 1500, command: "direct", left: 0, right: 0 },
       { atMs: 2000, command: "arm" },
@@ -417,6 +419,9 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
   assert.equal(plan.sendsArm, true);
   assert.equal(plan.sendsMovement, true);
   assert.equal(plan.maximumAbsoluteCommand, 10);
+  const offset = encodeUprightOffset(-16.3);
+  assert.equal(offset[0], 14);
+  assert.equal(offset.readInt32LE(1), -16300);
   assert.throws(() => normalizeStagePlan({
     actions: [
       { atMs: 1000, command: "mode", value: 3 },

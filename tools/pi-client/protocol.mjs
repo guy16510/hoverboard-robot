@@ -4,6 +4,7 @@ export const VERSION = 1;
 export const MAX_PAYLOAD = 48;
 export const MAX_FRAME = 11 + MAX_PAYLOAD;
 export const MAX_TRANSPORT_TEST_COMMAND = 50;
+export const UPRIGHT_OFFSET_CONFIGURATION_KEY = 14;
 
 function requireUnsignedWireInteger(name, value, maximum) {
   if (!Number.isInteger(value) || value < 0 || value > maximum) {
@@ -117,6 +118,17 @@ export function encodeDirectMotor({
   payload.writeInt16LE(right, 2);
   payload.writeUInt32LE(leaseId, 4);
   payload.writeUInt16LE(lifetimeMs, 8);
+  return payload;
+}
+
+export function encodeUprightOffset(valueDegrees) {
+  if (!Number.isFinite(valueDegrees) ||
+      valueDegrees < -45 || valueDegrees > 45) {
+    throw new RangeError("upright offset must be from -45 to 45 degrees");
+  }
+  const payload = Buffer.alloc(5);
+  payload[0] = UPRIGHT_OFFSET_CONFIGURATION_KEY;
+  payload.writeInt32LE(Math.round(valueDegrees * 1000), 1);
   return payload;
 }
 

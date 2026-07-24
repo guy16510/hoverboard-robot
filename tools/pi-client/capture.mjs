@@ -14,7 +14,11 @@ import { SerialClient } from "./client.mjs";
 import { MixedTelemetryDecoder } from "./capture_decoder.mjs";
 import { CaptureLifecycle } from "./capture_lifecycle.mjs";
 import { normalizeCaptureEvent } from "./evidence.mjs";
-import { MessageType, encodeDirectMotor } from "./protocol.mjs";
+import {
+  MessageType,
+  encodeDirectMotor,
+  encodeUprightOffset,
+} from "./protocol.mjs";
 import { loadStagePlan } from "./stage_plan.mjs";
 
 const repositoryDirectory = fileURLToPath(new URL("../../", import.meta.url));
@@ -274,6 +278,12 @@ async function capture(options) {
           break;
         case "clear-fault":
           send(MessageType.CLEAR_FAULT, "clear-fault");
+          break;
+        case "upright-offset":
+          send(MessageType.CONFIGURATION_UPDATE, "upright-offset",
+            encodeUprightOffset(action.value), {
+              valueDegrees: action.value,
+            });
           break;
         case "emergency-stop":
           send(MessageType.EMERGENCY_STOP, "emergency-stop");

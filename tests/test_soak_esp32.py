@@ -106,8 +106,15 @@ class SoakGateTest(unittest.TestCase):
             validate_soak_progress(self.baseline, final, 4)
 
         final["remote_parser"] = [110, 10, 0, 0]
-        with self.assertRaisesRegex(RuntimeError, "parser did not make"):
+        with self.assertRaisesRegex(RuntimeError, "transport did not make"):
             validate_soak_progress(self.baseline, final, 20)
+
+    def test_repeated_exact_heartbeats_need_not_advance_sequence_counter(
+        self,
+    ) -> None:
+        final = self.progressed()
+        final["remote_parser"] = [220, 10, 0, 0]
+        validate_soak_progress(self.baseline, final, 20)
 
 
 if __name__ == "__main__":

@@ -126,11 +126,10 @@ def validate_soak_progress(
     validate_transport_progress(baseline, final)
     baseline_remote = remote_parser(baseline)
     final_remote = remote_parser(final)
-    if final_remote[0] <= baseline_remote[0] or final_remote[1] <= baseline_remote[1]:
+    if final_remote[0] <= baseline_remote[0]:
         raise RuntimeError(
-            "MASTER command parser did not make valid progress: "
-            f"bytes={baseline_remote[0]}->{final_remote[0]}, "
-            f"frames={baseline_remote[1]}->{final_remote[1]}"
+            "MASTER command transport did not make byte progress: "
+            f"bytes={baseline_remote[0]}->{final_remote[0]}"
         )
 
 

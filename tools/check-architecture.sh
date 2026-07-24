@@ -10,6 +10,14 @@ rg -q 'breakstate = TIMER_BREAK_DISABLE' firmware/gd32/boards/gausstop_dphc_v33/
 rg -q 'kControllerTx = 17' firmware/esp32/coordinator/main.cpp
 rg -q 'kControllerRx = 35' firmware/esp32/coordinator/main.cpp
 rg -q 'controller_rx.begin\(19200, SERIAL_8N1, kControllerRx, -1\)' firmware/esp32/passive_probe/main.cpp
+rg -q 'master\.slave_feedback\.accepted_sequence == feedback_sequence' firmware/gd32/master/main.c
+rg -q 'GS_REMOTE_FEEDBACK_FALLBACK_MS' firmware/gd32/master/main.c
+rg -q 'master\.state == GS_CONTROLLER_READY' firmware/gd32/master/main.c
+rg -q 'nvic_irq_enable\(TIMER13_IRQn, 3u, 0u\)' firmware/gd32/boards/gausstop_dphc_v33/gausstop_swd_transport.c
+if rg -q 'GS_REMOTE_FEEDBACK_DELAY_MS' firmware/gd32/master/main.c; then
+  echo "MASTER feedback reverted to a fixed-delay-only response" >&2
+  exit 1
+fi
 if rg -q 'controller_rx\.(write|print|printf)' firmware/esp32/passive_probe/main.cpp; then
   echo "passive probe contains controller transmit behavior" >&2
   exit 1

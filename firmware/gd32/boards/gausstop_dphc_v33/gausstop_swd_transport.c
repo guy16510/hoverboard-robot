@@ -16,7 +16,7 @@
 enum {
   GS_SWD_UART_TIMER_HZ = GS_SWD_UART_TIMER_HZ_FOR(GS_SYSTEM_CLOCK_HZ),
   GS_SWD_UART_BIT_TICKS = GS_SWD_UART_BIT_TICKS_FOR(GS_SYSTEM_CLOCK_HZ),
-  GS_SWD_UART_RX_BUFFER_SIZE = 64,
+  GS_SWD_UART_RX_BUFFER_SIZE = 128,
   GS_SWD_UART_TX_BUFFER_SIZE = 128,
   GS_SWD_TAKEOVER_DELAY_MS = 2000,
 };
@@ -31,6 +31,10 @@ _Static_assert((GS_SWD_UART_RX_BUFFER_SIZE &
 _Static_assert((GS_SWD_UART_TX_BUFFER_SIZE &
                 (GS_SWD_UART_TX_BUFFER_SIZE - 1u)) == 0u,
                "TX buffer size must be a power of two");
+_Static_assert(GS_SWD_UART_RX_BUFFER_SIZE <= UINT8_MAX,
+               "RX indices must fit in uint8_t");
+_Static_assert(GS_SWD_UART_TX_BUFFER_SIZE <= UINT8_MAX,
+               "TX indices must fit in uint8_t");
 
 static volatile uint8_t rx_buffer[GS_SWD_UART_RX_BUFFER_SIZE];
 static volatile uint8_t rx_head;
@@ -40,6 +44,7 @@ static volatile uint32_t rx_overflow_count;
 static volatile uint32_t rx_framing_error_count;
 static volatile bool rx_low_active;
 static volatile uint32_t rx_low_started_us;
+static volatile uint32_t rx_last_edge_us;
 static gs_swd_pulse_decoder rx_decoder;
 
 static volatile uint8_t tx_buffer[GS_SWD_UART_TX_BUFFER_SIZE];
@@ -76,22 +81,25 @@ static void configure_tx_timer(void) {
   nvic_irq_enable(TIMER13_IRQn, 2u, 0u);
 }
 
-static void push_rx_byte(uint8_t byte) {
-  const uint8_t next =
-      (uint8_t)((rx_head + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
-  if (next == rx_tail) {
+static bool push_rx_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
+  const uint8_t head = rx_head;
+  const uint8_t tail = rx_tail;
+  const uint8_t used =
+      (uint8_t)((head - tail) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
+  const uint32_t available = GS_SWD_UART_RX_BUFFER_SIZE - 1u - used;
+  if (frame == NULL || GS_SWD_PULSE_FRAME_BYTES > available) {
     ++rx_overflow_count;
-    return;
+    return false;
   }
-  rx_buffer[rx_head] = byte;
-  rx_head = next;
-  ++rx_byte_count;
-}
-
-static void push_rx_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
+  uint8_t next = head;
   for (uint8_t index = 0u; index < GS_SWD_PULSE_FRAME_BYTES; ++index) {
-    push_rx_byte(frame[index]);
+    rx_buffer[next] = frame[index];
+    next =
+        (uint8_t)((next + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
   }
+  rx_head = next;
+  rx_byte_count += GS_SWD_PULSE_FRAME_BYTES;
+  return true;
 }
 
 static bool pop_tx_byte(uint8_t *byte) {
@@ -103,15 +111,33 @@ static bool pop_tx_byte(uint8_t *byte) {
   return true;
 }
 
+static void reset_partial_rx(void) {
+  gs_swd_pulse_decoder_init(&rx_decoder);
+  rx_low_active = false;
+}
+
 static void service_rx_edge(void) {
   const uint32_t now_us = gs_board_micros();
-  if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) == RESET) {
+  const bool line_low = gpio_input_bit_get(GPIOA, GPIO_PIN_13) == RESET;
+  if (line_low) {
+    if (rx_low_active) {
+      ++rx_framing_error_count;
+      reset_partial_rx();
+    } else if (rx_decoder.active && rx_last_edge_us != 0u &&
+               (uint32_t)(now_us - rx_last_edge_us) >
+                   GS_SWD_PULSE_FRAME_GAP_TIMEOUT_US) {
+      ++rx_framing_error_count;
+      gs_swd_pulse_decoder_init(&rx_decoder);
+    }
     rx_low_started_us = now_us;
     rx_low_active = true;
+    rx_last_edge_us = now_us;
     return;
   }
   if (!rx_low_active) {
     ++rx_framing_error_count;
+    gs_swd_pulse_decoder_init(&rx_decoder);
+    rx_last_edge_us = now_us;
     return;
   }
   rx_low_active = false;
@@ -122,10 +148,11 @@ static void service_rx_edge(void) {
   const gs_swd_pulse_result result =
       gs_swd_pulse_decoder_feed(&rx_decoder, bounded_width, frame);
   if (result == GS_SWD_PULSE_FRAME) {
-    push_rx_frame(frame);
+    (void)push_rx_frame(frame);
   } else if (result == GS_SWD_PULSE_ERROR) {
     ++rx_framing_error_count;
   }
+  rx_last_edge_us = now_us;
 }
 
 void EXTI4_15_IRQHandler(void) {
@@ -186,6 +213,7 @@ static void init_remote(bool transmit_enabled) {
   rx_framing_error_count = 0u;
   rx_low_active = false;
   rx_low_started_us = 0u;
+  rx_last_edge_us = 0u;
   gs_swd_pulse_decoder_init(&rx_decoder);
   tx_head = 0u;
   tx_tail = 0u;

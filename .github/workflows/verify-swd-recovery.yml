@@ -1,0 +1,73 @@
+name: Verify SWD recovery branch
+
+on:
+  push:
+    branches:
+      - codex/swd-dual-motor-recovery
+  pull_request:
+    branches:
+      - codex/swd-dual-motor-recovery
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Bootstrap pinned build tools
+        shell: bash
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
+          ./tools/bootstrap-tools.sh
+
+      - name: Run native tests
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! .venv/bin/pio run -e native_tests > native-build.log 2>&1; then
+            tail -250 native-build.log
+            exit 1
+          fi
+          if ! .pio/build/native_tests/program >> native-build.log 2>&1; then
+            tail -250 native-build.log
+            exit 1
+          fi
+          tail -30 native-build.log
+
+      - name: Build the ESP32 and both motor controllers
+        shell: bash
+        run: |
+          set -euo pipefail
+          if ! .venv/bin/pio run \
+            -e gausstop_master_swd \
+            -e bench_master_pa4_bypass \
+            -e gausstop_slave \
+            -e esp32_swd_coordinator \
+            > firmware-build.log 2>&1; then
+            tail -300 firmware-build.log
+            exit 1
+          fi
+          tail -80 firmware-build.log
+
+      - name: Upload build logs
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: swd-recovery-build-logs-${{ github.sha }}
+          path: |
+            native-build.log
+            firmware-build.log
+          if-no-files-found: ignore
+          retention-days: 30

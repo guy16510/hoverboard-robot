@@ -22,21 +22,35 @@ typedef struct {
 } gs_communication_diagnostic_counters;
 
 volatile gs_communication_diagnostic_counters gs_communication_diagnostic = {
-    .magic = 0x47534447u, /* GSDG */
-    .version = 1u,
+    .magic = 0x47534447u,
+    .version = GS_PROTOCOL_VERSION,
 };
 
 static bool send_remote_feedback(const gs_slave_feedback *slave_status,
-                                 uint32_t diagnostic_faults) {
-  const gs_master_feedback feedback = {GS_CONTROLLER_DISABLED,
-                                       slave_status->state,
-                                       0,
-                                       0,
-                                       0,
-                                       slave_status->odometer,
-                                       diagnostic_faults,
-                                       slave_status->faults};
+                                 uint32_t diagnostic_faults,
+                                 uint16_t accepted_esp_sequence,
+                                 uint16_t forwarded_slave_sequence,
+                                 uint32_t now_ms) {
+  const gs_master_feedback feedback = {
+      .protocol_version = GS_PROTOCOL_VERSION,
+      .master_state = GS_CONTROLLER_DISABLED,
+      .slave_state = slave_status->state,
+      .status_flags = 0u,
+      .accepted_esp_sequence = accepted_esp_sequence,
+      .forwarded_slave_sequence = forwarded_slave_sequence,
+      .accepted_slave_sequence = slave_status->accepted_sequence,
+      .left_applied = 0,
+      .right_applied = 0,
+      .left_odometer = 0,
+      .right_odometer = slave_status->odometer,
+      .master_faults = diagnostic_faults,
+      .slave_faults = slave_status->faults,
+      .master_command_age_ms = 0u,
+      .slave_feedback_age_ms = 0u,
+      .slave_command_age_ms = slave_status->command_age_ms,
+  };
   uint8_t reply[GS_MASTER_FEEDBACK_SIZE];
+  (void)now_ms;
   return gs_encode_master_feedback(reply, &feedback) &&
          gs_board_uart_write(GS_UART_REMOTE, reply, sizeof(reply));
 }
@@ -47,13 +61,24 @@ int main(void) {
   gs_board_uart_init(GS_UART_REMOTE, true);
   gs_board_uart_init(GS_UART_LINK, true);
   const uint8_t command_marker[] = {GS_COMMAND_MARKER};
+  const uint8_t slave_feedback_marker[] = {GS_SLAVE_FEEDBACK_MARKER};
   gs_frame_parser remote_parser;
   gs_frame_parser link_parser;
   gs_frame_parser_init(&remote_parser, command_marker, 1, GS_ESP_COMMAND_SIZE);
-  gs_frame_parser_init(&link_parser, command_marker, 1, GS_SLAVE_FEEDBACK_SIZE);
+  gs_frame_parser_init(&link_parser, slave_feedback_marker, 1,
+                       GS_SLAVE_FEEDBACK_SIZE);
   uint32_t next_slave_ms = 0;
   uint32_t next_beacon_ms = 0;
-  gs_slave_feedback slave_status = {GS_CONTROLLER_DISABLED, 0, 0};
+  uint16_t accepted_esp_sequence = 0;
+  uint16_t forwarded_slave_sequence = 0;
+  gs_slave_feedback slave_status = {
+      .state = GS_CONTROLLER_DISABLED,
+      .odometer = 0,
+      .faults = 0u,
+      .applied_electrical = 0,
+      .accepted_sequence = 0u,
+      .command_age_ms = UINT16_MAX,
+  };
   uint32_t diagnostic_faults = 0;
 
   for (;;) {
@@ -62,20 +87,24 @@ int main(void) {
     while (gs_board_uart_read(GS_UART_REMOTE, &byte)) {
       const uint32_t recent_index =
           gs_communication_diagnostic.recent_write_index;
-      gs_communication_diagnostic.recent_remote_bytes
-          [recent_index % GS_DIAGNOSTIC_RECENT_BYTES] = byte;
+      gs_communication_diagnostic
+          .recent_remote_bytes[recent_index % GS_DIAGNOSTIC_RECENT_BYTES] =
+          byte;
       gs_communication_diagnostic.recent_write_index = recent_index + 1u;
       ++gs_communication_diagnostic.remote_raw_bytes;
       const gs_parse_result result =
           gs_frame_parser_feed(&remote_parser, byte, gs_board_millis(), frame);
       if (result == GS_PARSE_FRAME) {
-        gs_esp_command ignored;
-        if (!gs_decode_esp_command(&ignored, frame)) {
+        gs_esp_command command;
+        if (!gs_decode_esp_command(&command, frame)) {
           diagnostic_faults |= GS_FAULT_PROTOCOL;
         } else {
+          accepted_esp_sequence = command.sequence;
           ++gs_communication_diagnostic.remote_valid_frames;
         }
-        if (send_remote_feedback(&slave_status, diagnostic_faults)) {
+        if (send_remote_feedback(&slave_status, diagnostic_faults,
+                                 accepted_esp_sequence,
+                                 forwarded_slave_sequence, gs_board_millis())) {
           ++gs_communication_diagnostic.remote_replies;
         }
       } else if (result == GS_PARSE_BAD_CRC) {
@@ -95,13 +124,20 @@ int main(void) {
     const uint32_t now = gs_board_millis();
     if ((int32_t)(now - next_beacon_ms) >= 0) {
       next_beacon_ms = now + 100u;
-      if (send_remote_feedback(&slave_status, diagnostic_faults)) {
+      if (send_remote_feedback(&slave_status, diagnostic_faults,
+                               accepted_esp_sequence, forwarded_slave_sequence,
+                               now)) {
         ++gs_communication_diagnostic.remote_beacons;
       }
     }
     if ((int32_t)(now - next_slave_ms) >= 0) {
       uint8_t disabled[GS_SLAVE_COMMAND_SIZE];
-      const gs_slave_command command = {0, GS_COMMAND_DISABLE};
+      ++forwarded_slave_sequence;
+      const gs_slave_command command = {
+          .electrical_command = 0,
+          .flags = GS_COMMAND_DISABLE,
+          .sequence = forwarded_slave_sequence,
+      };
       next_slave_ms = now + 20u;
       if (gs_encode_slave_command(disabled, &command)) {
         (void)gs_board_uart_write(GS_UART_LINK, disabled, sizeof(disabled));

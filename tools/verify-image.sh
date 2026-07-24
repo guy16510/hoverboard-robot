@@ -10,7 +10,7 @@ build_dir="$repo_dir/.pio/build/$target"
 [[ -f "$build_dir/firmware.bin" ]] || { echo "missing BIN for $target" >&2; exit 1; }
 
 case "$target" in
-  gausstop_*)
+  gausstop_* | bench_master_pa4_bypass)
     bin_size="$(wc -c < "$build_dir/firmware.bin" | tr -d ' ')"
     [[ "$bin_size" -le 65536 ]] || { echo "$target exceeds 64 KiB flash" >&2; exit 1; }
     size_tool="$repo_dir/.toolchains/arm-none-eabi/bin/arm-none-eabi-size"
@@ -24,6 +24,8 @@ case "$target" in
   esp32_*)
     [[ -f "$build_dir/bootloader.bin" ]]
     [[ -f "$build_dir/partitions.bin" ]]
+    [[ -f "$build_dir/boot_app0.bin" ]]
+    [[ "$(wc -c < "$build_dir/boot_app0.bin" | tr -d ' ')" == "8192" ]]
     ;;
   *)
     echo "unknown target: $target" >&2

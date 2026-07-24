@@ -13,7 +13,7 @@ cp "$build_dir/firmware.bin" "$dist_dir/firmware.bin"
 cp "$build_dir/firmware.elf" "$dist_dir/firmware.elf"
 [[ -f "$build_dir/firmware.map" ]] && cp "$build_dir/firmware.map" "$dist_dir/firmware.map"
 [[ -f "$build_dir/firmware.lst" ]] && cp "$build_dir/firmware.lst" "$dist_dir/firmware.lst"
-for extra in bootloader.bin partitions.bin; do
+for extra in bootloader.bin partitions.bin boot_app0.bin; do
   [[ -f "$build_dir/$extra" ]] && cp "$build_dir/$extra" "$dist_dir/$extra"
 done
 
@@ -21,7 +21,7 @@ git_commit="$(git -C "$repo_dir" rev-parse HEAD)"
 dirty="false"
 [[ -n "$(git -C "$repo_dir" status --porcelain --untracked-files=no)" ]] && dirty="true"
 pio_version="$($repo_dir/.venv/bin/pio --version | awk '{print $NF}')"
-if [[ "$target" == gausstop_* ]]; then
+if [[ "$target" == gausstop_* || "$target" == bench_master_pa4_bypass ]]; then
   size_tool="$repo_dir/.toolchains/arm-none-eabi/bin/arm-none-eabi-size"
   toolchain_version="$($repo_dir/.toolchains/arm-none-eabi/bin/arm-none-eabi-gcc -dumpfullversion)"
   board="GAUSSTOP_DPHC-V3.3_GD32F130C8T6"

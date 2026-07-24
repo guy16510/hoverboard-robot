@@ -8,6 +8,7 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "gausstop_bridge_profile.h"
 #include "gs_motor_control.h"
 
 #if !defined(GD32F130) || GD32F130 != 1
@@ -102,6 +103,20 @@ typedef enum {
   GS_UART_LINK,
 } gs_board_uart;
 
+typedef struct {
+  uint8_t hall;
+  uint32_t timestamp_us;
+  uint32_t interval_us;
+} gs_board_hall_event;
+
+typedef struct {
+  uint32_t rx_bytes;
+  uint32_t tx_bytes;
+  uint32_t rx_overflows;
+  uint32_t tx_overflows;
+  uint32_t framing_errors;
+} gs_board_uart_stats;
+
 void gs_board_safe_gpio_init(void);
 void gs_board_time_init(void);
 void gs_board_operational_init(void);
@@ -109,7 +124,12 @@ void gs_board_bridge_off(void *context);
 bool gs_board_bridge_apply(void *context, const gs_commutation_vector *vector,
                            uint16_t compare_offset);
 gs_bridge_port gs_board_bridge_port(void);
+gs_bridge_profile_id gs_board_bridge_profile_id(void);
 uint8_t gs_board_read_hall(void);
+void gs_board_hall_exti_service(void);
+bool gs_board_hall_event_read(gs_board_hall_event *event);
+uint32_t gs_board_hall_overflow_count(void);
+bool gs_board_shutdown_raw_high(void);
 bool gs_board_shutdown_clear(void);
 bool gs_board_adc_read(uint16_t *out);
 bool gs_board_watchdog_was_reset(void);
@@ -121,5 +141,6 @@ void gs_board_uart_init(gs_board_uart uart, bool transmit_enabled);
 bool gs_board_uart_read(gs_board_uart uart, uint8_t *byte);
 bool gs_board_uart_write(gs_board_uart uart, const uint8_t *bytes,
                          uint32_t length);
+void gs_board_uart_get_stats(gs_board_uart uart, gs_board_uart_stats *stats);
 
 #endif

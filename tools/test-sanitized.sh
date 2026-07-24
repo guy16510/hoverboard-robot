@@ -12,16 +12,18 @@ cd "$repo_dir"
   -fsanitize=address,undefined -fno-omit-frame-pointer \
   -Ifirmware/gd32/common/protocol -Ifirmware/gd32/common/control \
   -Ifirmware/gd32/common/motor -Ifirmware/gd32/common/safety \
+  -Ifirmware/gd32/boards/gausstop_dphc_v33 \
   -Ifirmware/gd32/common/transport -Ifirmware/gd32/common/coordination \
-  -Itests/native \
+  -Itests/native -DGS_POWER_PROFILE_ID=1 -DGS_BRIDGE_PROFILE_ID=2 \
   tests/native/test_main.c tests/native/test_protocol.c tests/native/test_control.c \
-  tests/native/test_architecture.c \
+  tests/native/test_architecture.c tests/native/test_simulation.c \
   firmware/gd32/common/protocol/gs_protocol.c \
   firmware/gd32/common/protocol/gs_frame_parser.c \
   firmware/gd32/common/control/gs_wheel_mix.c \
   firmware/gd32/common/control/gs_console.c \
   firmware/gd32/common/motor/gs_commutation.c \
   firmware/gd32/common/motor/gs_motor_control.c \
+  firmware/gd32/common/motor/gs_motor_profile.c \
   firmware/gd32/common/safety/gs_safety.c \
   firmware/gd32/common/coordination/gs_master.c \
   firmware/gd32/common/coordination/gs_slave.c \

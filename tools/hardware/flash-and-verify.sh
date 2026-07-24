@@ -31,3 +31,4 @@ esac
 openocd -f "$interface_cfg" -f "$target_cfg" -c "$openocd_command"
 cmp "$image" "$readback"
 shasum -a 256 "$image" "$readback"
+echo "verified; disconnect the ST-Link and power-cycle the controller before operation"

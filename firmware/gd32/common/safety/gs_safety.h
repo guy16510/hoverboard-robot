@@ -5,10 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#include "gs_types.h"
+
 enum {
-  GS_PWM_OFFSET_MAX = 80,
-  GS_PWM_OFFSET_START = 40,
-  GS_COMMAND_DEADBAND = 50,
   GS_ESP_TIMEOUT_MS = 400,
   GS_SLAVE_TIMEOUT_MS = 100,
   GS_STARTUP_TIMEOUT_MS = 700,
@@ -37,6 +36,8 @@ typedef enum {
   GS_FAULT_PROTECTION = 1u << 9,
   GS_FAULT_ADC_CALIBRATION = 1u << 10,
   GS_FAULT_WATCHDOG_LOCKOUT = 1u << 11,
+  GS_FAULT_HALL_CAPTURE_OVERFLOW = 1u << 12,
+  GS_FAULT_TRANSPORT_OVERFLOW = 1u << 13,
 } gs_fault_flag;
 
 typedef struct {

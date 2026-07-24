@@ -6,39 +6,86 @@
 
 static void test_crc_vectors(void) {
   static const uint8_t check[] = "123456789";
-  static const uint8_t disabled_esp[] = {0x2F, 0, 0, 0, 0, 0x40, 0x40};
-  static const uint8_t disabled_slave[] = {0x2F, 0, 0, 0x40};
-
   GS_EXPECT_EQ(0x31C3, gs_crc16(check, sizeof(check) - 1u));
-  GS_EXPECT_EQ(0xA117, gs_crc16(disabled_esp, sizeof(disabled_esp)));
-  GS_EXPECT_EQ(0xAB64, gs_crc16(disabled_slave, sizeof(disabled_slave)));
 }
 
 static void test_exact_sizes_and_endianness(void) {
-  const gs_esp_command command = {-1000, 1000, GS_COMMAND_DIRECT_LR, 0};
-  const uint8_t prefix[] = {0x2F, 0x18, 0xFC, 0xE8, 0x03, 0x20, 0x00};
+  const gs_esp_command command = {
+      .speed = -1000,
+      .steer = 1000,
+      .master_flags = GS_COMMAND_DIRECT_LR,
+      .slave_flags = 0u,
+      .sequence = 0x1234u,
+  };
+  const uint8_t prefix[] = {0x30, 0x34, 0x12, 0x18, 0xFC,
+                            0xE8, 0x03, 0x20, 0x00};
   uint8_t frame[GS_ESP_COMMAND_SIZE] = {0};
   gs_esp_command decoded = {0};
 
-  GS_EXPECT_EQ(9, GS_ESP_COMMAND_SIZE);
-  GS_EXPECT_EQ(6, GS_SLAVE_COMMAND_SIZE);
-  GS_EXPECT_EQ(12, GS_SLAVE_FEEDBACK_SIZE);
-  GS_EXPECT_EQ(26, GS_MASTER_FEEDBACK_SIZE);
+  GS_EXPECT_EQ(2, GS_PROTOCOL_VERSION);
+  GS_EXPECT_EQ(11, GS_ESP_COMMAND_SIZE);
+  GS_EXPECT_EQ(8, GS_SLAVE_COMMAND_SIZE);
+  GS_EXPECT_EQ(22, GS_SLAVE_FEEDBACK_SIZE);
+  GS_EXPECT_EQ(55, GS_MASTER_FEEDBACK_SIZE);
   GS_EXPECT_TRUE(gs_encode_esp_command(frame, &command));
   GS_EXPECT_BYTES(prefix, frame, sizeof(prefix));
-  GS_EXPECT_EQ(gs_crc16(frame, 7),
-               (uint16_t)(frame[7] | ((uint16_t)frame[8] << 8)));
+  GS_EXPECT_EQ(gs_crc16(frame, GS_ESP_COMMAND_SIZE - 2u),
+               (uint16_t)(frame[GS_ESP_COMMAND_SIZE - 2u] |
+                          ((uint16_t)frame[GS_ESP_COMMAND_SIZE - 1u] << 8)));
   GS_EXPECT_TRUE(gs_decode_esp_command(&decoded, frame));
+  GS_EXPECT_EQ(0x1234, decoded.sequence);
   GS_EXPECT_EQ(-1000, decoded.speed);
   GS_EXPECT_EQ(1000, decoded.steer);
   GS_EXPECT_EQ(GS_COMMAND_DIRECT_LR, decoded.master_flags);
 }
 
 static void test_all_frame_round_trips(void) {
-  const gs_slave_command command = {-321, GS_COMMAND_DISABLE};
-  const gs_slave_feedback slave = {7, -123456, 0xAABBCCDDu};
-  const gs_master_feedback master = {1,       2,      -300,        400,
-                                     -100000, 200000, 0x01020304u, 0xA0B0C0D0u};
+  const gs_slave_command command = {
+      .electrical_command = -321,
+      .flags = GS_COMMAND_DISABLE,
+      .sequence = 17u,
+  };
+  const gs_slave_feedback slave = {
+      .state = 7,
+      .odometer = -123456,
+      .faults = 0xAABBCCDDu,
+      .applied_electrical = -222,
+      .accepted_sequence = 17u,
+      .command_age_ms = 19u,
+      .hall = 5u,
+      .status_flags =
+          GS_MOTOR_FEEDBACK_BRIDGE_ENABLED | GS_MOTOR_FEEDBACK_PA4_RAW_HIGH,
+      .compare_offset = 80u,
+  };
+  const gs_master_feedback master = {
+      .protocol_version = GS_PROTOCOL_VERSION,
+      .master_state = 1,
+      .slave_state = 2,
+      .status_flags = GS_FEEDBACK_PEER_HEALTHY,
+      .accepted_esp_sequence = 20u,
+      .forwarded_slave_sequence = 20u,
+      .accepted_slave_sequence = 20u,
+      .left_applied = -300,
+      .right_applied = 400,
+      .left_odometer = -100000,
+      .right_odometer = 200000,
+      .master_faults = 0x01020304u,
+      .slave_faults = 0xA0B0C0D0u,
+      .master_command_age_ms = 10u,
+      .slave_feedback_age_ms = 11u,
+      .slave_command_age_ms = 12u,
+      .left_hall = 2u,
+      .right_hall = 6u,
+      .left_compare_offset = 90u,
+      .right_compare_offset = 80u,
+      .motor_status_flags = GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED |
+                            GS_MASTER_MOTOR_RIGHT_BRIDGE_ENABLED |
+                            GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH,
+      .remote_rx_bytes = 123u,
+      .remote_valid_frames = 7u,
+      .remote_invalid_frames = 3u,
+      .remote_framing_errors = 2u,
+  };
   uint8_t command_frame[GS_SLAVE_COMMAND_SIZE];
   uint8_t slave_frame[GS_SLAVE_FEEDBACK_SIZE];
   uint8_t master_frame[GS_MASTER_FEEDBACK_SIZE];
@@ -50,27 +97,54 @@ static void test_all_frame_round_trips(void) {
   GS_EXPECT_TRUE(gs_decode_slave_command(&command_out, command_frame));
   GS_EXPECT_EQ(command.electrical_command, command_out.electrical_command);
   GS_EXPECT_EQ(command.flags, command_out.flags);
+  GS_EXPECT_EQ(command.sequence, command_out.sequence);
 
   GS_EXPECT_TRUE(gs_encode_slave_feedback(slave_frame, &slave));
+  GS_EXPECT_EQ(GS_SLAVE_FEEDBACK_MARKER, slave_frame[0]);
   GS_EXPECT_TRUE(gs_decode_slave_feedback(&slave_out, slave_frame));
   GS_EXPECT_EQ(slave.state, slave_out.state);
   GS_EXPECT_EQ(slave.odometer, slave_out.odometer);
   GS_EXPECT_EQ(slave.faults, slave_out.faults);
+  GS_EXPECT_EQ(slave.applied_electrical, slave_out.applied_electrical);
+  GS_EXPECT_EQ(slave.accepted_sequence, slave_out.accepted_sequence);
+  GS_EXPECT_EQ(slave.command_age_ms, slave_out.command_age_ms);
+  GS_EXPECT_EQ(slave.hall, slave_out.hall);
+  GS_EXPECT_EQ(slave.status_flags, slave_out.status_flags);
+  GS_EXPECT_EQ(slave.compare_offset, slave_out.compare_offset);
 
   GS_EXPECT_TRUE(gs_encode_master_feedback(master_frame, &master));
-  GS_EXPECT_EQ(0xCD, master_frame[0]);
-  GS_EXPECT_EQ(0xAB, master_frame[1]);
+  GS_EXPECT_EQ(GS_FEEDBACK_MARKER_0, master_frame[0]);
+  GS_EXPECT_EQ(GS_FEEDBACK_MARKER_1, master_frame[1]);
   GS_EXPECT_TRUE(gs_decode_master_feedback(&master_out, master_frame));
+  GS_EXPECT_EQ(GS_PROTOCOL_VERSION, master_out.protocol_version);
+  GS_EXPECT_EQ(master.accepted_esp_sequence, master_out.accepted_esp_sequence);
+  GS_EXPECT_EQ(master.forwarded_slave_sequence,
+               master_out.forwarded_slave_sequence);
+  GS_EXPECT_EQ(master.accepted_slave_sequence,
+               master_out.accepted_slave_sequence);
   GS_EXPECT_EQ(master.left_applied, master_out.left_applied);
   GS_EXPECT_EQ(master.right_applied, master_out.right_applied);
   GS_EXPECT_EQ(master.left_odometer, master_out.left_odometer);
   GS_EXPECT_EQ(master.right_odometer, master_out.right_odometer);
   GS_EXPECT_EQ(master.master_faults, master_out.master_faults);
   GS_EXPECT_EQ(master.slave_faults, master_out.slave_faults);
+  GS_EXPECT_EQ(master.master_command_age_ms, master_out.master_command_age_ms);
+  GS_EXPECT_EQ(master.slave_feedback_age_ms, master_out.slave_feedback_age_ms);
+  GS_EXPECT_EQ(master.slave_command_age_ms, master_out.slave_command_age_ms);
+  GS_EXPECT_EQ(master.remote_rx_bytes, master_out.remote_rx_bytes);
+  GS_EXPECT_EQ(master.remote_valid_frames, master_out.remote_valid_frames);
+  GS_EXPECT_EQ(master.remote_invalid_frames, master_out.remote_invalid_frames);
+  GS_EXPECT_EQ(master.remote_framing_errors,
+               master_out.remote_framing_errors);
+  GS_EXPECT_EQ(master.left_hall, master_out.left_hall);
+  GS_EXPECT_EQ(master.right_hall, master_out.right_hall);
+  GS_EXPECT_EQ(master.left_compare_offset, master_out.left_compare_offset);
+  GS_EXPECT_EQ(master.right_compare_offset, master_out.right_compare_offset);
+  GS_EXPECT_EQ(master.motor_status_flags, master_out.motor_status_flags);
 }
 
-static void test_semantic_and_crc_rejection(void) {
-  gs_esp_command valid = {0, 0, 0, 0};
+static void test_semantic_crc_and_version_rejection(void) {
+  gs_esp_command valid = {.sequence = 1u};
   uint8_t frame[GS_ESP_COMMAND_SIZE];
   gs_esp_command out = {0};
 
@@ -87,9 +161,245 @@ static void test_semantic_and_crc_rejection(void) {
   valid.slave_flags = GS_COMMAND_DIRECT_LR;
   GS_EXPECT_FALSE(gs_encode_esp_command(frame, &valid));
 
-  GS_EXPECT_TRUE(gs_encode_esp_command(frame, &(gs_esp_command){0, 0, 0, 0}));
-  frame[0] = 0x00;
+  GS_EXPECT_TRUE(
+      gs_encode_esp_command(frame, &(gs_esp_command){.sequence = 2u}));
+  frame[0] = 0x2Fu;
   GS_EXPECT_FALSE(gs_decode_esp_command(&out, frame));
+
+  gs_master_feedback feedback = {.protocol_version = GS_PROTOCOL_VERSION};
+  uint8_t feedback_frame[GS_MASTER_FEEDBACK_SIZE];
+  GS_EXPECT_TRUE(gs_encode_master_feedback(feedback_frame, &feedback));
+  feedback_frame[2] = 1u;
+  const uint16_t crc = gs_crc16(feedback_frame, GS_MASTER_FEEDBACK_SIZE - 2u);
+  feedback_frame[GS_MASTER_FEEDBACK_SIZE - 2u] = (uint8_t)crc;
+  feedback_frame[GS_MASTER_FEEDBACK_SIZE - 1u] = (uint8_t)(crc >> 8);
+  GS_EXPECT_FALSE(gs_decode_master_feedback(&feedback, feedback_frame));
+}
+
+static void test_command_sequencer_waits_for_end_to_end_ack(void) {
+  gs_command_sequencer sequencer;
+  gs_command_sequencer_init(&sequencer);
+
+  const gs_esp_command ready = {
+      .master_flags = GS_COMMAND_DIRECT_LR,
+  };
+  const gs_esp_command move_100 = {
+      .speed = 100,
+      .steer = 100,
+      .master_flags = GS_COMMAND_DIRECT_LR,
+  };
+  const gs_esp_command move_250 = {
+      .speed = 250,
+      .steer = 250,
+      .master_flags = GS_COMMAND_DIRECT_LR,
+  };
+  const gs_esp_command disable = {
+      .master_flags = GS_COMMAND_DISABLE,
+      .slave_flags = GS_COMMAND_DISABLE,
+  };
+
+  const gs_esp_command *selected =
+      gs_command_sequencer_select(&sequencer, &ready, false, 10u);
+  GS_EXPECT_EQ(1, selected->sequence);
+  GS_EXPECT_EQ(0, selected->speed);
+  GS_EXPECT_EQ(10, sequencer.sequence_started_ms);
+
+  selected = gs_command_sequencer_select(&sequencer, &move_100, false, 30u);
+  GS_EXPECT_EQ(1, selected->sequence);
+  GS_EXPECT_EQ(0, selected->speed);
+  GS_EXPECT_EQ(10, sequencer.sequence_started_ms);
+  GS_EXPECT_FALSE(
+      gs_command_sequencer_ack_expired(&sequencer, false, 210u, 200u));
+  GS_EXPECT_TRUE(
+      gs_command_sequencer_ack_expired(&sequencer, false, 211u, 200u));
+
+  selected = gs_command_sequencer_select(&sequencer, &move_250, true, 40u);
+  GS_EXPECT_EQ(2, selected->sequence);
+  GS_EXPECT_EQ(250, selected->speed);
+  GS_EXPECT_EQ(40, sequencer.sequence_started_ms);
+
+  selected = gs_command_sequencer_select(&sequencer, &disable, false, 41u);
+  GS_EXPECT_EQ(3, selected->sequence);
+  GS_EXPECT_TRUE((selected->master_flags & GS_COMMAND_DISABLE) != 0u);
+  GS_EXPECT_EQ(41, sequencer.sequence_started_ms);
+  GS_EXPECT_FALSE(
+      gs_command_sequencer_ack_expired(&sequencer, true, 500u, 200u));
+
+  sequencer.sequence = UINT16_MAX;
+  sequencer.in_flight = disable;
+  sequencer.in_flight.sequence = UINT16_MAX;
+  sequencer.sent = true;
+  selected = gs_command_sequencer_select(&sequencer, &ready, true, 600u);
+  GS_EXPECT_EQ(1, selected->sequence);
+}
+
+static gs_master_feedback safe_zero_feedback(void) {
+  const gs_master_feedback feedback = {
+      .protocol_version = GS_PROTOCOL_VERSION,
+      .master_state = 1u,
+      .slave_state = 1u,
+      .status_flags = GS_FEEDBACK_PEER_HEALTHY | GS_FEEDBACK_PA4_RAW_HIGH,
+      .accepted_esp_sequence = 7u,
+      .forwarded_slave_sequence = 7u,
+      .accepted_slave_sequence = 7u,
+      .left_hall = 2u,
+      .right_hall = 2u,
+      .motor_status_flags = GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH,
+  };
+  return feedback;
+}
+
+static void test_esp32_feedback_guards_reject_contradictory_telemetry(void) {
+  gs_master_feedback feedback = safe_zero_feedback();
+  GS_EXPECT_TRUE(gs_master_feedback_exact_ack(&feedback, 7u, true));
+  GS_EXPECT_TRUE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_TRUE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback.left_compare_offset = 40u;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+  feedback.left_applied = 100;
+  feedback.motor_status_flags |= GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_TRUE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.left_applied = 49;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_TRUE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.status_flags |= GS_FEEDBACK_CLEAR_PENDING;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.status_flags &= (uint8_t)~GS_FEEDBACK_PEER_HEALTHY;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.status_flags &= (uint8_t)~GS_FEEDBACK_PA4_RAW_HIGH;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  feedback.status_flags |= GS_FEEDBACK_PA4_BYPASS;
+  GS_EXPECT_TRUE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+
+  feedback = safe_zero_feedback();
+  feedback.motor_status_flags &= (uint8_t)~GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.left_hall = 0u;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.master_faults = 1u;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.master_state = 0u;
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+
+  feedback = safe_zero_feedback();
+  feedback.forwarded_slave_sequence = 6u;
+  GS_EXPECT_FALSE(gs_master_feedback_exact_ack(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 7u, false));
+}
+
+static void test_every_single_bit_wire_error_is_rejected(void) {
+  uint8_t esp_frame[GS_ESP_COMMAND_SIZE];
+  uint8_t slave_command_frame[GS_SLAVE_COMMAND_SIZE];
+  uint8_t slave_feedback_frame[GS_SLAVE_FEEDBACK_SIZE];
+  uint8_t master_feedback_frame[GS_MASTER_FEEDBACK_SIZE];
+  const gs_esp_command esp_command = {
+      .speed = 250,
+      .steer = -250,
+      .master_flags = GS_COMMAND_DIRECT_LR,
+      .sequence = 123u,
+  };
+  const gs_slave_command slave_command = {
+      .electrical_command = -250,
+      .sequence = 123u,
+  };
+  const gs_slave_feedback slave_feedback = {
+      .state = GS_CONTROLLER_ACTIVE,
+      .odometer = -12345,
+      .applied_electrical = -250,
+      .accepted_sequence = 123u,
+      .command_age_ms = 17u,
+      .hall = 4u,
+      .status_flags =
+          GS_MOTOR_FEEDBACK_BRIDGE_ENABLED | GS_MOTOR_FEEDBACK_PA4_RAW_HIGH,
+      .compare_offset = 100u,
+  };
+  const gs_master_feedback master_feedback = {
+      .protocol_version = GS_PROTOCOL_VERSION,
+      .master_state = GS_CONTROLLER_ACTIVE,
+      .slave_state = GS_CONTROLLER_ACTIVE,
+      .status_flags = GS_FEEDBACK_PEER_HEALTHY | GS_FEEDBACK_PA4_RAW_HIGH,
+      .accepted_esp_sequence = 123u,
+      .forwarded_slave_sequence = 123u,
+      .accepted_slave_sequence = 123u,
+      .left_applied = 250,
+      .right_applied = -250,
+      .left_odometer = 23456,
+      .right_odometer = -12345,
+      .master_command_age_ms = 12u,
+      .slave_feedback_age_ms = 18u,
+      .slave_command_age_ms = 14u,
+      .left_hall = 3u,
+      .right_hall = 4u,
+      .left_compare_offset = 100u,
+      .right_compare_offset = 100u,
+      .motor_status_flags = GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED |
+                            GS_MASTER_MOTOR_RIGHT_BRIDGE_ENABLED |
+                            GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH,
+  };
+  GS_EXPECT_TRUE(gs_encode_esp_command(esp_frame, &esp_command));
+  GS_EXPECT_TRUE(gs_encode_slave_command(slave_command_frame, &slave_command));
+  GS_EXPECT_TRUE(
+      gs_encode_slave_feedback(slave_feedback_frame, &slave_feedback));
+  GS_EXPECT_TRUE(
+      gs_encode_master_feedback(master_feedback_frame, &master_feedback));
+
+  for (size_t byte = 0u; byte < sizeof(esp_frame); ++byte) {
+    for (uint8_t bit = 0u; bit < 8u; ++bit) {
+      esp_frame[byte] ^= (uint8_t)(1u << bit);
+      gs_esp_command decoded = {0};
+      GS_EXPECT_FALSE(gs_decode_esp_command(&decoded, esp_frame));
+      esp_frame[byte] ^= (uint8_t)(1u << bit);
+    }
+  }
+  for (size_t byte = 0u; byte < sizeof(slave_command_frame); ++byte) {
+    for (uint8_t bit = 0u; bit < 8u; ++bit) {
+      slave_command_frame[byte] ^= (uint8_t)(1u << bit);
+      gs_slave_command decoded = {0};
+      GS_EXPECT_FALSE(gs_decode_slave_command(&decoded, slave_command_frame));
+      slave_command_frame[byte] ^= (uint8_t)(1u << bit);
+    }
+  }
+  for (size_t byte = 0u; byte < sizeof(slave_feedback_frame); ++byte) {
+    for (uint8_t bit = 0u; bit < 8u; ++bit) {
+      slave_feedback_frame[byte] ^= (uint8_t)(1u << bit);
+      gs_slave_feedback decoded = {0};
+      GS_EXPECT_FALSE(gs_decode_slave_feedback(&decoded, slave_feedback_frame));
+      slave_feedback_frame[byte] ^= (uint8_t)(1u << bit);
+    }
+  }
+  for (size_t byte = 0u; byte < sizeof(master_feedback_frame); ++byte) {
+    for (uint8_t bit = 0u; bit < 8u; ++bit) {
+      master_feedback_frame[byte] ^= (uint8_t)(1u << bit);
+      gs_master_feedback decoded = {0};
+      GS_EXPECT_FALSE(
+          gs_decode_master_feedback(&decoded, master_feedback_frame));
+      master_feedback_frame[byte] ^= (uint8_t)(1u << bit);
+    }
+  }
 }
 
 static gs_parse_result feed_bytes(gs_frame_parser *parser, const uint8_t *bytes,
@@ -105,7 +415,7 @@ static void test_parser_noise_repetition_crc_and_timeout(void) {
   const uint8_t marker[] = {GS_COMMAND_MARKER};
   const uint8_t noise[] = {0, 1, 2, 3, 4, 5, 6, 7, 8, 9, 10};
   gs_frame_parser parser;
-  gs_esp_command command = {12, -34, 0, 0};
+  gs_esp_command command = {.speed = 12, .steer = -34, .sequence = 7u};
   uint8_t frame[GS_ESP_COMMAND_SIZE];
   uint8_t out[GS_MAX_FRAME_SIZE] = {0};
 
@@ -128,33 +438,13 @@ static void test_parser_noise_repetition_crc_and_timeout(void) {
   GS_EXPECT_EQ(GS_PARSE_TIMEOUT, gs_frame_parser_poll(&parser, 203));
 }
 
-static void test_parser_resynchronizes_after_partial_marker(void) {
-  const uint8_t marker[] = {GS_COMMAND_MARKER};
-  gs_frame_parser parser;
-  gs_esp_command command = {99, 88, 0, 0};
-  uint8_t frame[GS_ESP_COMMAND_SIZE];
-  uint8_t stream[GS_ESP_COMMAND_SIZE + 3];
-  uint8_t out[GS_MAX_FRAME_SIZE] = {0};
-
-  GS_EXPECT_TRUE(gs_encode_esp_command(frame, &command));
-  stream[0] = GS_COMMAND_MARKER;
-  stream[1] = 0x44;
-  stream[2] = 0x55;
-  memcpy(&stream[3], frame, sizeof(frame));
-
-  gs_frame_parser_init(&parser, marker, 1, sizeof(frame));
-  GS_EXPECT_EQ(GS_PARSE_BAD_CRC,
-               feed_bytes(&parser, stream, GS_ESP_COMMAND_SIZE, 0, out));
-  GS_EXPECT_EQ(GS_PARSE_FRAME,
-               feed_bytes(&parser, &stream[GS_ESP_COMMAND_SIZE], 3, 20, out));
-  GS_EXPECT_BYTES(frame, out, sizeof(frame));
-}
-
 void gs_test_protocol(void) {
   test_crc_vectors();
   test_exact_sizes_and_endianness();
   test_all_frame_round_trips();
-  test_semantic_and_crc_rejection();
+  test_semantic_crc_and_version_rejection();
+  test_command_sequencer_waits_for_end_to_end_ack();
+  test_esp32_feedback_guards_reject_contradictory_telemetry();
+  test_every_single_bit_wire_error_is_rejected();
   test_parser_noise_repetition_crc_and_timeout();
-  test_parser_resynchronizes_after_partial_marker();
 }

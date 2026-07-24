@@ -20,6 +20,7 @@ constexpr uint32_t kAckTimeoutMs = 500;
 constexpr uint32_t kFeedbackTimeoutMs = 500;
 constexpr rmt_channel_t kCommandRmtChannel = RMT_CHANNEL_0;
 constexpr uint8_t kCommandRmtClockDivider = 80;
+constexpr uint16_t kCommandPulseUnitUs = 80;
 constexpr size_t kCommandRmtItems = GS_SWD_PULSE_FRAME_SYMBOLS + 1u;
 
 constexpr int kMpu6050Sda = 21;
@@ -30,6 +31,9 @@ static_assert(GS_SWD_PULSE_FRAME_BYTES == GS_ESP_COMMAND_SIZE,
               "pulse transport must carry one exact ESP command frame");
 static_assert(kCommandRmtItems <= 64u,
               "pulse command must fit in one ESP32 RMT memory block");
+static_assert(kCommandPulseUnitUs >= GS_SWD_PULSE_MIN_UNIT_US &&
+                  kCommandPulseUnitUs <= GS_SWD_PULSE_MAX_UNIT_US,
+              "pulse command unit must remain inside the adaptive decoder");
 
 HardwareSerial controller_uart(2);
 gs_console_state console_state;
@@ -269,9 +273,9 @@ bool init_command_transport() {
 bool transmit_command_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
   rmt_item32_t items[kCommandRmtItems] = {};
   items[0].level0 = 0u;
-  items[0].duration0 = GS_SWD_PULSE_SYNC_US;
+  items[0].duration0 = kCommandPulseUnitUs * GS_SWD_PULSE_SYNC_UNITS;
   items[0].level1 = 1u;
-  items[0].duration1 = GS_SWD_PULSE_SYNC_SEPARATOR_US;
+  items[0].duration1 = kCommandPulseUnitUs * 2u;
 
   size_t item_index = 1u;
   for (size_t byte = 0u; byte < GS_SWD_PULSE_FRAME_BYTES; ++byte) {
@@ -282,9 +286,10 @@ bool transmit_command_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
                                 (symbol_index * GS_SWD_PULSE_SYMBOL_BITS)) &
                                0x03u);
       items[item_index].level0 = 0u;
-      items[item_index].duration0 = gs_swd_pulse_symbol_width_us(symbol);
+      items[item_index].duration0 =
+          static_cast<uint16_t>((symbol + 1u) * kCommandPulseUnitUs);
       items[item_index].level1 = 1u;
-      items[item_index].duration1 = GS_SWD_PULSE_SEPARATOR_US;
+      items[item_index].duration1 = kCommandPulseUnitUs;
       ++item_index;
     }
   }

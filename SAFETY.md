@@ -54,3 +54,22 @@ PA4 is active-low digital with a weak pull-up. Its source is unknown. PB12 is
 input-only and TIMER0 hardware break is disabled. PB2 stays high because its
 exact circuit role is unresolved. **Historically physically verified** behavior
 with remaining items **Awaiting hardware validation**
+
+## Balance-layer output gate
+
+`esp32_balance_coordinator` and `esp32_balance_web` compile with
+`GS_BALANCE_DRY_RUN=1`. The estimator and controller calculate and report both
+wheel terms, while `ControlRuntime` replaces the motor command with disabled
+zero output. The configured IMU sign and upright mechanical offset define the
+same pitch frame for controller correction, the approximately-upright arming
+gate, and fall detection. Arming also requires healthy calibrated IMU data,
+approximately upright pitch, fresh fault-free motor feedback, exact
+acknowledged zero output, healthy command transport, and a healthy loop. MPU
+timeout, feedback timeout, invalid or contradictory Hall/controller feedback,
+controller fault, repeated loop overrun, fall angle, local disarm, or emergency
+stop prevents output.
+Non-finite controller input disables output immediately. Diagnostic DISARMED
+mode remains available without powered motor controllers, but it cannot arm.
+The ESP32 scheduler is covered by a two-second task watchdog.
+**Native-test validated** and **Build validated**; physical behavior **Awaiting
+hardware validation**

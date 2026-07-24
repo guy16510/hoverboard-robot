@@ -17,6 +17,8 @@ cd "$repo_dir"
   -Itests/native -DGS_POWER_PROFILE_ID=1 -DGS_BRIDGE_PROFILE_ID=2 \
   tests/native/test_main.c tests/native/test_protocol.c tests/native/test_control.c \
   tests/native/test_architecture.c tests/native/test_simulation.c \
+  tests/native/test_swd_timing.c tests/native/test_resync.c \
+  firmware/gd32/boards/gausstop_dphc_v33/gausstop_swd_pulse.c \
   firmware/gd32/common/protocol/gs_protocol.c \
   firmware/gd32/common/protocol/gs_frame_parser.c \
   firmware/gd32/common/control/gs_wheel_mix.c \

@@ -1,0 +1,10 @@
+{
+  "actions": [
+    { "atMs": 1000, "command": "upright-offset", "value": -16.3 },
+    { "atMs": 5000, "command": "mode", "value": 1 },
+    { "atMs": 6000, "command": "arm" },
+    { "atMs": 20000, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 20001, "command": "stop" },
+    { "atMs": 20200, "command": "disarm" }
+  ]
+}

@@ -935,7 +935,12 @@ void serviceTelemetry(uint64_t now_us) {
       "\"tx\":%lu,\"rx\":%lu,\"crc_errors\":%lu,"
       "\"ack_timeouts\":%lu,\"ack_latency_us\":[%lu,%lu],"
       "\"apply_latency_us\":[%lu,%lu],\"serial_response_drops\":%lu,"
-      "\"faults\":[%lu,%lu]}\n",
+      "\"faults\":[%lu,%lu],"
+      "\"feedback\":{\"protocol\":%u,\"states\":[%u,%u],"
+      "\"status_flags\":[%u,%u],\"sequences\":[%u,%u,%u],"
+      "\"applied\":[%d,%d],\"ages_ms\":[%u,%u,%u],"
+      "\"hall\":[%u,%u],\"compare\":[%u,%u],"
+      "\"remote\":[%u,%u,%u,%u]}}\n",
       GS_BALANCE_DRY_RUN != 0 ? 1u : 0u, operating_mode,
       stateName(state_machine.state()), imu.address(),
       diagnostics.calibration_complete ? 1u : 0u,
@@ -971,7 +976,28 @@ void serviceTelemetry(uint64_t now_us) {
       static_cast<unsigned long>(transport.maximum_apply_latency_us),
       static_cast<unsigned long>(telemetry_sink.droppedFrames()),
       static_cast<unsigned long>(feedback.master_faults),
-      static_cast<unsigned long>(feedback.slave_faults));
+      static_cast<unsigned long>(feedback.slave_faults),
+      static_cast<unsigned>(feedback.protocol_version),
+      static_cast<unsigned>(feedback.master_state),
+      static_cast<unsigned>(feedback.slave_state),
+      static_cast<unsigned>(feedback.status_flags),
+      static_cast<unsigned>(feedback.motor_status_flags),
+      static_cast<unsigned>(feedback.accepted_esp_sequence),
+      static_cast<unsigned>(feedback.forwarded_slave_sequence),
+      static_cast<unsigned>(feedback.accepted_slave_sequence),
+      static_cast<int>(feedback.left_applied),
+      static_cast<int>(feedback.right_applied),
+      static_cast<unsigned>(feedback.master_command_age_ms),
+      static_cast<unsigned>(feedback.slave_feedback_age_ms),
+      static_cast<unsigned>(feedback.slave_command_age_ms),
+      static_cast<unsigned>(feedback.left_hall),
+      static_cast<unsigned>(feedback.right_hall),
+      static_cast<unsigned>(feedback.left_compare_offset),
+      static_cast<unsigned>(feedback.right_compare_offset),
+      static_cast<unsigned>(feedback.remote_rx_bytes),
+      static_cast<unsigned>(feedback.remote_valid_frames),
+      static_cast<unsigned>(feedback.remote_invalid_frames),
+      static_cast<unsigned>(feedback.remote_framing_errors));
   message_length = written <= 0 ? 0u
                                 : std::min(static_cast<size_t>(written),
                                            sizeof(message) - 1u);

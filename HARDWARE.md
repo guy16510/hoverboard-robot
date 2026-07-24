@@ -38,6 +38,12 @@ override the identified GD32F130C8T6. **Historically physically verified**
 | ESP32 transport | USART0 PB6 TX / PB7 RX | **Upstream-defined** intended mapping; connector route **Awaiting hardware validation** |
 | Master/slave transport | USART1 PA2 TX / PA3 RX | **Legacy software-tested** architecture |
 
+The ESP32 balance coordinator reserves GPIO17 for MASTER command output,
+GPIO35 for MASTER feedback input, GPIO21 for MPU6050 SDA, and GPIO22 for
+MPU6050 SCL. Raspberry Pi control initially uses ESP32 USB serial and must not
+reuse those pins. **Build validated**; MPU wiring **Awaiting hardware
+validation**
+
 Upstream Target 1 layout 13 is a nearby reference, not an exact GAUSSTOP
 layout. Its Hall mapping is not silently substituted. **Statically validated**
 
@@ -80,4 +86,3 @@ adapter. TIMER0 primary output and every channel start disabled. **Statically va
 11. Long-duration thermal behavior is unproven. **Awaiting hardware validation**
 12. Battery undervoltage protection is not calibrated. **Awaiting hardware validation**
 13. Motor and chassis-forward directions require physical confirmation. **Awaiting hardware validation**
-

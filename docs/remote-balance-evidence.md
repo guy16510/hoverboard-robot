@@ -1,0 +1,127 @@
+# Remote balance evidence capture
+
+Use this workflow when the ESP32 and MPU6050 are attached to a different
+macOS or Linux computer. It produces one checksummed archive containing the
+raw serial stream, decoded binary frames, `BALANCE` JSON telemetry (including
+raw gyro, bias-corrected gyro, and learned bias), every outbound query, operator
+action notes, firmware identity, source identity, and host metadata.
+
+The capture tool does not flash firmware, arm, or send movement. At startup it
+sends `hello` and `disarm`; while recording it sends read-only capability and
+telemetry queries; at shutdown it sends `stop` and `disarm`.
+
+## Prepare the other computer
+
+Copy this exact working tree, including its uncommitted and untracked files, to
+the other computer. A fresh clone of `main` is insufficient because the balance
+layer is intentionally uncommitted. Preserve the directory as-is rather than
+copying only the firmware binary.
+
+Requirements:
+
+- macOS or Linux;
+- Node.js 18 or newer;
+- `git`, `tar`, `stty`, and either `sha256sum` or `shasum`;
+- the project's PlatformIO environment if the ESP32 image must be rebuilt or
+  flashed.
+
+Run the local tests on that computer before using hardware:
+
+```sh
+./tools/test-all.sh
+```
+
+Build the default dry-run image:
+
+```sh
+PLATFORMIO_CORE_DIR="$PWD/.platformio" \
+  PLATFORMIO_SETTING_ENABLE_TELEMETRY=no \
+  .venv/bin/pio run -e esp32_balance_coordinator
+```
+
+The firmware passed to the capture command must be the exact binary flashed to
+the ESP32:
+
+```text
+.pio/build/esp32_balance_coordinator/firmware.bin
+```
+
+If flashing is required for Stage 3, flash only
+`esp32_balance_coordinator` to the ESP32. Do not flash MASTER or SLAVE. Confirm
+the build reports `GS_BALANCE_DRY_RUN=1`; keep motor power removed throughout.
+After upload, identify the serial device again rather than assuming its name
+stayed the same.
+
+## Stage 3 capture
+
+Follow the wiring and power restrictions in
+[`balance-wiring.md`](balance-wiring.md). With motor power removed and the
+chassis secured, run:
+
+```sh
+./tools/capture-balance-evidence.sh \
+  --port /dev/serial/by-id/REPLACE_WITH_EXACT_DEVICE \
+  --firmware .pio/build/esp32_balance_coordinator/firmware.bin \
+  --duration 180 \
+  --stage mpu-diagnostic \
+  --label stage3-mpu
+```
+
+On macOS, use the exact `/dev/cu.*` device instead. Do not use a guessed port.
+
+While the capture runs, type the following notes into its terminal at the
+corresponding physical moments. Notes are written only to the evidence file and
+are never transmitted to the robot.
+
+```text
+STATIONARY calibration-start
+STATIONARY calibrated
+TILT_FORWARD start
+UPRIGHT returned
+TILT_BACKWARD start
+UPRIGHT returned
+STATIONARY final
+```
+
+Wait for `calibrated` before the first tilt. Move slowly, return to upright
+between directions, and leave the chassis stationary at the end. Press
+Control-C only if an immediate stop is needed; the recorder still sends
+`stop` and `disarm` and packages the partial evidence.
+
+Do not proceed to motor-powered stages from this document. Stage 4–6 commands
+must be selected only after the Stage 3 archive has been reviewed.
+
+## Evidence produced
+
+The command creates a directory plus `<directory>.tar.gz` and
+`<directory>.tar.gz.sha256`.
+
+The directory contains:
+
+| File | Evidence |
+|---|---|
+| `session-start.json` | UTC start time, stage, port, host, branch, commit, working-tree status, firmware SHA-256 and byte size, and enforced command restrictions |
+| `raw-serial.bin` | exact bytes received from the ESP32 |
+| `events.ndjson` | timestamped decoded frames, debug telemetry, device text, host queries, errors, and operator notes |
+| `session-end.json` | stop reason, elapsed time, raw byte count, and event counts |
+| `SHA256SUMS` | integrity hashes for every evidence file |
+
+Even a serial-open failure is packaged with its error metadata. The wrapper
+returns a nonzero exit status in that case, so do not mistake an error archive
+for a completed physical run.
+
+Verify the returned archive before transferring it:
+
+```sh
+sha256sum -c balance-evidence-mpu-diagnostic-*.tar.gz.sha256
+```
+
+On macOS:
+
+```sh
+shasum -a 256 -c balance-evidence-mpu-diagnostic-*.tar.gz.sha256
+```
+
+Return both the `.tar.gz` archive and its `.sha256` file. Those two files are
+enough to reproduce the telemetry timeline and determine what physical evidence
+is still missing without attaching the devices to this computer.

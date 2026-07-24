@@ -45,6 +45,25 @@ units per 50 ms heartbeat.
 Use `./tools/test-all.sh` for host tests and `./tools/build-all.sh` for all
 firmware builds. Neither command uploads firmware or enumerates devices.
 
+The next ESP32 balance layer is a separate, dry-run-first environment:
+
+```sh
+.venv/bin/pio run -e esp32_balance_coordinator
+```
+
+It scans an MPU6050 on GPIO21/22, runs a 200 Hz estimator/controller schedule,
+accepts the versioned Raspberry Pi protocol over USB serial, and preserves the
+GPIO17/35 motor path while always transmitting disabled zero output by default.
+The optional `esp32_balance_web` environment compiles a removable static
+page/WebSocket adapter; the default environment explicitly excludes Wi-Fi.
+
+See [the Pi serial protocol](docs/pi-serial-protocol.md),
+[balance wiring](docs/balance-wiring.md),
+[the tuning guide](docs/balance-tuning.md), and
+[local validation notes](docs/local-balance-validation.md). When the hardware
+is attached to another computer, use the
+[remote evidence capture workflow](docs/remote-balance-evidence.md).
+
 See [UPSTREAM.md](UPSTREAM.md), [LEGACY.md](LEGACY.md), [HARDWARE.md](HARDWARE.md),
 [PROTOCOL.md](PROTOCOL.md), [SAFETY.md](SAFETY.md), and
 [HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md) before using any artifact.
@@ -54,4 +73,3 @@ See [UPSTREAM.md](UPSTREAM.md), [LEGACY.md](LEGACY.md), [HARDWARE.md](HARDWARE.m
 GPL-3.0-only. See [LICENSE](LICENSE). Modified upstream concepts and retained
 legacy behavior are identified in `UPSTREAM.md`, `LEGACY.md`, and
 `SOURCE_CLASSIFICATION.csv`.
-

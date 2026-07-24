@@ -2,6 +2,7 @@
 
 import fs from "node:fs";
 import { spawnSync } from "node:child_process";
+import { Readable } from "node:stream";
 
 import {
   MessageType,
@@ -33,6 +34,63 @@ export function configureSerialPort(port, baud = 115200) {
   }
 }
 
+export function openConfiguredSerialPort(port, {
+  baud = 115200,
+  configure = true,
+  open = value => fs.openSync(
+    value, fs.constants.O_RDWR | fs.constants.O_NOCTTY |
+      fs.constants.O_NONBLOCK),
+  configurePort = configureSerialPort,
+  close = fs.closeSync,
+} = {}) {
+  const descriptor = open(port);
+  try {
+    if (configure) configurePort(port, baud);
+  } catch (error) {
+    close(descriptor);
+    throw error;
+  }
+  return descriptor;
+}
+
+export class PollingSerialStream extends Readable {
+  #buffer = Buffer.alloc(4096);
+  #descriptor;
+  #read;
+  #timer;
+
+  constructor(descriptor, {
+    read = fs.readSync,
+    intervalMs = 5,
+  } = {}) {
+    super();
+    this.#descriptor = descriptor;
+    this.#read = read;
+    this.#timer = setInterval(() => this.#poll(), intervalMs);
+  }
+
+  _read() {}
+
+  _destroy(error, callback) {
+    clearInterval(this.#timer);
+    callback(error);
+  }
+
+  #poll() {
+    try {
+      const length = this.#read(
+        this.#descriptor, this.#buffer, 0, this.#buffer.length, null);
+      if (length > 0) {
+        this.push(Buffer.from(this.#buffer.subarray(0, length)));
+      }
+    } catch (error) {
+      if (error.code !== "EAGAIN" && error.code !== "EWOULDBLOCK") {
+        this.destroy(error);
+      }
+    }
+  }
+}
+
 export class SerialClient {
   #descriptor;
   #leaseId;
@@ -44,8 +102,7 @@ export class SerialClient {
     hello = true,
     leaseId = Date.now(),
   } = {}) {
-    if (configure) configureSerialPort(port, baud);
-    this.#descriptor = fs.openSync(port, fs.constants.O_RDWR | fs.constants.O_NOCTTY);
+    this.#descriptor = openConfiguredSerialPort(port, { baud, configure });
     this.#leaseId = leaseId >>> 0;
     this.#sequence = new Sequence();
     if (hello) this.send(MessageType.HELLO);
@@ -90,10 +147,7 @@ export class SerialClient {
   }
 
   readStream() {
-    return fs.createReadStream(null, {
-      fd: this.#descriptor,
-      autoClose: false,
-    });
+    return new PollingSerialStream(this.#descriptor);
   }
 
   close() {

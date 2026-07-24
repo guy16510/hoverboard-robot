@@ -12,7 +12,11 @@ import {
   encodeFrame,
   encodeMovement,
 } from "../protocol.mjs";
-import { Sequence } from "../client.mjs";
+import {
+  PollingSerialStream,
+  Sequence,
+  openConfiguredSerialPort,
+} from "../client.mjs";
 import { MixedTelemetryDecoder } from "../capture_decoder.mjs";
 import { CaptureLifecycle } from "../capture_lifecycle.mjs";
 import { normalizeCaptureEvent } from "../evidence.mjs";
@@ -124,6 +128,44 @@ test("sequence generation rolls over from 65535 to zero", () => {
   const sequence = new Sequence(0xffff);
   assert.equal(sequence.next(), 0xffff);
   assert.equal(sequence.next(), 0);
+});
+
+test("serial descriptor opens before macOS baud configuration", () => {
+  const calls = [];
+  const descriptor = openConfiguredSerialPort("/dev/test", {
+    baud: 115200,
+    open: () => {
+      calls.push("open");
+      return 42;
+    },
+    configurePort: () => calls.push("configure"),
+  });
+  assert.equal(descriptor, 42);
+  assert.deepEqual(calls, ["open", "configure"]);
+});
+
+test("nonblocking serial stream retries EAGAIN and closes cleanly", async () => {
+  let calls = 0;
+  const stream = new PollingSerialStream(42, {
+    intervalMs: 1,
+    read: (_descriptor, buffer) => {
+      calls += 1;
+      if (calls === 1) {
+        const error = new Error("would block");
+        error.code = "EAGAIN";
+        throw error;
+      }
+      Buffer.from("ok").copy(buffer);
+      return 2;
+    },
+  });
+  const data = await new Promise((resolve, reject) => {
+    stream.once("data", resolve);
+    stream.once("error", reject);
+  });
+  assert.equal(data.toString(), "ok");
+  stream.destroy();
+  await new Promise(resolve => stream.once("close", resolve));
 });
 
 test("capabilities and status payloads decode into named fields", () => {

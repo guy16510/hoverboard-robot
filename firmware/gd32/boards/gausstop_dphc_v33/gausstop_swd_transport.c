@@ -78,7 +78,7 @@ static void configure_tx_timer(void) {
   timer_interrupt_flag_clear(TIMER13, TIMER_INT_FLAG_UP);
   timer_interrupt_enable(TIMER13, TIMER_INT_UP);
   timer_disable(TIMER13);
-  nvic_irq_enable(TIMER13_IRQn, 2u, 0u);
+  nvic_irq_enable(TIMER13_IRQn, 1u, 0u);
 }
 
 static bool push_rx_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
@@ -204,7 +204,10 @@ void TIMER13_IRQHandler(void) {
 }
 
 static void init_remote(bool transmit_enabled) {
+  uint8_t discarded_link_byte = 0u;
   while (gs_board_millis() < GS_SWD_TAKEOVER_DELAY_MS) {
+    while (__real_gs_board_uart_read(GS_UART_LINK, &discarded_link_byte)) {
+    }
   }
   rx_head = 0u;
   rx_tail = 0u;

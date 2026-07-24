@@ -10,11 +10,18 @@
 #include "gs_safety.h"
 #include "gs_wheel_mix.h"
 
+enum {
+  GS_REMOTE_FEEDBACK_DELAY_MS = 25,
+  GS_REMOTE_FEEDBACK_RETRY_MS = 10,
+};
+
 static gs_master_coordinator master;
 static gs_motor_controller motor;
 static gs_safety_supervisor safety;
 static gs_frame_parser esp_parser;
 static gs_frame_parser slave_parser;
+static bool feedback_pending;
+static uint32_t feedback_due_ms;
 
 static void calibrate_protection(void) {
   for (uint8_t sample = 0; sample < GS_ADC_CALIBRATION_SAMPLES; ++sample) {
@@ -50,6 +57,8 @@ static void service_esp_rx(void) {
     if (result == GS_PARSE_FRAME &&
         gs_master_accept_esp_frame(&master, frame, now_ms)) {
       gs_safety_note_command(&safety, now_ms);
+      feedback_pending = true;
+      feedback_due_ms = now_ms + GS_REMOTE_FEEDBACK_DELAY_MS;
     }
   }
   (void)gs_frame_parser_poll(&esp_parser, gs_board_millis());
@@ -97,7 +106,7 @@ static void service_transport_health(void) {
   remote_tx_overflows = remote.tx_overflows;
   link_rx_overflows = link.rx_overflows;
   link_tx_overflows = link.tx_overflows;
-  if (overflow_sources != 0u) {
+  if (overflow_sources != 0u && master.state == GS_CONTROLLER_ACTIVE) {
     gs_master_note_transport_overflow(&master, overflow_sources);
     force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
   }
@@ -214,11 +223,10 @@ int main(void) {
   gs_frame_parser_init(&esp_parser, command_marker, 1, GS_ESP_COMMAND_SIZE);
   gs_frame_parser_init(&slave_parser, slave_feedback_marker, 1,
                        GS_SLAVE_FEEDBACK_SIZE);
-  gs_board_uart_init(GS_UART_REMOTE, true);
   gs_board_uart_init(GS_UART_LINK, true);
+  gs_board_uart_init(GS_UART_REMOTE, true);
   gs_board_watchdog_start();
   uint32_t next_link_ms = 0;
-  uint32_t next_feedback_ms = 0;
   for (;;) {
     service_esp_rx();
     service_slave_rx();
@@ -234,12 +242,14 @@ int main(void) {
         force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
       }
     }
-    if ((int32_t)(now - next_feedback_ms) >= 0) {
+    if (feedback_pending && (int32_t)(now - feedback_due_ms) >= 0) {
       uint8_t frame[GS_MASTER_FEEDBACK_SIZE];
-      next_feedback_ms = now + 50u;
-      if (gs_master_make_feedback(&master, frame, now) &&
-          !gs_board_uart_write(GS_UART_REMOTE, frame, sizeof(frame))) {
-        force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
+      if (!gs_master_make_feedback(&master, frame, now)) {
+        feedback_pending = false;
+      } else if (gs_board_uart_write(GS_UART_REMOTE, frame, sizeof(frame))) {
+        feedback_pending = false;
+      } else {
+        feedback_due_ms = now + GS_REMOTE_FEEDBACK_RETRY_MS;
       }
     }
     gs_board_watchdog_reload();

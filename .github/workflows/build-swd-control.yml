@@ -5,6 +5,7 @@ on:
     branches:
       - codex/swd-esp32-dual-motor-control
       - codex/swd-dual-motor-recovery
+      - codex/swd-transport-starvation-fix
   pull_request:
     branches:
       - main

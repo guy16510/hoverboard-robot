@@ -745,9 +745,11 @@ float wheelVelocity(uint64_t now_us) {
 
 void applyRequest(const ControlRequest &request, const SafetySnapshot &safety) {
   if (request.set_operating_mode) {
+    const bool changed = operating_mode != request.operating_mode;
     operating_mode = request.operating_mode;
-    if (operating_mode == 0u) {
+    if (changed || operating_mode == 0u) {
       state_machine.disarm();
+      controller.reset(0.0f, 0.0f);
     }
   }
   if (request.emergency_stop || request.disarm) {
@@ -761,9 +763,12 @@ void applyRequest(const ControlRequest &request, const SafetySnapshot &safety) {
   if (request.arm && operating_mode != 0u) {
     state_machine.arm(safety);
   }
-  state_machine.setDriving(
-      operating_mode == 2u &&
-      (request.linear_velocity != 0.0f || request.yaw_rate != 0.0f));
+  const bool driving =
+      (operating_mode == 2u &&
+       (request.linear_velocity != 0.0f || request.yaw_rate != 0.0f)) ||
+      (operating_mode == 3u && request.direct_motor &&
+       (request.direct_left != 0.0f || request.direct_right != 0.0f));
+  state_machine.setDriving(driving);
 }
 
 void runControlLoop(uint64_t scheduled_us) {
@@ -819,7 +824,12 @@ void runControlLoop(uint64_t scheduled_us) {
   input.desired_yaw_rate = request.yaw_rate;
   input.dt_seconds = pitch.dt_seconds > 0.0f ? pitch.dt_seconds : 0.005f;
   const BalanceOutput output =
-      control_runtime.step(input, state_machine.outputEnabled());
+      operating_mode == 3u
+          ? control_runtime.stepDirect(
+                request.direct_motor ? request.direct_left : 0.0f,
+                request.direct_motor ? request.direct_right : 0.0f,
+                state_machine.outputEnabled())
+          : control_runtime.step(input, state_machine.outputEnabled());
   controller_healthy = output.valid;
   telemetry_sink.publish(pitch, output);
 

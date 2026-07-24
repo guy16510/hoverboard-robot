@@ -5,6 +5,7 @@ import { spawnSync } from "node:child_process";
 
 import {
   MessageType,
+  encodeDirectMotor,
   encodeFrame,
   encodeMovement,
 } from "./protocol.mjs";
@@ -51,6 +52,10 @@ export class SerialClient {
   }
 
   send(type, payload = Buffer.alloc(0), flags = 0) {
+    return this.sendDetailed(type, payload, flags).sequence;
+  }
+
+  sendDetailed(type, payload = Buffer.alloc(0), flags = 0) {
     const frame = encodeFrame({
       type,
       flags,
@@ -58,7 +63,10 @@ export class SerialClient {
       payload,
     });
     fs.writeSync(this.#descriptor, frame);
-    return frame.readUInt16LE(5);
+    return {
+      sequence: frame.readUInt16LE(5),
+      frame,
+    };
   }
 
   movement(linear, yaw, { lifetimeMs = 500, leaseId = this.#leaseId } = {}) {
@@ -69,6 +77,12 @@ export class SerialClient {
       lifetimeMs,
     });
     this.send(MessageType.SET_VELOCITY_AND_YAW, payload);
+  }
+
+  directMotor(left, right,
+              { lifetimeMs = 500, leaseId = this.#leaseId } = {}) {
+    const payload = encodeDirectMotor({ left, right, leaseId, lifetimeMs });
+    return this.send(MessageType.SET_DIRECT_MOTOR, payload);
   }
 
   mode(value) {

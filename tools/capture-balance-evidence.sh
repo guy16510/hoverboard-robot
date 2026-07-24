@@ -10,15 +10,16 @@ duration="120"
 poll_ms="500"
 stage="mpu-diagnostic"
 label=""
+command_plan=""
 query="1"
 
 usage() {
-  echo "usage: tools/capture-balance-evidence.sh --port DEVICE --firmware FILE [--output DIRECTORY] [--duration SECONDS] [--poll-ms MILLISECONDS] [--stage NAME] [--label TEXT] [--no-query]" >&2
+  echo "usage: tools/capture-balance-evidence.sh --port DEVICE --firmware FILE [--output DIRECTORY] [--duration SECONDS] [--poll-ms MILLISECONDS] [--stage NAME] [--label TEXT] [--command-plan FILE] [--no-query]" >&2
 }
 
 while (($# > 0)); do
   case "$1" in
-  --port | --firmware | --output | --duration | --poll-ms | --stage | --label)
+  --port | --firmware | --output | --duration | --poll-ms | --stage | --label | --command-plan)
     if (($# < 2)); then
       usage
       exit 2
@@ -34,6 +35,7 @@ while (($# > 0)); do
     --poll-ms) poll_ms="$value" ;;
     --stage) stage="$value" ;;
     --label) label="$value" ;;
+    --command-plan) command_plan="$value" ;;
     esac
     ;;
   --no-query)
@@ -91,6 +93,9 @@ capture_arguments=(
 )
 if [[ "$query" == "0" ]]; then
   capture_arguments+=(--no-query)
+fi
+if [[ -n "$command_plan" ]]; then
+  capture_arguments+=(--command-plan "$command_plan")
 fi
 
 capture_status="0"

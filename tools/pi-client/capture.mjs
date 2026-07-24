@@ -13,7 +13,8 @@ import { fileURLToPath } from "node:url";
 import { SerialClient } from "./client.mjs";
 import { MixedTelemetryDecoder } from "./capture_decoder.mjs";
 import { normalizeCaptureEvent } from "./evidence.mjs";
-import { MessageType } from "./protocol.mjs";
+import { MessageType, encodeDirectMotor } from "./protocol.mjs";
+import { loadStagePlan } from "./stage_plan.mjs";
 
 const repositoryDirectory = fileURLToPath(new URL("../../", import.meta.url));
 const stages = new Set([
@@ -27,7 +28,8 @@ function usage(output = process.stderr) {
   output.write(
     "usage: capture.mjs --port DEVICE --output DIRECTORY " +
     "[--duration SECONDS] [--poll-ms MILLISECONDS] [--baud RATE] " +
-    "[--stage NAME] [--label TEXT] [--firmware FILE] [--no-query]\n",
+    "[--stage NAME] [--label TEXT] [--firmware FILE] " +
+    "[--command-plan FILE] [--no-query]\n",
   );
 }
 
@@ -68,6 +70,9 @@ function parseArguments(arguments_) {
     if (argument === "--port") options.port = value;
     else if (argument === "--output") options.output = path.resolve(value);
     else if (argument === "--firmware") options.firmware = path.resolve(value);
+    else if (argument === "--command-plan") {
+      options.commandPlanFile = path.resolve(value);
+    }
     else if (argument === "--label") options.label = value;
     else if (argument === "--stage") options.stage = value;
     else if (argument === "--duration") {
@@ -87,6 +92,12 @@ function parseArguments(arguments_) {
   }
   if (options.pollMilliseconds < 100) {
     throw new Error("poll-ms must be at least 100");
+  }
+  if (options.commandPlanFile) {
+    options.commandPlan = loadStagePlan(options.commandPlanFile, {
+      stage: options.stage,
+      durationSeconds: options.durationSeconds,
+    });
   }
   return options;
 }
@@ -142,10 +153,13 @@ function sessionMetadata(options, startedUtc) {
         .filter(Boolean) ?? null,
     },
     firmware: firmwareMetadata(options.firmware),
+    commandPlan: options.commandPlan ?? null,
     safety: {
       flashesFirmware: false,
-      sendsArm: false,
-      sendsMovement: false,
+      sendsArm: options.commandPlan?.sendsArm ?? false,
+      sendsMovement: options.commandPlan?.sendsMovement ?? false,
+      maximumAbsoluteCommand:
+        options.commandPlan?.maximumAbsoluteCommand ?? 0,
       startupCommands: ["hello", "disarm"],
       shutdownCommands: ["stop", "disarm"],
     },
@@ -199,6 +213,7 @@ async function capture(options) {
   let stream;
   let queryTimer;
   let durationTimer;
+  const actionTimers = [];
   let notes;
 
   const record = body => {
@@ -211,15 +226,64 @@ async function capture(options) {
     fs.writeSync(eventsDescriptor, `${JSON.stringify(event)}\n`);
   };
 
-  const send = (type, command) => {
-    const sequence = client.send(type);
+  const send = (type, command, payload = Buffer.alloc(0), fields = {}) => {
+    const { sequence, frame } = client.sendDetailed(type, payload);
     record({
       kind: "host-command",
       direction: "host-to-device",
       command,
       type,
       sequence,
+      payloadHex: payload.toString("hex"),
+      rawFrameHex: frame.toString("hex"),
+      ...fields,
     });
+  };
+
+  const executeAction = action => {
+    try {
+      switch (action.command) {
+        case "mode":
+          send(MessageType.SET_OPERATING_MODE, "set-operating-mode",
+            Buffer.from([action.value]), { mode: action.value });
+          break;
+        case "arm":
+          send(MessageType.ARM, "arm");
+          break;
+        case "direct": {
+          const payload = encodeDirectMotor({
+            left: action.left,
+            right: action.right,
+            leaseId: 0x47535450,
+            lifetimeMs: action.lifetimeMs,
+          });
+          send(MessageType.SET_DIRECT_MOTOR, "direct-motor", payload, {
+            left: action.left,
+            right: action.right,
+            lifetimeMs: action.lifetimeMs,
+          });
+          break;
+        }
+        case "stop":
+          send(MessageType.STOP, "stop");
+          break;
+        case "disarm":
+          send(MessageType.DISARM, "disarm");
+          break;
+        case "clear-fault":
+          send(MessageType.CLEAR_FAULT, "clear-fault");
+          break;
+        case "emergency-stop":
+          send(MessageType.EMERGENCY_STOP, "emergency-stop");
+          break;
+        default:
+          throw new Error(`unsupported planned command: ${action.command}`);
+      }
+    } catch (error) {
+      record({ kind: "capture-error", operation: "planned-command",
+        command: action.command, message: error.message });
+      finish("planned-command-error", 1);
+    }
   };
 
   const poll = () => {
@@ -271,6 +335,7 @@ async function capture(options) {
     finishing = true;
     clearInterval(queryTimer);
     clearTimeout(durationTimer);
+    for (const timer of actionTimers) clearTimeout(timer);
     try {
       send(MessageType.STOP, "stop");
       send(MessageType.DISARM, "disarm");
@@ -322,6 +387,9 @@ async function capture(options) {
   if (options.query) {
     poll();
     queryTimer = setInterval(poll, options.pollMilliseconds);
+  }
+  for (const action of options.commandPlan?.actions ?? []) {
+    actionTimers.push(setTimeout(() => executeAction(action), action.atMs));
   }
 
   if (process.stdin.isTTY) {

@@ -50,6 +50,7 @@ and yaw. The reference client sends hello when it opens the port.
 | `0x21` | set yaw rate | Pi -> ESP32 |
 | `0x22` | set velocity and yaw | Pi -> ESP32 |
 | `0x23` | heartbeat / lease renewal | Pi -> ESP32 |
+| `0x24` | bounded direct motor transport test | Pi -> ESP32 |
 | `0x30` | status | both |
 | `0x31` | IMU telemetry | both |
 | `0x32` | motor telemetry | both |
@@ -65,8 +66,9 @@ stop, clear fault, status, and telemetry requests. Query responses use the
 request sequence number. Hello and capabilities requests both produce a
 capabilities response.
 
-Operating mode is one byte: `0` diagnostic, `1` balance, and `2` drive.
-Unknown values are rejected.
+Operating mode is one byte: `0` diagnostic, `1` balance, `2` drive, and `3`
+bounded direct-motor transport test. Unknown values are rejected. Changing
+operating mode disarms and requires an explicit rearm.
 
 ## Movement and lease payload
 
@@ -91,6 +93,14 @@ Only one source may own movement. Priority is:
 2. local disarm;
 3. Raspberry Pi serial;
 4. temporary web controller.
+
+The direct-motor transport-test payload has the same ten-byte lease layout,
+with signed `left` and `right` command units in the first two fields. Both
+values are independently restricted to `-50..50`, which reaches only the
+existing profile's minimum non-deadband command. It is honored only in mode 3,
+still requires every normal arming and feedback gate, expires to zero, and is
+clamped again immediately before the motor sink. It is not a general-purpose
+drive command.
 
 ## Responses and telemetry
 
@@ -179,6 +189,13 @@ For evidence collection on another computer, use
 capture workflow preserves the raw mixed stream, decoded binary responses,
 debug JSON, host queries, operator notes, source metadata, and firmware hash.
 See [`remote-balance-evidence.md`](remote-balance-evidence.md).
+
+Powered Stage 5 and Stage 6 captures use `--command-plan FILE`. Plans are
+validated before the serial port opens, are restricted to their matching
+stage, enforce the direct-command ceiling, and must end in direct zero, stop,
+and disarm. Every transmitted frame, including its raw bytes and decoded
+command values, is recorded in `events.ndjson`. Reviewed templates are in
+`tools/pi-client/plans`; they must not be run before the physical checkpoint.
 
 Protocol tests run with:
 

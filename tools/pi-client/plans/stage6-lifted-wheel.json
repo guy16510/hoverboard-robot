@@ -1,0 +1,9 @@
+{
+  "actions": [
+    { "atMs": 1000, "command": "mode", "value": 1 },
+    { "atMs": 3000, "command": "arm" },
+    { "atMs": 30000, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 30001, "command": "stop" },
+    { "atMs": 30002, "command": "disarm" }
+  ]
+}

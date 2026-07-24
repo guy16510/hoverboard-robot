@@ -16,6 +16,8 @@ struct ControlRequest {
   CommandSource source = CommandSource::kNone;
   float linear_velocity = 0.0f;
   float yaw_rate = 0.0f;
+  float direct_left = 0.0f;
+  float direct_right = 0.0f;
   uint64_t lease_expires_us = 0u;
   uint32_t lease_id = 0u;
   uint16_t sequence = 0u;
@@ -23,6 +25,7 @@ struct ControlRequest {
   bool disarm = false;
   bool emergency_stop = false;
   bool clear_fault = false;
+  bool direct_motor = false;
   bool set_operating_mode = false;
   uint8_t operating_mode = 0u;
 };

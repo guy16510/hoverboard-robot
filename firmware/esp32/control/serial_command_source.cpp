@@ -120,6 +120,43 @@ bool SerialCommandSource::acceptFrame(const SerialFrame &frame,
        frame.payload_length != 0u)) {
     return acceptMovement(frame, now_us);
   }
+  if (frame.type == SerialMessageType::kSetDirectMotor) {
+    DirectMotorCommand direct{};
+    if (!DirectMotorCommandCodec::decode(
+            frame.payload.data(), frame.payload_length, direct)) {
+      last_error_code_ = static_cast<uint8_t>(SerialErrorCode::kMalformed);
+      return false;
+    }
+    if (direct.left < -kMaximumTransportTestCommand ||
+        direct.left > kMaximumTransportTestCommand ||
+        direct.right < -kMaximumTransportTestCommand ||
+        direct.right > kMaximumTransportTestCommand) {
+      last_error_code_ =
+          static_cast<uint8_t>(SerialErrorCode::kInvalidConfiguration);
+      return false;
+    }
+    if (active_lease_id_ != 0u && now_us <= active_lease_expires_us_ &&
+        direct.lease_id != active_lease_id_) {
+      last_error_code_ =
+          static_cast<uint8_t>(SerialErrorCode::kLeaseConflict);
+      return false;
+    }
+    latest_ = {};
+    latest_.source = CommandSource::kSerial;
+    latest_.direct_motor = true;
+    latest_.direct_left = static_cast<float>(direct.left);
+    latest_.direct_right = static_cast<float>(direct.right);
+    latest_.lease_expires_us =
+        now_us + static_cast<uint64_t>(direct.lifetime_ms) * 1000u;
+    latest_.lease_id = direct.lease_id;
+    latest_.sequence = frame.sequence;
+    latest_.set_operating_mode = operating_mode_set_;
+    latest_.operating_mode = operating_mode_;
+    has_request_ = true;
+    active_lease_id_ = direct.lease_id;
+    active_lease_expires_us_ = latest_.lease_expires_us;
+    return true;
+  }
   switch (frame.type) {
   case SerialMessageType::kCapabilities:
   case SerialMessageType::kStatus:
@@ -239,7 +276,7 @@ bool SerialCommandSource::acceptAction(const SerialFrame &frame,
     latest_.clear_fault = true;
     break;
   case SerialMessageType::kSetOperatingMode:
-    if (frame.payload_length != 1u || frame.payload[0] > 2u) {
+    if (frame.payload_length != 1u || frame.payload[0] > 3u) {
       last_error_code_ =
           static_cast<uint8_t>(SerialErrorCode::kInvalidConfiguration);
       return false;

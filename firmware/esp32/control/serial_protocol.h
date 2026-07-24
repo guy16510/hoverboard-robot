@@ -5,6 +5,8 @@
 #include <cstddef>
 #include <cstdint>
 
+#include "transport_test_limits.h"
+
 namespace gs::balance {
 
 constexpr uint8_t kSerialProtocolVersion = 1u;
@@ -24,6 +26,7 @@ enum class SerialMessageType : uint8_t {
   kSetYawRate = 0x21,
   kSetVelocityAndYaw = 0x22,
   kHeartbeat = 0x23,
+  kSetDirectMotor = 0x24,
   kStatus = 0x30,
   kImuTelemetry = 0x31,
   kMotorTelemetry = 0x32,
@@ -112,6 +115,21 @@ public:
                        size_t capacity);
   static bool decode(const uint8_t *payload, size_t length,
                      MovementCommand &command);
+};
+
+struct DirectMotorCommand {
+  int16_t left = 0;
+  int16_t right = 0;
+  uint32_t lease_id = 0u;
+  uint16_t lifetime_ms = 0u;
+};
+
+class DirectMotorCommandCodec {
+public:
+  static size_t encode(const DirectMotorCommand &command, uint8_t *payload,
+                       size_t capacity);
+  static bool decode(const uint8_t *payload, size_t length,
+                     DirectMotorCommand &command);
 };
 
 } // namespace gs::balance

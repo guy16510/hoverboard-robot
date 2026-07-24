@@ -12,7 +12,7 @@ namespace gs::balance {
 struct ProtocolCapabilities {
   bool dry_run = true;
   bool web_enabled = false;
-  uint8_t supported_modes = 0x07u;
+  uint8_t supported_modes = 0x0fu;
   uint16_t control_rate_hz = 200u;
   uint16_t motor_rate_hz = 10u;
   uint16_t configuration_keys = 0u;

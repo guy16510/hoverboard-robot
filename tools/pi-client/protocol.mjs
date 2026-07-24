@@ -3,6 +3,7 @@
 export const VERSION = 1;
 export const MAX_PAYLOAD = 48;
 export const MAX_FRAME = 11 + MAX_PAYLOAD;
+export const MAX_TRANSPORT_TEST_COMMAND = 50;
 
 function requireUnsignedWireInteger(name, value, maximum) {
   if (!Number.isInteger(value) || value < 0 || value > maximum) {
@@ -23,6 +24,7 @@ export const MessageType = Object.freeze({
   SET_YAW_RATE: 0x21,
   SET_VELOCITY_AND_YAW: 0x22,
   HEARTBEAT: 0x23,
+  SET_DIRECT_MOTOR: 0x24,
   STATUS: 0x30,
   IMU_TELEMETRY: 0x31,
   MOTOR_TELEMETRY: 0x32,
@@ -86,6 +88,33 @@ export function encodeMovement({
   const payload = Buffer.alloc(10);
   payload.writeInt16LE(linearVelocityMilli, 0);
   payload.writeInt16LE(yawRateMilli, 2);
+  payload.writeUInt32LE(leaseId, 4);
+  payload.writeUInt16LE(lifetimeMs, 8);
+  return payload;
+}
+
+export function encodeDirectMotor({
+  left,
+  right,
+  leaseId,
+  lifetimeMs,
+}) {
+  for (const [name, value] of [["left", left], ["right", right]]) {
+    if (!Number.isInteger(value) ||
+        Math.abs(value) > MAX_TRANSPORT_TEST_COMMAND) {
+      throw new RangeError(
+        `${name} must be an integer from ` +
+        `${-MAX_TRANSPORT_TEST_COMMAND} to ${MAX_TRANSPORT_TEST_COMMAND}`,
+      );
+    }
+  }
+  if (!Number.isInteger(lifetimeMs) || lifetimeMs <= 0 || lifetimeMs > 65535) {
+    throw new RangeError("lifetimeMs must be between 1 and 65535");
+  }
+  requireUnsignedWireInteger("leaseId", leaseId, 0xffffffff);
+  const payload = Buffer.alloc(10);
+  payload.writeInt16LE(left, 0);
+  payload.writeInt16LE(right, 2);
   payload.writeUInt32LE(leaseId, 4);
   payload.writeUInt16LE(lifetimeMs, 8);
   return payload;

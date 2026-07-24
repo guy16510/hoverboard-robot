@@ -1,0 +1,25 @@
+{
+  "actions": [
+    { "atMs": 1000, "command": "mode", "value": 3 },
+    { "atMs": 1500, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 2500, "command": "arm" },
+    { "atMs": 3500, "command": "direct", "left": 50, "right": 0 },
+    { "atMs": 4300, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 5000, "command": "direct", "left": 0, "right": 50 },
+    { "atMs": 5800, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 6500, "command": "direct", "left": 50, "right": 50 },
+    { "atMs": 7300, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 8000, "command": "direct", "left": -50, "right": -50 },
+    { "atMs": 8800, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 9500, "command": "direct", "left": 50, "right": -50 },
+    { "atMs": 10300, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 11000, "command": "direct", "left": -50, "right": 50 },
+    { "atMs": 11800, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 12500, "command": "direct", "left": 50, "right": 50 },
+    { "atMs": 13300, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 14000, "command": "direct", "left": -50, "right": -50 },
+    { "atMs": 14800, "command": "direct", "left": 0, "right": 0 },
+    { "atMs": 14801, "command": "stop" },
+    { "atMs": 15000, "command": "disarm" }
+  ]
+}

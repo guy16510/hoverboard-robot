@@ -184,4 +184,29 @@ bool MovementCommandCodec::decode(const uint8_t *payload, size_t length,
   return command.lifetime_ms != 0u;
 }
 
+size_t DirectMotorCommandCodec::encode(const DirectMotorCommand &command,
+                                       uint8_t *payload, size_t capacity) {
+  constexpr size_t kLength = 10u;
+  if (payload == nullptr || capacity < kLength) {
+    return 0u;
+  }
+  writeU16(&payload[0], static_cast<uint16_t>(command.left));
+  writeU16(&payload[2], static_cast<uint16_t>(command.right));
+  writeU32(&payload[4], command.lease_id);
+  writeU16(&payload[8], command.lifetime_ms);
+  return kLength;
+}
+
+bool DirectMotorCommandCodec::decode(const uint8_t *payload, size_t length,
+                                     DirectMotorCommand &command) {
+  if (payload == nullptr || length != 10u) {
+    return false;
+  }
+  command.left = static_cast<int16_t>(readU16(&payload[0]));
+  command.right = static_cast<int16_t>(readU16(&payload[2]));
+  command.lease_id = readU32(&payload[4]);
+  command.lifetime_ms = readU16(&payload[8]);
+  return command.lifetime_ms != 0u;
+}
+
 } // namespace gs::balance

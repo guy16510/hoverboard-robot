@@ -8,12 +8,14 @@ import {
   MessageType,
   crc16,
   decodeMessage,
+  encodeDirectMotor,
   encodeFrame,
   encodeMovement,
 } from "../protocol.mjs";
 import { Sequence } from "../client.mjs";
 import { MixedTelemetryDecoder } from "../capture_decoder.mjs";
 import { normalizeCaptureEvent } from "../evidence.mjs";
+import { normalizeStagePlan } from "../stage_plan.mjs";
 
 test("CRC-16/CCITT-FALSE matches the standard check vector", () => {
   assert.equal(crc16(Buffer.from("123456789")), 0x29b1);
@@ -91,6 +93,28 @@ test("movement encoder rejects invalid lease identifiers", () => {
   );
   assert.throws(
     () => encodeMovement({ ...movement, leaseId: 1.5 }),
+    RangeError,
+  );
+});
+
+test("direct motor encoder enforces the transport-test command ceiling", () => {
+  const payload = encodeDirectMotor({
+    left: 20,
+    right: -30,
+    leaseId: 0x12345678,
+    lifetimeMs: 400,
+  });
+  assert.equal(payload.readInt16LE(0), 20);
+  assert.equal(payload.readInt16LE(2), -30);
+  assert.equal(payload.readUInt32LE(4), 0x12345678);
+  assert.equal(payload.readUInt16LE(8), 400);
+  assert.throws(
+    () => encodeDirectMotor({
+      left: 51,
+      right: 0,
+      leaseId: 1,
+      lifetimeMs: 500,
+    }),
     RangeError,
   );
 });
@@ -333,4 +357,48 @@ test("capture normalization retains malformed device text for later review", () 
       parseError: "invalid BALANCE JSON",
     },
   );
+});
+
+test("motor transport plans are bounded, ordered, and fail-safe", () => {
+  const plan = normalizeStagePlan({
+    actions: [
+      { atMs: 1000, command: "mode", value: 3 },
+      { atMs: 1500, command: "direct", left: 0, right: 0 },
+      { atMs: 2000, command: "arm" },
+      { atMs: 2500, command: "direct", left: 10, right: 0 },
+      { atMs: 3500, command: "direct", left: 0, right: 0 },
+      { atMs: 4000, command: "stop" },
+      { atMs: 4500, command: "disarm" },
+    ],
+  }, { stage: "motor-transport", durationSeconds: 10 });
+  assert.equal(plan.sendsArm, true);
+  assert.equal(plan.sendsMovement, true);
+  assert.equal(plan.maximumAbsoluteCommand, 10);
+  assert.throws(() => normalizeStagePlan({
+    actions: [
+      { atMs: 1000, command: "mode", value: 3 },
+      { atMs: 1500, command: "arm" },
+      { atMs: 2000, command: "direct", left: 51, right: 0 },
+      { atMs: 3000, command: "direct", left: 0, right: 0 },
+      { atMs: 3500, command: "stop" },
+      { atMs: 4000, command: "disarm" },
+    ],
+  }, { stage: "motor-transport", durationSeconds: 10 }), /left/);
+});
+
+test("lifted-wheel plans reject direct motion and require fail-safe ending", () => {
+  const actions = [
+    { atMs: 1000, command: "mode", value: 1 },
+    { atMs: 2000, command: "arm" },
+    { atMs: 6000, command: "direct", left: 0, right: 0 },
+    { atMs: 6500, command: "stop" },
+    { atMs: 7000, command: "disarm" },
+  ];
+  assert.equal(normalizeStagePlan(
+    { actions }, { stage: "lifted-wheel", durationSeconds: 10 },
+  ).sendsMovement, false);
+  assert.throws(() => normalizeStagePlan(
+    { actions: actions.slice(0, -1) },
+    { stage: "lifted-wheel", durationSeconds: 10 },
+  ), /end with direct zero/);
 });

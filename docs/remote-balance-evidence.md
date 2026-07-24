@@ -6,9 +6,13 @@ raw serial stream, decoded binary frames, `BALANCE` JSON telemetry (including
 raw gyro, bias-corrected gyro, and learned bias), every outbound query, operator
 action notes, firmware identity, source identity, and host metadata.
 
-The capture tool does not flash firmware, arm, or send movement. At startup it
-sends `hello` and `disarm`; while recording it sends read-only capability and
-telemetry queries; at shutdown it sends `stop` and `disarm`.
+The capture tool does not flash firmware. Without `--command-plan`, it never
+arms or sends movement: at startup it sends `hello` and `disarm`; while
+recording it sends read-only capability and telemetry queries; at shutdown it
+sends `stop` and `disarm`. A validated command plan is allowed only for the
+`motor-transport` and `lifted-wheel` stages after their safety gates. The plan
+executes on the same serial descriptor as capture, and every outbound frame is
+timestamped with its exact raw bytes.
 
 ## Prepare the other computer
 
@@ -88,8 +92,10 @@ between directions, and leave the chassis stationary at the end. Press
 Control-C only if an immediate stop is needed; the recorder still sends
 `stop` and `disarm` and packages the partial evidence.
 
-Do not proceed to motor-powered stages from this document. Stage 4–6 commands
-must be selected only after the Stage 3 archive has been reviewed.
+Do not proceed to motor-powered stages until the Stage 3–4 archives have been
+reviewed and the one-time physical checkpoint has passed. Stage 5–6 command
+plans must be reviewed before use; the supplied templates are not permission
+to power or move the wheels.
 
 ## Evidence produced
 

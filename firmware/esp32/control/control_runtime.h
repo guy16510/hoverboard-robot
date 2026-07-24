@@ -2,6 +2,7 @@
 #pragma once
 
 #include "balance_controller.h"
+#include "transport_test_limits.h"
 
 namespace gs::balance {
 
@@ -11,6 +12,7 @@ public:
                  bool dry_run);
 
   BalanceOutput step(const BalanceInput &input, bool output_permitted);
+  BalanceOutput stepDirect(float left, float right, bool output_permitted);
   bool dryRun() const;
 
 private:

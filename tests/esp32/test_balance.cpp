@@ -642,6 +642,31 @@ void testDryRunCalculatesButNeverSendsNonzeroOutput() {
   GS_ESP32_EXPECT_FALSE(sink.last_.enabled);
 }
 
+void testDirectTransportCommandIsBoundedAndHonorsDryRun() {
+  RecordingMotorSink sink;
+  CascadedBalanceController controller(CascadedBalanceConfig::conservative());
+  ControlRuntime active(controller, sink, false);
+
+  const BalanceOutput direct = active.stepDirect(20.0f, -30.0f, true);
+  GS_ESP32_EXPECT_NEAR(20.0, direct.left, 0.001);
+  GS_ESP32_EXPECT_NEAR(-30.0, direct.right, 0.001);
+  GS_ESP32_EXPECT_TRUE(sink.last_.enabled);
+  GS_ESP32_EXPECT_NEAR(20.0, sink.last_.left, 0.001);
+  GS_ESP32_EXPECT_NEAR(-30.0, sink.last_.right, 0.001);
+
+  const BalanceOutput bounded = active.stepDirect(500.0f, -500.0f, true);
+  GS_ESP32_EXPECT_NEAR(kMaximumTransportTestCommand, bounded.left, 0.001);
+  GS_ESP32_EXPECT_NEAR(-kMaximumTransportTestCommand, bounded.right, 0.001);
+
+  ControlRuntime dry_run(controller, sink, true);
+  const BalanceOutput calculated = dry_run.stepDirect(10.0f, -10.0f, true);
+  GS_ESP32_EXPECT_NEAR(10.0, calculated.left, 0.001);
+  GS_ESP32_EXPECT_NEAR(-10.0, calculated.right, 0.001);
+  GS_ESP32_EXPECT_FALSE(sink.last_.enabled);
+  GS_ESP32_EXPECT_NEAR(0.0, sink.last_.left, 0.001);
+  GS_ESP32_EXPECT_NEAR(0.0, sink.last_.right, 0.001);
+}
+
 void testRuntimeResetsControllerAcrossDisabledTransition() {
   RecordingMotorSink sink;
   CascadedBalanceController controller(CascadedBalanceConfig::conservative());
@@ -1029,6 +1054,38 @@ void testSerialCommandSourceProducesLeaseBoundRequest() {
   GS_ESP32_EXPECT_EQ(1, source.acceptedFrames());
 }
 
+void testSerialCommandSourceAcceptsOnlyBoundedDirectMotorCommands() {
+  DirectMotorCommand direct{};
+  direct.left = 20;
+  direct.right = -30;
+  direct.lease_id = 77u;
+  direct.lifetime_ms = 400u;
+  SerialFrame frame{};
+  frame.type = SerialMessageType::kSetDirectMotor;
+  frame.sequence = 101u;
+  frame.payload_length = static_cast<uint16_t>(DirectMotorCommandCodec::encode(
+      direct, frame.payload.data(), frame.payload.size()));
+  SerialCommandSource source(50000u);
+
+  feedEncodedFrame(source, frame, 1000000u);
+  ControlRequest request{};
+  GS_ESP32_EXPECT_TRUE(source.latest(request));
+  GS_ESP32_EXPECT_TRUE(request.direct_motor);
+  GS_ESP32_EXPECT_NEAR(20.0, request.direct_left, 0.001);
+  GS_ESP32_EXPECT_NEAR(-30.0, request.direct_right, 0.001);
+  GS_ESP32_EXPECT_EQ(77, request.lease_id);
+
+  direct.left = static_cast<int16_t>(kMaximumTransportTestCommand + 1);
+  frame.sequence = 102u;
+  frame.payload_length = static_cast<uint16_t>(DirectMotorCommandCodec::encode(
+      direct, frame.payload.data(), frame.payload.size()));
+  feedEncodedFrame(source, frame, 2000000u);
+  GS_ESP32_EXPECT_EQ(1, source.rejectedFrames());
+  GS_ESP32_EXPECT_EQ(
+      static_cast<uint8_t>(SerialErrorCode::kInvalidConfiguration),
+      source.lastErrorCode());
+}
+
 void testSerialCommandSourceRejectsStaleSequenceAndDisconnectsSafely() {
   SerialCommandSource source(50000u);
   SerialFrame stop{};
@@ -1274,6 +1331,7 @@ int main() {
   testEmergencyStopAndLocalDisarmOverrideLeases();
   testHigherPrioritySourceAndAnyEmergencyStopPreemptOwner();
   testDryRunCalculatesButNeverSendsNonzeroOutput();
+  testDirectTransportCommandIsBoundedAndHonorsDryRun();
   testRuntimeResetsControllerAcrossDisabledTransition();
   testLoopMetricsReportRateJitterDeadlineAndAges();
   testSerialFrameRoundTripAndLittleEndianEncoding();
@@ -1287,6 +1345,7 @@ int main() {
   testEveryBinaryTelemetrySchemaHasDeterministicWidthAndOffsets();
   testProtocolDeclaresRequiredMessageTypes();
   testSerialCommandSourceProducesLeaseBoundRequest();
+  testSerialCommandSourceAcceptsOnlyBoundedDirectMotorCommands();
   testSerialCommandSourceRejectsStaleSequenceAndDisconnectsSafely();
   testSerialCommandSourceClassifiesCorruptFrame();
   testHelloStartsANewSequenceSession();

@@ -1,6 +1,8 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "control_runtime.h"
 
+#include <algorithm>
+
 namespace gs::balance {
 
 ControlRuntime::ControlRuntime(IBalanceController &controller,
@@ -19,6 +21,27 @@ BalanceOutput ControlRuntime::step(const BalanceInput &input,
   output_was_permitted_ = output_permitted;
   MotorCommand command;
   command.enabled = output_permitted && output.valid && !dry_run_;
+  if (command.enabled) {
+    command.left = output.left;
+    command.right = output.right;
+  }
+  motor_sink_.write(command);
+  return output;
+}
+
+BalanceOutput ControlRuntime::stepDirect(float left, float right,
+                                         bool output_permitted) {
+  controller_.clear();
+  output_was_permitted_ = output_permitted;
+  BalanceOutput output;
+  output.left = std::clamp(
+      left, -static_cast<float>(kMaximumTransportTestCommand),
+      static_cast<float>(kMaximumTransportTestCommand));
+  output.right = std::clamp(
+      right, -static_cast<float>(kMaximumTransportTestCommand),
+      static_cast<float>(kMaximumTransportTestCommand));
+  MotorCommand command;
+  command.enabled = output_permitted && !dry_run_;
   if (command.enabled) {
     command.left = output.left;
     command.right = output.right;

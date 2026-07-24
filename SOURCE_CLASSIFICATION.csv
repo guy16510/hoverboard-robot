@@ -89,6 +89,7 @@ firmware/esp32/control/serial_messages.h,New ESP32 code
 firmware/esp32/control/serial_protocol.cpp,New ESP32 code
 firmware/esp32/control/serial_protocol.h,New ESP32 code
 firmware/esp32/control/swd_transport_budget.h,New ESP32 code
+firmware/esp32/control/transport_test_limits.h,New ESP32 code
 firmware/esp32/control/web_command_source.cpp,New ESP32 code
 firmware/esp32/control/web_command_source.h,New ESP32 code
 firmware/esp32/coordinator/main.cpp,New ESP32 code
@@ -134,9 +135,6 @@ logs/esp32-zero-demand-gate.jsonl,New ESP32 code
 logs/hardware-validation-20260723.md,New GAUSSTOP-specific code
 platformio.ini,New GAUSSTOP-specific code
 requirements-dev.txt,New GAUSSTOP-specific code
-tests/__pycache__/test_drive_esp32.cpython-312.pyc,New ESP32 code
-tests/__pycache__/test_drive_esp32.cpython-314.pyc,New ESP32 code
-tests/__pycache__/test_soak_esp32.cpython-314.pyc,New ESP32 code
 tests/esp32/test_balance.cpp,New ESP32 code
 tests/esp32/test_harness.h,New ESP32 code
 tests/native/test_architecture.c,New GAUSSTOP-specific code
@@ -149,9 +147,6 @@ tests/native/test_simulation.c,New GAUSSTOP-specific code
 tests/native/test_swd_timing.c,New GAUSSTOP-specific code
 tests/test_drive_esp32.py,New ESP32 code
 tests/test_soak_esp32.py,New ESP32 code
-tools/__pycache__/drive_esp32.cpython-312.pyc,New ESP32 code
-tools/__pycache__/drive_esp32.cpython-314.pyc,New ESP32 code
-tools/__pycache__/soak_esp32.cpython-314.pyc,New ESP32 code
 tools/audit-upstream.sh,New GAUSSTOP-specific code
 tools/bootstrap-tools.sh,New GAUSSTOP-specific code
 tools/build-all.sh,New GAUSSTOP-specific code
@@ -174,6 +169,9 @@ tools/pi-client/client.mjs,New ESP32 code
 tools/pi-client/evidence.mjs,New ESP32 code
 tools/pi-client/package.json,New ESP32 code
 tools/pi-client/protocol.mjs,New ESP32 code
+tools/pi-client/stage_plan.mjs,New ESP32 code
+tools/pi-client/plans/stage5-minimum.json,New ESP32 code
+tools/pi-client/plans/stage6-lifted-wheel.json,New ESP32 code
 tools/pi-client/test/protocol.test.mjs,New ESP32 code
 tools/pio_extra.py,New GAUSSTOP-specific code
 tools/soak_esp32.py,New ESP32 code

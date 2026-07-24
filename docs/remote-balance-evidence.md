@@ -56,6 +56,11 @@ mode and sends a zero `DIRECT_LR` command while disarmed so the existing
 MASTER/SLAVE controllers can reach `READY` without enabling either bridge.
 Do not use this image for balancing.
 
+For Stage 6 lifted-wheel correction, use `esp32_stage6_lifted`. It accepts
+active output only in balance mode, clamps correction to 50 command units, and
+limits output slew to 100 command units per second. It is not approved for a
+ground-balancing test.
+
 If flashing is required for Stage 3, flash only
 `esp32_balance_coordinator` to the ESP32. Do not flash MASTER or SLAVE. Confirm
 the build reports `GS_BALANCE_DRY_RUN=1`; keep motor power removed throughout.

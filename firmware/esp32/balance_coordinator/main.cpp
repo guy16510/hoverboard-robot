@@ -45,6 +45,10 @@ extern "C" {
 #define GS_STAGE5_TRANSPORT_ONLY 0
 #endif
 
+#ifndef GS_STAGE6_LIFTED_ONLY
+#define GS_STAGE6_LIFTED_ONLY 0
+#endif
+
 #if GS_ENABLE_WEB_CONTROL
 #ifndef GS_WIFI_SSID
 #define GS_WIFI_SSID ""
@@ -89,6 +93,10 @@ static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 ||
               "GS_STAGE5_TRANSPORT_ONLY must be zero or one");
 static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 || GS_BALANCE_DRY_RUN == 0,
               "Stage 5 transport image must permit bounded direct output");
+static_assert(GS_STAGE6_LIFTED_ONLY == 0 || GS_BALANCE_DRY_RUN == 0,
+              "Stage 6 lifted image must permit bounded correction output");
+static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 || GS_STAGE6_LIFTED_ONLY == 0,
+              "Only one powered validation mode may be selected");
 
 class EspClock final : public IClock {
 public:
@@ -254,6 +262,11 @@ ComplementaryPitchEstimator estimator(ComplementaryPitchConfig{});
 CascadedBalanceConfig initialBalanceConfig() {
   CascadedBalanceConfig config = CascadedBalanceConfig::conservative();
   config.upright_offset_deg = user_config::kUprightMountingOffsetDeg;
+#if GS_STAGE6_LIFTED_ONLY
+  config.inner.output_limit = 50.0f;
+  config.output_limit = 50.0f;
+  config.slew_per_second = 100.0f;
+#endif
   return config;
 }
 BalanceStateConfig initialStateConfig() {
@@ -376,6 +389,13 @@ gs_esp_command requestedMotorCommand() {
 #if GS_STAGE5_TRANSPORT_ONLY
   command.master_flags = GS_COMMAND_DIRECT_LR;
   if (operating_mode != 3u || !motor.enabled) {
+    command.speed = 0;
+    command.steer = 0;
+    return command;
+  }
+#elif GS_STAGE6_LIFTED_ONLY
+  command.master_flags = GS_COMMAND_DIRECT_LR;
+  if (operating_mode != 1u || !motor.enabled) {
     command.speed = 0;
     command.steer = 0;
     return command;

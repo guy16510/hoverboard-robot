@@ -36,12 +36,17 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
           ./tools/bootstrap-tools.sh
 
-      - name: Run transport architecture and host tests
+      - name: Run transport architecture checks
         shell: bash
         run: |
-          set -euo pipefail
-          ./tools/check-architecture.sh
-          .venv/bin/python -m unittest tests/test_drive_esp32.py
+          set -o pipefail
+          ./tools/check-architecture.sh 2>&1 | tee architecture-check.log
+
+      - name: Run host control tests
+        shell: bash
+        run: |
+          set -o pipefail
+          .venv/bin/python -m unittest -v tests/test_drive_esp32.py 2>&1 | tee host-tests.log
 
       - name: Run native tests
         shell: bash
@@ -190,6 +195,8 @@ jobs:
         with:
           name: swd-build-logs-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
+            architecture-check.log
+            host-tests.log
             native-build.log
             firmware-build.log
             reproducibility-build.log

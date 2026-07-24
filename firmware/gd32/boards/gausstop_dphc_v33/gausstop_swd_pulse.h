@@ -5,8 +5,9 @@
 #include <stdbool.h>
 #include <stdint.h>
 
+#define GS_SWD_PULSE_FRAME_BYTES 11u
+
 enum {
-  GS_SWD_PULSE_FRAME_BYTES = 11u,
   GS_SWD_PULSE_SYMBOL_BITS = 2u,
   GS_SWD_PULSE_SYMBOLS_PER_BYTE = 4u,
   GS_SWD_PULSE_FRAME_SYMBOLS =

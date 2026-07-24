@@ -14,6 +14,7 @@ import {
 } from "../protocol.mjs";
 import { Sequence } from "../client.mjs";
 import { MixedTelemetryDecoder } from "../capture_decoder.mjs";
+import { CaptureLifecycle } from "../capture_lifecycle.mjs";
 import { normalizeCaptureEvent } from "../evidence.mjs";
 import { normalizeStagePlan } from "../stage_plan.mjs";
 
@@ -401,4 +402,14 @@ test("lifted-wheel plans reject direct motion and require fail-safe ending", () 
     { actions: actions.slice(0, -1) },
     { stage: "lifted-wheel", durationSeconds: 10 },
   ), /end with direct zero/);
+});
+
+test("capture lifecycle ignores late serial events after finalization", () => {
+  const lifecycle = new CaptureLifecycle();
+  assert.equal(lifecycle.canHandleSerialEvent, true);
+  assert.equal(lifecycle.beginFinish(), true);
+  assert.equal(lifecycle.beginFinish(), false);
+  lifecycle.markFinalized();
+  assert.equal(lifecycle.canRecord, false);
+  assert.equal(lifecycle.canHandleSerialEvent, false);
 });

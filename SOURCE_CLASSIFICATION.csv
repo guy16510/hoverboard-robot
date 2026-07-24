@@ -163,6 +163,7 @@ tools/hardware/openocd-gd32f130c8.cfg,New GAUSSTOP-specific code
 tools/hardware/read-flash.sh,New GAUSSTOP-specific code
 tools/hardware/uart-capture.sh,New GAUSSTOP-specific code
 tools/pi-client/capture.mjs,New ESP32 code
+tools/pi-client/capture_lifecycle.mjs,New ESP32 code
 tools/pi-client/capture_decoder.mjs,New ESP32 code
 tools/pi-client/cli.mjs,New ESP32 code
 tools/pi-client/client.mjs,New ESP32 code

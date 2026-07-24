@@ -12,6 +12,7 @@ import { fileURLToPath } from "node:url";
 
 import { SerialClient } from "./client.mjs";
 import { MixedTelemetryDecoder } from "./capture_decoder.mjs";
+import { CaptureLifecycle } from "./capture_lifecycle.mjs";
 import { normalizeCaptureEvent } from "./evidence.mjs";
 import { MessageType, encodeDirectMotor } from "./protocol.mjs";
 import { loadStagePlan } from "./stage_plan.mjs";
@@ -208,7 +209,7 @@ async function capture(options) {
   const decoder = new MixedTelemetryDecoder();
   const counts = {};
   let rawBytes = 0;
-  let finishing = false;
+  const lifecycle = new CaptureLifecycle();
   let client;
   let stream;
   let queryTimer;
@@ -217,6 +218,7 @@ async function capture(options) {
   let notes;
 
   const record = body => {
+    if (!lifecycle.canRecord) return;
     const event = {
       timeUtc: new Date().toISOString(),
       elapsedMs: Number(elapsedMilliseconds(startedMonotonic).toFixed(3)),
@@ -310,6 +312,7 @@ async function capture(options) {
         message: error.message });
     }
     record({ kind: "capture-end", reason });
+    lifecycle.markFinalized();
     fs.closeSync(rawDescriptor);
     fs.closeSync(eventsDescriptor);
     writeJsonExclusive(endFile, {
@@ -331,8 +334,7 @@ async function capture(options) {
   };
 
   const finish = (reason, exitCode = 0) => {
-    if (finishing) return;
-    finishing = true;
+    if (!lifecycle.beginFinish()) return;
     clearInterval(queryTimer);
     clearTimeout(durationTimer);
     for (const timer of actionTimers) clearTimeout(timer);
@@ -359,6 +361,7 @@ async function capture(options) {
   }
   stream = client.readStream();
   stream.on("data", chunk => {
+    if (!lifecycle.canHandleSerialEvent) return;
     try {
       fs.writeSync(rawDescriptor, chunk);
       rawBytes += chunk.length;
@@ -375,11 +378,14 @@ async function capture(options) {
     }
   });
   stream.on("error", error => {
+    if (!lifecycle.canHandleSerialEvent) return;
     record({ kind: "capture-error", operation: "serial-read",
       message: error.message });
     finish("serial-error", 1);
   });
-  stream.on("end", () => finish("serial-ended", 1));
+  stream.on("end", () => {
+    if (lifecycle.canHandleSerialEvent) finish("serial-ended", 1);
+  });
 
   send(MessageType.HELLO, "hello");
   send(MessageType.DISARM, "disarm");

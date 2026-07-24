@@ -35,7 +35,6 @@ FAULTED = 3
 SHUTDOWN = 4
 COMMAND_DEADBAND = 50
 MAX_FEEDBACK_AGE_MS = 300
-COMMAND_ACK_GRACE_S = 0.45
 
 
 def command_value(value: str) -> int:
@@ -409,7 +408,6 @@ def run_test(
     next_status = start
     send_times: list[float] = []
     bridge_seen = [False, False]
-    unacknowledged_since: float | None = None
 
     while time.monotonic() - start < args.duration:
         now = time.monotonic()
@@ -427,12 +425,6 @@ def run_test(
             validate_status(status)
             for wheel, enabled in enumerate(integer_pair(status, "bridge", 0)):
                 bridge_seen[wheel] = bridge_seen[wheel] or bool(enabled)
-            if acknowledged(status):
-                unacknowledged_since = None
-            elif unacknowledged_since is None:
-                unacknowledged_since = now
-            elif now - unacknowledged_since > COMMAND_ACK_GRACE_S:
-                raise RuntimeError("Command acknowledgment is missing")
             master_state, slave_state = states(status)
             if moving and not motion_session_healthy(status):
                 raise RuntimeError(

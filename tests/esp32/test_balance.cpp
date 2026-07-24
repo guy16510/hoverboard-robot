@@ -2,6 +2,7 @@
 #include "test_harness.h"
 
 #include "balance_configuration.h"
+#include "balance_user_config.h"
 #include "balance_controller.h"
 #include "balance_state_machine.h"
 #include "command_arbiter.h"
@@ -946,6 +947,13 @@ void testBalanceConfigurationCodecValidatesAndUpdatesOneKey() {
   GS_ESP32_EXPECT_FALSE(
       BalanceConfigurationCodec::applyUpdate(payload, unsafe_length, config));
   GS_ESP32_EXPECT_NEAR(250.0, config.output_limit, 0.0001);
+
+  const size_t offset_length = BalanceConfigurationCodec::encodeValue(
+      BalanceConfigKey::kUprightOffset,
+      user_config::kUprightMountingOffsetDeg, payload, sizeof(payload));
+  GS_ESP32_EXPECT_TRUE(
+      BalanceConfigurationCodec::applyUpdate(payload, offset_length, config));
+  GS_ESP32_EXPECT_NEAR(20.0, config.upright_offset_deg, 0.0001);
 }
 
 void testBinaryTelemetryPayloadsAndResponseQueueAreBounded() {

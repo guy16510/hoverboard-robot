@@ -12,6 +12,7 @@
 #include "balance_configuration.h"
 #include "balance_controller.h"
 #include "balance_state_machine.h"
+#include "balance_user_config.h"
 #include "command_arbiter.h"
 #include "complementary_pitch_estimator.h"
 #include "control_runtime.h"
@@ -241,11 +242,21 @@ WireMpu6050Bus mpu_bus(Wire);
 Mpu6050Config mpu_config;
 Mpu6050Imu imu(mpu_bus, clock_source, mpu_config);
 ComplementaryPitchEstimator estimator(ComplementaryPitchConfig{});
-CascadedBalanceConfig balance_config = CascadedBalanceConfig::conservative();
+CascadedBalanceConfig initialBalanceConfig() {
+  CascadedBalanceConfig config = CascadedBalanceConfig::conservative();
+  config.upright_offset_deg = user_config::kUprightMountingOffsetDeg;
+  return config;
+}
+BalanceStateConfig initialStateConfig() {
+  BalanceStateConfig config;
+  config.fall_angle_deg = user_config::kFallAngleDeg;
+  return config;
+}
+CascadedBalanceConfig balance_config = initialBalanceConfig();
 CascadedBalanceController controller(balance_config);
 SwdMotorCommandSink motor_sink(clock_source);
 ControlRuntime control_runtime(controller, motor_sink, GS_BALANCE_DRY_RUN != 0);
-BalanceStateMachine state_machine(BalanceStateConfig{});
+BalanceStateMachine state_machine(initialStateConfig());
 CommandArbiter command_arbiter;
 SerialCommandSource serial_source(kSerialParserTimeoutUs);
 SerialTelemetrySink telemetry_sink;
@@ -706,7 +717,8 @@ SafetySnapshot safetySnapshot(uint64_t now_us, const PitchEstimate &pitch) {
   safety.calibrated = diagnostics.calibration_complete;
   safety.approximately_upright =
       std::fabs(balanceFramePitchDeg(pitch.filtered_pitch_deg,
-                                     balance_config)) <= 5.0f;
+                                     balance_config)) <=
+      user_config::kArmingToleranceDeg;
   safety.motor_feedback_healthy = feedbackFresh(now_us) && !feedbackFaulted();
   safety.motor_transport_healthy =
       command_transport_ready && !motor_transport_fault;

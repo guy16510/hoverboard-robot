@@ -17,6 +17,17 @@ ESP32 3.3 V  -> MPU6050 VCC
 ESP32 GND    -> MPU6050 GND
 ```
 
+## Temporary mounting angle
+
+The provisional mechanical upright is configured as `20.0` degrees in
+`firmware/esp32/control/balance_user_config.h`. After installing the final
+3D-printed case, edit only `kUprightMountingOffsetDeg` in that file to match the
+raw pitch reported while the finished chassis is mechanically upright.
+
+`kArmingToleranceDeg` and `kFallAngleDeg` are in the same file, but they are
+safety limits relative to mechanical upright and should not be changed merely
+to compensate for a different sensor mounting angle.
+
 Use the ESP32 USB connection for the Raspberry Pi protocol. Do not place Pi
 UART traffic on GPIO17, GPIO35, GPIO21, or GPIO22.
 

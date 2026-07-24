@@ -120,7 +120,7 @@ bool assign(BalanceConfigKey key, float value, CascadedBalanceConfig &config) {
     config.yaw_limit = value;
     return true;
   case BalanceConfigKey::kUprightOffset:
-    if (!inRange(value, -15.0f, 15.0f)) {
+    if (!inRange(value, -45.0f, 45.0f)) {
       return false;
     }
     config.upright_offset_deg = value;

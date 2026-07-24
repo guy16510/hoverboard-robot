@@ -34,6 +34,7 @@ ACTIVE = 2
 FAULTED = 3
 SHUTDOWN = 4
 COMMAND_DEADBAND = 50
+MAX_FEEDBACK_AGE_MS = 300
 
 
 def command_value(value: str) -> int:
@@ -91,6 +92,23 @@ def default_log_path() -> Path:
 def send_line(port: serial.Serial, line: str) -> None:
     port.write((line + "\n").encode("ascii"))
     port.flush()
+
+
+def open_serial_without_reset(port_name: str) -> serial.Serial:
+    """Open the ESP32 console without asserting DTR or RTS reset lines."""
+    port = serial.Serial(
+        port=None,
+        baudrate=115200,
+        timeout=0.05,
+        write_timeout=0.5,
+    )
+    port.dtr = False
+    port.rts = False
+    port.port = port_name
+    port.open()
+    port.dtr = False
+    port.rts = False
+    return port
 
 
 @dataclass
@@ -189,6 +207,13 @@ def integer_pair(status: dict[str, Any], name: str, default: int) -> tuple[int, 
     return int(raw[0]), int(raw[1])
 
 
+def transport_overflows(status: dict[str, Any]) -> tuple[int, int, int, int]:
+    raw = status.get("transport_overflows", [1, 1, 1, 1])
+    if not isinstance(raw, list) or len(raw) != 4:
+        raise RuntimeError(f"Malformed transport overflow telemetry: {raw!r}")
+    return tuple(int(value) for value in raw)  # type: ignore[return-value]
+
+
 def validate_status(status: dict[str, Any], allow_faults: bool = False) -> None:
     if int(status.get("protocol", -1)) != 2:
         raise RuntimeError(f"Unexpected protocol version: {status.get('protocol')}")
@@ -208,8 +233,15 @@ def validate_status(status: dict[str, Any], allow_faults: bool = False) -> None:
         raise RuntimeError(
             f"Unsafe controller state, master={master_state}, slave={slave_state}"
         )
-    if int(status.get("esp_feedback_age_ms", 999999)) > 150:
-        raise RuntimeError("ESP32 feedback is stale")
+    feedback_age = int(status.get("esp_feedback_age_ms", 999999))
+    if feedback_age > MAX_FEEDBACK_AGE_MS:
+        raise RuntimeError(
+            f"ESP32 feedback is stale: age={feedback_age} ms, "
+            f"limit={MAX_FEEDBACK_AGE_MS} ms"
+        )
+    overflows = transport_overflows(status)
+    if not allow_faults and any(overflows):
+        raise RuntimeError(f"Transport overflow reported: {overflows}")
     if not bool(status.get("pa4_raw_high")) and not bool(status.get("pa4_bypass")):
         raise RuntimeError("MASTER PA4 is low without the explicit bypass")
     if not bool(status.get("slave_pa4_raw_high")):
@@ -315,6 +347,7 @@ def zero_ready(status: dict[str, Any]) -> bool:
         and bool(status.get("peer_healthy"))
         and acknowledged(status)
         and states(status) == (READY, READY)
+        and transport_overflows(status) == (0, 0, 0, 0)
         and outputs_off(status)
     )
 
@@ -324,6 +357,7 @@ def motion_session_healthy(status: dict[str, Any]) -> bool:
     return (
         bool(status.get("session_ready"))
         and bool(status.get("peer_healthy"))
+        and transport_overflows(status) == (0, 0, 0, 0)
         and all(state in operational_states for state in states(status))
     )
 
@@ -337,6 +371,7 @@ def fault_clear_confirmed(status: dict[str, Any]) -> bool:
         disabled(status)
         and acknowledged(status)
         and faults(status) == (0, 0)
+        and transport_overflows(status) == (0, 0, 0, 0)
         and not bool(status.get("clear_pending"))
     )
 
@@ -449,7 +484,7 @@ def main() -> int:
     odometer_delta = (0, 0)
     failure: BaseException | None = None
 
-    with serial.Serial(args.port, 115200, timeout=0.05, write_timeout=0.5) as port:
+    with open_serial_without_reset(args.port) as port:
         time.sleep(1.0)
         port.reset_input_buffer()
         monitor = SerialMonitor(port, log_path)

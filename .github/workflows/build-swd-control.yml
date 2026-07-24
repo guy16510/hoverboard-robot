@@ -46,7 +46,7 @@ jobs:
         shell: bash
         run: |
           set -o pipefail
-          .venv/bin/python -m unittest -v tests/test_drive_esp32.py 2>&1 | tee host-tests.log
+          .venv/bin/python -m unittest discover -v -s tests -p 'test_*.py' 2>&1 | tee host-tests.log
 
       - name: Run native tests
         shell: bash

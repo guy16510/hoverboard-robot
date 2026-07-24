@@ -1,7 +1,9 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include <Arduino.h>
+#include <driver/rmt.h>
 
 extern "C" {
+#include "gausstop_swd_pulse.h"
 #include "gs_console.h"
 #include "gs_frame_parser.h"
 #include "gs_protocol.h"
@@ -12,14 +14,22 @@ constexpr uint32_t kConsoleBaud = 115200;
 constexpr uint32_t kControllerBaud = 19200;
 constexpr int kControllerRx = 35;
 constexpr int kControllerTx = 17;
-constexpr uint32_t kHeartbeatMs = 20;
+constexpr uint32_t kHeartbeatMs = 40;
 constexpr uint32_t kPiCommandTimeoutMs = 500;
-constexpr uint32_t kAckTimeoutMs = 200;
-constexpr uint32_t kFeedbackTimeoutMs = 200;
+constexpr uint32_t kAckTimeoutMs = 250;
+constexpr uint32_t kFeedbackTimeoutMs = 250;
+constexpr rmt_channel_t kCommandRmtChannel = RMT_CHANNEL_0;
+constexpr uint8_t kCommandRmtClockDivider = 80;
+constexpr size_t kCommandRmtItems = GS_SWD_PULSE_FRAME_SYMBOLS + 1u;
 
 constexpr int kMpu6050Sda = 21;
 constexpr int kMpu6050Scl = 22;
 constexpr uint32_t kFutureBalanceLoopHz = 200;
+
+static_assert(GS_SWD_PULSE_FRAME_BYTES == GS_ESP_COMMAND_SIZE,
+              "pulse transport must carry one exact ESP command frame");
+static_assert(kCommandRmtItems <= 64u,
+              "pulse command must fit in one ESP32 RMT memory block");
 
 HardwareSerial controller_uart(2);
 gs_console_state console_state;
@@ -32,6 +42,8 @@ bool console_overflow;
 bool clear_fault_pending;
 bool command_timeout_announced;
 bool session_ready;
+bool command_transport_ready;
+bool command_transport_error_announced;
 uint32_t next_heartbeat_ms;
 uint32_t last_feedback_ms;
 uint32_t last_control_input_ms;
@@ -70,7 +82,7 @@ void print_help() {
   Serial.println("enable | lr LEFT RIGHT | drive SPEED STEER | stop | disable");
   Serial.println("forward VALUE | reverse VALUE | ramp STEP | clearfault");
   Serial.println("shutdown | status | help");
-  Serial.println("Motion requires READY acknowledgment and fresh 200 ms "
+  Serial.println("Motion requires READY acknowledgment and fresh 250 ms "
                  "sequence acknowledgment.");
 }
 
@@ -91,6 +103,7 @@ void print_status() {
       "\"states\":[%u,%u],\"faults\":[%lu,%lu],\"tx\":%lu,"
       "\"rx\":%lu,\"crc_errors\":%lu,\"ack_timeouts\":%lu,"
       "\"remote_parser\":[%u,%u,%u,%u],"
+      "\"command_transport\":\"pulse-rmt-v1\","
       "\"mpu_future\":[%d,%d,%lu]}\n",
       feedback.protocol_version, console_state.enabled ? 1u : 0u,
       console_state.shutdown ? 1u : 0u, session_ready ? 1u : 0u,
@@ -238,6 +251,47 @@ gs_esp_command desired_command() {
   return command;
 }
 
+bool init_command_transport() {
+  rmt_config_t config =
+      RMT_DEFAULT_CONFIG_TX(static_cast<gpio_num_t>(kControllerTx),
+                            kCommandRmtChannel);
+  config.clk_div = kCommandRmtClockDivider;
+  config.tx_config.loop_en = false;
+  config.tx_config.carrier_en = false;
+  config.tx_config.idle_output_en = true;
+  config.tx_config.idle_level = RMT_IDLE_LEVEL_HIGH;
+  if (rmt_config(&config) != ESP_OK) {
+    return false;
+  }
+  return rmt_driver_install(kCommandRmtChannel, 0u, 0u) == ESP_OK;
+}
+
+bool transmit_command_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
+  rmt_item32_t items[kCommandRmtItems] = {};
+  items[0].level0 = 0u;
+  items[0].duration0 = GS_SWD_PULSE_SYNC_US;
+  items[0].level1 = 1u;
+  items[0].duration1 = GS_SWD_PULSE_SYNC_SEPARATOR_US;
+
+  size_t item_index = 1u;
+  for (size_t byte = 0u; byte < GS_SWD_PULSE_FRAME_BYTES; ++byte) {
+    for (uint8_t symbol_index = 0u;
+         symbol_index < GS_SWD_PULSE_SYMBOLS_PER_BYTE; ++symbol_index) {
+      const uint8_t symbol =
+          static_cast<uint8_t>((frame[byte] >>
+                                (symbol_index * GS_SWD_PULSE_SYMBOL_BITS)) &
+                               0x03u);
+      items[item_index].level0 = 0u;
+      items[item_index].duration0 = gs_swd_pulse_symbol_width_us(symbol);
+      items[item_index].level1 = 1u;
+      items[item_index].duration1 = GS_SWD_PULSE_SEPARATOR_US;
+      ++item_index;
+    }
+  }
+  return rmt_write_items(kCommandRmtChannel, items,
+                         static_cast<int>(item_index), true) == ESP_OK;
+}
+
 void send_heartbeat() {
   enforce_pi_timeout();
   gs_console_ramp_tick_when_ready(&console_state, session_ready);
@@ -245,9 +299,17 @@ void send_heartbeat() {
   const gs_esp_command *command = gs_command_sequencer_select(
       &command_sequencer, &desired, exact_ack(), millis());
   uint8_t frame[GS_ESP_COMMAND_SIZE];
-  if (command != nullptr && gs_encode_esp_command(frame, command)) {
-    controller_uart.write(frame, sizeof(frame));
+  if (command == nullptr || !gs_encode_esp_command(frame, command)) {
+    return;
+  }
+  if (command_transport_ready && transmit_command_frame(frame)) {
     ++command_frames;
+    return;
+  }
+  force_safe_disable();
+  if (!command_transport_error_announced) {
+    command_transport_error_announced = true;
+    Serial.println("SAFE STOP: ESP32 pulse transport failed");
   }
 }
 
@@ -306,15 +368,20 @@ void setup() {
   gs_console_init(&console_state);
   gs_command_sequencer_init(&command_sequencer);
   Serial.begin(kConsoleBaud);
-  controller_uart.begin(kControllerBaud, SERIAL_8N1, kControllerRx,
-                        kControllerTx);
+  controller_uart.begin(kControllerBaud, SERIAL_8N1, kControllerRx, -1);
+  command_transport_ready = init_command_transport();
   const uint8_t marker[] = {GS_FEEDBACK_MARKER_0, GS_FEEDBACK_MARKER_1};
   gs_frame_parser_init(&feedback_parser, marker, 2, GS_MASTER_FEEDBACK_SIZE);
   next_heartbeat_ms = millis();
   last_feedback_ms = millis();
   last_control_input_ms = millis();
-  Serial.println("GAUSSTOP SWD coordinator protocol v2 ready, motors disabled. "
-                 "Type help.");
+  if (!command_transport_ready) {
+    command_transport_error_announced = true;
+    Serial.println("FATAL: ESP32 pulse transport initialization failed");
+  }
+  Serial.println(
+      "GAUSSTOP SWD coordinator protocol v2, pulse-rmt-v1 commands ready, "
+      "motors disabled. Type help.");
 }
 
 void loop() {

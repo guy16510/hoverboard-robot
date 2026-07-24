@@ -14,10 +14,10 @@ constexpr uint32_t kConsoleBaud = 115200;
 constexpr uint32_t kControllerBaud = 19200;
 constexpr int kControllerRx = 35;
 constexpr int kControllerTx = 17;
-constexpr uint32_t kHeartbeatMs = 40;
+constexpr uint32_t kHeartbeatMs = 100;
 constexpr uint32_t kPiCommandTimeoutMs = 500;
-constexpr uint32_t kAckTimeoutMs = 250;
-constexpr uint32_t kFeedbackTimeoutMs = 250;
+constexpr uint32_t kAckTimeoutMs = 500;
+constexpr uint32_t kFeedbackTimeoutMs = 500;
 constexpr rmt_channel_t kCommandRmtChannel = RMT_CHANNEL_0;
 constexpr uint8_t kCommandRmtClockDivider = 80;
 constexpr size_t kCommandRmtItems = GS_SWD_PULSE_FRAME_SYMBOLS + 1u;
@@ -82,7 +82,7 @@ void print_help() {
   Serial.println("enable | lr LEFT RIGHT | drive SPEED STEER | stop | disable");
   Serial.println("forward VALUE | reverse VALUE | ramp STEP | clearfault");
   Serial.println("shutdown | status | help");
-  Serial.println("Motion requires READY acknowledgment and fresh 250 ms "
+  Serial.println("Motion requires READY acknowledgment and fresh 500 ms "
                  "sequence acknowledgment.");
 }
 

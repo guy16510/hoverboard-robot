@@ -11,7 +11,7 @@
 #include "gs_wheel_mix.h"
 
 enum {
-  GS_REMOTE_FEEDBACK_DELAY_MS = 25,
+  GS_REMOTE_FEEDBACK_DELAY_MS = 45,
   GS_REMOTE_FEEDBACK_RETRY_MS = 10,
 };
 

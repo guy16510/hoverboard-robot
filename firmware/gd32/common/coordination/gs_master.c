@@ -30,6 +30,24 @@ static bool sequence_is_newer(uint16_t sequence, uint16_t previous) {
   return delta != 0u && delta < 0x8000u;
 }
 
+static bool safe_resync_command(const gs_esp_command *command) {
+  return command != NULL && command->speed == 0 && command->steer == 0 &&
+         (command->master_flags & GS_COMMAND_DISABLE) != 0u &&
+         (command->slave_flags & GS_COMMAND_DISABLE) != 0u;
+}
+
+static bool safe_resync_allowed(const gs_master_coordinator *master,
+                                const gs_esp_command *command,
+                                uint32_t now_ms) {
+  if (master == NULL || master->shutdown ||
+      !safe_resync_command(command)) {
+    return false;
+  }
+  return master->state == GS_CONTROLLER_DISABLED ||
+         master->state == GS_CONTROLLER_FAULTED ||
+         (uint32_t)(now_ms - master->last_esp_command_ms) > GS_ESP_TIMEOUT_MS;
+}
+
 static bool slave_state_healthy(uint8_t state) {
   return state == GS_CONTROLLER_READY || state == GS_CONTROLLER_ACTIVE;
 }
@@ -65,16 +83,19 @@ bool gs_master_accept_esp_frame(gs_master_coordinator *master,
     return false;
   }
 
+  const bool resync = safe_resync_allowed(master, &command, now_ms);
   if (master->esp_seen && command.sequence == master->last_esp_sequence) {
-    if (!command_equal(&command, &master->last_esp_command)) {
+    if (command_equal(&command, &master->last_esp_command)) {
+      master->last_esp_command_ms = now_ms;
+      return true;
+    }
+    if (!resync) {
       ++master->invalid_esp_frames;
       return false;
     }
-    master->last_esp_command_ms = now_ms;
-    return true;
   }
 
-  if (master->esp_seen &&
+  if (master->esp_seen && !resync &&
       !sequence_is_newer(command.sequence, master->last_esp_sequence)) {
     ++master->invalid_esp_frames;
     return false;
@@ -90,7 +111,7 @@ bool gs_master_accept_esp_frame(gs_master_coordinator *master,
     return false;
   }
 
-  if (master->esp_seen) {
+  if (master->esp_seen && !resync) {
     const uint16_t delta =
         (uint16_t)(command.sequence - master->last_esp_sequence);
     if (delta > 1u) {

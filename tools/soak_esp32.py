@@ -169,6 +169,8 @@ def run_soak(
             try:
                 event = monitor.events.get(timeout=remaining)
             except queue.Empty as exc:
+                if time.monotonic() >= deadline:
+                    break
                 raise RuntimeError("No ESP32 status received during soak") from exc
             if event.received_monotonic < requested_at:
                 continue

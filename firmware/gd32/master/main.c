@@ -11,7 +11,8 @@
 #include "gs_wheel_mix.h"
 
 enum {
-  GS_REMOTE_FEEDBACK_DELAY_MS = 45,
+  GS_REMOTE_FEEDBACK_FALLBACK_MS = 60,
+  GS_REMOTE_FEEDBACK_AFTER_SLAVE_MS = 2,
   GS_REMOTE_FEEDBACK_RETRY_MS = 10,
 };
 
@@ -21,6 +22,7 @@ static gs_safety_supervisor safety;
 static gs_frame_parser esp_parser;
 static gs_frame_parser slave_parser;
 static bool feedback_pending;
+static uint16_t feedback_sequence;
 static uint32_t feedback_due_ms;
 
 static void calibrate_protection(void) {
@@ -58,7 +60,8 @@ static void service_esp_rx(void) {
         gs_master_accept_esp_frame(&master, frame, now_ms)) {
       gs_safety_note_command(&safety, now_ms);
       feedback_pending = true;
-      feedback_due_ms = now_ms + GS_REMOTE_FEEDBACK_DELAY_MS;
+      feedback_sequence = master.last_esp_sequence;
+      feedback_due_ms = now_ms + GS_REMOTE_FEEDBACK_FALLBACK_MS;
     }
   }
   (void)gs_frame_parser_poll(&esp_parser, gs_board_millis());
@@ -71,8 +74,15 @@ static void service_slave_rx(void) {
     const uint32_t now_ms = gs_board_millis();
     const gs_parse_result result =
         gs_frame_parser_feed(&slave_parser, byte, now_ms, frame);
-    if (result == GS_PARSE_FRAME) {
-      (void)gs_master_accept_slave_feedback(&master, frame, now_ms);
+    if (result == GS_PARSE_FRAME &&
+        gs_master_accept_slave_feedback(&master, frame, now_ms) &&
+        feedback_pending &&
+        master.slave_feedback.accepted_sequence == feedback_sequence) {
+      const uint32_t acknowledged_due =
+          now_ms + GS_REMOTE_FEEDBACK_AFTER_SLAVE_MS;
+      if ((int32_t)(acknowledged_due - feedback_due_ms) < 0) {
+        feedback_due_ms = acknowledged_due;
+      }
     }
   }
   (void)gs_frame_parser_poll(&slave_parser, gs_board_millis());
@@ -106,7 +116,9 @@ static void service_transport_health(void) {
   remote_tx_overflows = remote.tx_overflows;
   link_rx_overflows = link.rx_overflows;
   link_tx_overflows = link.tx_overflows;
-  if (overflow_sources != 0u && master.state == GS_CONTROLLER_ACTIVE) {
+  if (overflow_sources != 0u &&
+      (master.state == GS_CONTROLLER_READY ||
+       master.state == GS_CONTROLLER_ACTIVE)) {
     gs_master_note_transport_overflow(&master, overflow_sources);
     force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
   }

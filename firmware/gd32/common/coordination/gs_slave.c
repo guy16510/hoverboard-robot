@@ -25,6 +25,23 @@ static bool sequence_is_newer(uint16_t sequence, uint16_t previous) {
   return delta != 0u && delta < 0x8000u;
 }
 
+static bool safe_resync_command(const gs_slave_command *command) {
+  return command != NULL && command->electrical_command == 0 &&
+         (command->flags & GS_COMMAND_DISABLE) != 0u;
+}
+
+static bool safe_resync_allowed(const gs_slave_coordinator *slave,
+                                const gs_slave_command *command,
+                                uint32_t now_ms) {
+  if (slave == NULL || slave->shutdown || !safe_resync_command(command)) {
+    return false;
+  }
+  return slave->state == GS_CONTROLLER_DISABLED ||
+         slave->state == GS_CONTROLLER_FAULTED ||
+         (uint32_t)(now_ms - slave->last_master_command_ms) >
+             GS_SLAVE_TIMEOUT_MS;
+}
+
 void gs_slave_init(gs_slave_coordinator *slave, uint32_t now_ms) {
   if (slave == NULL) {
     return;
@@ -45,22 +62,25 @@ bool gs_slave_accept_master_frame(gs_slave_coordinator *slave,
     return false;
   }
 
+  const bool resync = safe_resync_allowed(slave, &command, now_ms);
   if (slave->master_seen && command.sequence == slave->last_master_sequence) {
-    if (!command_equal(&command, &slave->last_master_command)) {
+    if (command_equal(&command, &slave->last_master_command)) {
+      slave->last_master_command_ms = now_ms;
+      return true;
+    }
+    if (!resync) {
       ++slave->invalid_master_frames;
       return false;
     }
-    slave->last_master_command_ms = now_ms;
-    return true;
   }
 
-  if (slave->master_seen &&
+  if (slave->master_seen && !resync &&
       !sequence_is_newer(command.sequence, slave->last_master_sequence)) {
     ++slave->invalid_master_frames;
     return false;
   }
 
-  if (slave->master_seen) {
+  if (slave->master_seen && !resync) {
     const uint16_t delta =
         (uint16_t)(command.sequence - slave->last_master_sequence);
     if (delta > 1u) {
@@ -167,8 +187,7 @@ bool gs_slave_make_feedback(const gs_slave_coordinator *slave,
       .status_flags =
           (uint8_t)((slave->bridge_enabled ? GS_MOTOR_FEEDBACK_BRIDGE_ENABLED
                                            : 0u) |
-                    (slave->pa4_raw_high ? GS_MOTOR_FEEDBACK_PA4_RAW_HIGH
-                                         : 0u) |
+                    (slave->pa4_raw_high ? GS_MOTOR_FEEDBACK_PA4_RAW_HIGH : 0u) |
                     (slave->clear_fault_pending
                          ? GS_MOTOR_FEEDBACK_CLEAR_PENDING
                          : 0u)),

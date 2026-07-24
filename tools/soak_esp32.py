@@ -145,6 +145,7 @@ def run_soak(
         ready_timeout,
         "fault-clear confirmation while disabled",
         allow_faults=True,
+        ignore_uninitialized=True,
     )
 
     monitor.set_stage("soak_ready")

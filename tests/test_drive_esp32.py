@@ -1,8 +1,12 @@
 # SPDX-License-Identifier: GPL-3.0-only
+import queue
+import time
 import unittest
 from unittest.mock import patch
 
 from tools.drive_esp32 import (
+    SerialMonitor,
+    StatusEvent,
     disabled,
     fault_clear_confirmed,
     motion_session_healthy,
@@ -12,6 +16,38 @@ from tools.drive_esp32 import (
     validate_transport_progress,
     zero_ready,
 )
+
+class SerialMonitorWaitTest(unittest.TestCase):
+    def test_can_ignore_uninitialized_boot_status(self) -> None:
+        monitor = SerialMonitor.__new__(SerialMonitor)
+        monitor.events = queue.Queue()
+        monitor.request_status = lambda: None
+        received = time.monotonic() + 1.0
+        monitor.events.put(StatusEvent(received, {"protocol": 0}))
+        ready = {
+            "protocol": 2,
+            "faults": [0, 0],
+            "states": [0, 0],
+            "esp_feedback_age_ms": 0,
+            "pa4_raw_high": False,
+            "pa4_bypass": True,
+            "slave_pa4_raw_high": True,
+            "halls": [2, 4],
+            "applied": [0, 0],
+            "compare": [0, 0],
+            "bridge": [0, 0],
+            "transport_overflows": [0, 0, 0, 0],
+        }
+        monitor.events.put(StatusEvent(received, ready))
+
+        result = monitor.wait_for(
+            lambda status: status["protocol"] == 2,
+            0.1,
+            "initialized protocol",
+            ignore_uninitialized=True,
+        )
+
+        self.assertIs(result, ready)
 
 
 class ValidateMotionResultTest(unittest.TestCase):

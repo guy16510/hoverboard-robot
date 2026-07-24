@@ -172,6 +172,7 @@ class SerialMonitor:
         timeout: float,
         description: str,
         allow_faults: bool = False,
+        ignore_uninitialized: bool = False,
     ) -> dict[str, Any]:
         started = time.monotonic()
         deadline = time.monotonic() + timeout
@@ -183,6 +184,8 @@ class SerialMonitor:
             except queue.Empty:
                 continue
             if event.received_monotonic < started:
+                continue
+            if ignore_uninitialized and int(event.payload.get("protocol", 0)) == 0:
                 continue
             validate_status(event.payload, allow_faults=allow_faults)
             if predicate(event.payload):

@@ -195,6 +195,7 @@ static void service_motor(void) {
       motor.applied_command == 0 && gs_safety_clear(&safety, &sample, now_ms)) {
     gs_motor_clear_fault(&motor, now_ms);
     gs_master_finish_fault_clear(&master, true);
+    master.transport_status_flags = 0u;
   }
   gs_safety_evaluate(&safety, &sample, now_ms);
   master.faults |= safety.faults.bits;

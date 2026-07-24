@@ -1,5 +1,6 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "gausstop_board.h"
+#include "gausstop_swd_pulse.h"
 #include "gausstop_swd_timing.h"
 
 #include <stdbool.h>
@@ -15,19 +16,15 @@
 enum {
   GS_SWD_UART_TIMER_HZ = GS_SWD_UART_TIMER_HZ_FOR(GS_SYSTEM_CLOCK_HZ),
   GS_SWD_UART_BIT_TICKS = GS_SWD_UART_BIT_TICKS_FOR(GS_SYSTEM_CLOCK_HZ),
-  GS_SWD_UART_FIRST_SAMPLE_TICKS =
-      GS_SWD_UART_FIRST_SAMPLE_TICKS_FOR(GS_SYSTEM_CLOCK_HZ),
   GS_SWD_UART_RX_BUFFER_SIZE = 64,
   GS_SWD_UART_TX_BUFFER_SIZE = 128,
   GS_SWD_TAKEOVER_DELAY_MS = 2000,
 };
 
 _Static_assert(GS_SWD_UART_TIMER_HZ == 1000000u,
-               "SWD UART timer must run at 1 MHz");
+               "SWD feedback timer must run at 1 MHz");
 _Static_assert(GS_SWD_UART_BIT_TICKS == 52u,
-               "19,200 baud must use 52 timer ticks");
-_Static_assert(GS_SWD_UART_FIRST_SAMPLE_TICKS == 78u,
-               "first UART sample must occur at 1.5 bit times");
+               "19,200-baud feedback must use 52 timer ticks");
 _Static_assert((GS_SWD_UART_RX_BUFFER_SIZE &
                 (GS_SWD_UART_RX_BUFFER_SIZE - 1u)) == 0u,
                "RX buffer size must be a power of two");
@@ -35,21 +32,15 @@ _Static_assert((GS_SWD_UART_TX_BUFFER_SIZE &
                 (GS_SWD_UART_TX_BUFFER_SIZE - 1u)) == 0u,
                "TX buffer size must be a power of two");
 
-typedef enum {
-  GS_SWD_RX_IDLE = 0,
-  GS_SWD_RX_DATA,
-  GS_SWD_RX_STOP,
-} gs_swd_rx_state;
-
 static volatile uint8_t rx_buffer[GS_SWD_UART_RX_BUFFER_SIZE];
 static volatile uint8_t rx_head;
 static volatile uint8_t rx_tail;
 static volatile uint32_t rx_byte_count;
 static volatile uint32_t rx_overflow_count;
 static volatile uint32_t rx_framing_error_count;
-static volatile gs_swd_rx_state rx_state;
-static volatile uint8_t rx_byte;
-static volatile uint8_t rx_bit;
+static volatile bool rx_low_active;
+static volatile uint32_t rx_low_started_us;
+static gs_swd_pulse_decoder rx_decoder;
 
 static volatile uint8_t tx_buffer[GS_SWD_UART_TX_BUFFER_SIZE];
 static volatile uint8_t tx_head;
@@ -85,29 +76,6 @@ static void configure_tx_timer(void) {
   nvic_irq_enable(TIMER13_IRQn, 2u, 0u);
 }
 
-static void configure_rx_timer(void) {
-  rcu_periph_clock_enable(RCU_TIMER14);
-  timer_deinit(TIMER14);
-  timer_parameter_struct timer = {0};
-  timer.prescaler = GS_SWD_UART_TIMER_DIVIDER - 1u;
-  timer.alignedmode = TIMER_COUNTER_EDGE;
-  timer.counterdirection = TIMER_COUNTER_UP;
-  timer.period = GS_SWD_UART_FIRST_SAMPLE_TICKS - 1u;
-  timer.clockdivision = TIMER_CKDIV_DIV1;
-  timer_init(TIMER14, &timer);
-  /*
-   * RX changes ARR after the 1.5-bit first sample. If ARR shadowing is left
-   * enabled, the old period can remain active for another cycle, and the next
-   * byte can begin with the one-bit period still active. Both cases shift every
-   * following sample and present as continuous framing and CRC failures.
-   */
-  timer_auto_reload_shadow_disable(TIMER14);
-  timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
-  timer_interrupt_enable(TIMER14, TIMER_INT_UP);
-  timer_disable(TIMER14);
-  nvic_irq_enable(TIMER14_IRQn, 1u, 0u);
-}
-
 static void push_rx_byte(uint8_t byte) {
   const uint8_t next =
       (uint8_t)((rx_head + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
@@ -120,6 +88,12 @@ static void push_rx_byte(uint8_t byte) {
   ++rx_byte_count;
 }
 
+static void push_rx_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
+  for (uint8_t index = 0u; index < GS_SWD_PULSE_FRAME_BYTES; ++index) {
+    push_rx_byte(frame[index]);
+  }
+}
+
 static bool pop_tx_byte(uint8_t *byte) {
   if (byte == NULL || tx_tail == tx_head) {
     return false;
@@ -129,15 +103,29 @@ static bool pop_tx_byte(uint8_t *byte) {
   return true;
 }
 
-static void start_rx_sampling(void) {
-  rx_state = GS_SWD_RX_DATA;
-  rx_byte = 0u;
-  rx_bit = 0u;
-  timer_disable(TIMER14);
-  timer_autoreload_value_config(TIMER14, GS_SWD_UART_FIRST_SAMPLE_TICKS - 1u);
-  timer_counter_value_config(TIMER14, 0u);
-  timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
-  timer_enable(TIMER14);
+static void service_rx_edge(void) {
+  const uint32_t now_us = gs_board_micros();
+  if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) == RESET) {
+    rx_low_started_us = now_us;
+    rx_low_active = true;
+    return;
+  }
+  if (!rx_low_active) {
+    ++rx_framing_error_count;
+    return;
+  }
+  rx_low_active = false;
+  const uint32_t width_us = now_us - rx_low_started_us;
+  const uint16_t bounded_width =
+      width_us > UINT16_MAX ? UINT16_MAX : (uint16_t)width_us;
+  uint8_t frame[GS_SWD_PULSE_FRAME_BYTES];
+  const gs_swd_pulse_result result =
+      gs_swd_pulse_decoder_feed(&rx_decoder, bounded_width, frame);
+  if (result == GS_SWD_PULSE_FRAME) {
+    push_rx_frame(frame);
+  } else if (result == GS_SWD_PULSE_ERROR) {
+    ++rx_framing_error_count;
+  }
 }
 
 void EXTI4_15_IRQHandler(void) {
@@ -146,38 +134,7 @@ void EXTI4_15_IRQHandler(void) {
     return;
   }
   exti_interrupt_flag_clear(EXTI_13);
-  if (rx_state != GS_SWD_RX_IDLE ||
-      gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
-    return;
-  }
-  start_rx_sampling();
-}
-
-void TIMER14_IRQHandler(void) {
-  if (timer_interrupt_flag_get(TIMER14, TIMER_INT_FLAG_UP) == RESET) {
-    return;
-  }
-  timer_interrupt_flag_clear(TIMER14, TIMER_INT_FLAG_UP);
-  if (rx_state == GS_SWD_RX_DATA) {
-    if (gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
-      rx_byte |= (uint8_t)(1u << rx_bit);
-    }
-    ++rx_bit;
-    timer_autoreload_value_config(TIMER14, GS_SWD_UART_BIT_TICKS - 1u);
-    if (rx_bit >= 8u) {
-      rx_state = GS_SWD_RX_STOP;
-    }
-    return;
-  }
-  timer_disable(TIMER14);
-  if (rx_state == GS_SWD_RX_STOP &&
-      gpio_input_bit_get(GPIOA, GPIO_PIN_13) != RESET) {
-    push_rx_byte(rx_byte);
-  } else if (rx_state == GS_SWD_RX_STOP) {
-    ++rx_framing_error_count;
-  }
-  rx_state = GS_SWD_RX_IDLE;
-  exti_interrupt_flag_clear(EXTI_13);
+  service_rx_edge();
 }
 
 static void drive_tx_bit(void) {
@@ -227,7 +184,9 @@ static void init_remote(bool transmit_enabled) {
   rx_byte_count = 0u;
   rx_overflow_count = 0u;
   rx_framing_error_count = 0u;
-  rx_state = GS_SWD_RX_IDLE;
+  rx_low_active = false;
+  rx_low_started_us = 0u;
+  gs_swd_pulse_decoder_init(&rx_decoder);
   tx_head = 0u;
   tx_tail = 0u;
   tx_byte_count = 0u;
@@ -241,10 +200,9 @@ static void init_remote(bool transmit_enabled) {
   gpio_output_options_set(GPIOA, GPIO_OTYPE_PP, GPIO_OSPEED_2MHZ, GPIO_PIN_14);
   gpio_mode_set(GPIOA, GPIO_MODE_INPUT, GPIO_PUPD_PULLUP, GPIO_PIN_13);
   syscfg_exti_line_config(EXTI_SOURCE_GPIOA, EXTI_SOURCE_PIN13);
-  exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_FALLING);
+  exti_init(EXTI_13, EXTI_INTERRUPT, EXTI_TRIG_BOTH);
   exti_interrupt_flag_clear(EXTI_13);
   configure_tx_timer();
-  configure_rx_timer();
   NVIC_SetPriority(SysTick_IRQn, 3u);
   nvic_irq_enable(EXTI4_15_IRQn, 0u, 0u);
   (void)transmit_enabled;

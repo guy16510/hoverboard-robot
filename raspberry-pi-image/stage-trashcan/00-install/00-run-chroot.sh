@@ -1,10 +1,12 @@
 #!/bin/bash -e
 
+set -euo pipefail
+
 APP=/opt/trashcan-robot/donkeycar
 VENV="$APP/.venv"
 
 getent group trashbot >/dev/null || groupadd --system trashbot
-id trashbot >/dev/null 2>&1 || useradd --system --create-home --gid trashbot --shell /bin/bash trashbot
+id trashbot >/dev/null 2>&1 || useradd --system --create-home --gid trashbot --shell /usr/sbin/nologin trashbot
 for group in dialout video render gpio i2c input; do
   getent group "$group" >/dev/null && usermod -aG "$group" trashbot || true
 done
@@ -30,7 +32,7 @@ sed -i \
   /etc/systemd/system/trashcan-donkeycar.service
 systemctl enable trashcan-donkeycar.service
 
-"$VENV/bin/python" - <<'PY'
+PYTHONPATH="$APP" "$VENV/bin/python" - <<'PY'
 import flask
 import psutil
 import serial
@@ -46,3 +48,5 @@ PY
 
 PYTHONPATH="$APP" "$VENV/bin/python" -m pytest -q "$APP/tests"
 systemd-analyze verify /etc/systemd/system/trashcan-donkeycar.service
+
+touch /etc/trashcan-robot-image-validated

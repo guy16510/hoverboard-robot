@@ -5,12 +5,12 @@ Wants=network-online.target
 
 [Service]
 Type=simple
-User=pi
-Group=pi
-SupplementaryGroups=dialout video
-WorkingDirectory=/opt/hoverboard-robot/donkeycar
+User=trashbot
+Group=trashbot
+SupplementaryGroups=dialout video render gpio i2c input
+WorkingDirectory=/opt/trashcan-robot/donkeycar
 Environment=PYTHONUNBUFFERED=1
-ExecStart=/opt/hoverboard-robot/donkeycar/.venv/bin/python /opt/hoverboard-robot/donkeycar/manage.py drive --config /opt/hoverboard-robot/donkeycar/config/robot.yaml
+ExecStart=/opt/trashcan-robot/donkeycar/.venv/bin/python /opt/trashcan-robot/donkeycar/manage.py drive --config /opt/trashcan-robot/donkeycar/config/robot.yaml
 Restart=on-failure
 RestartSec=3
 TimeoutStopSec=10

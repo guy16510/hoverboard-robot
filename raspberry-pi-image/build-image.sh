@@ -45,11 +45,10 @@ mkdir -p "$IMAGE_DIR/dist"
   sudo bash ./build.sh -c "$IMAGE_DIR/config"
 )
 
-validated_marker="$PI_GEN_DIR/work/trashcan-robot/stage-trashcan/rootfs/etc/trashcan-robot-image-validated"
-sudo test -f "$validated_marker" || {
-  echo "pi-gen exported an image without the required in-image validation marker" >&2
-  exit 1
-}
+# The in-image marker is verified inside stage-trashcan immediately after the
+# chroot smoke tests. pi-gen may remove or rotate temporary rootfs directories
+# during export, so checking that temporary path after build.sh returns is not
+# reliable and caused successful image builds to be rejected.
 
 find "$PI_GEN_DIR/deploy" -maxdepth 1 -type f \( \
   -name '*trashcan-robot*.img.xz' -o \

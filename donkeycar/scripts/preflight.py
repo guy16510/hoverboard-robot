@@ -10,18 +10,20 @@ from pathlib import Path
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
+import serial
+
 from trashcan_robot.config import load_config
 from trashcan_robot.protocol import (
     ARM,
+    DISARM,
     DRIVE_MODE,
     HELLO,
     SET_OPERATING_MODE,
     STATUS,
+    STOP,
     FrameDecoder,
     encode_frame,
 )
-
-import serial
 
 
 def write_frame(port: serial.Serial, message_type: int, sequence: int, payload: bytes = b"") -> int:
@@ -56,46 +58,55 @@ def main() -> int:
         timeout=config.serial.timeout_seconds,
         write_timeout=config.serial.timeout_seconds,
     ) as port:
-        port.reset_input_buffer()
-        sequence = write_frame(port, HELLO, sequence)
-        capabilities = wait_for(decoder, port, 0x02, args.timeout)
-        if len(capabilities.payload) != 12:
-            raise RuntimeError(f"unexpected capabilities payload length {len(capabilities.payload)}")
-        protocol, dry_run, _web, modes, control_hz, motor_hz, max_payload, _keys = struct.unpack(
-            "<BBBBHHHH", capabilities.payload
-        )
-        if protocol != 1:
-            raise RuntimeError(f"unsupported Pi protocol {protocol}")
-        if dry_run:
-            raise RuntimeError("ESP32 reports dry-run firmware, refusing drive preflight")
-        if not modes & (1 << DRIVE_MODE):
-            raise RuntimeError("ESP32 does not advertise drive mode")
-        if max_payload < 10:
-            raise RuntimeError("ESP32 payload limit cannot carry a movement lease")
+        try:
+            port.reset_input_buffer()
+            sequence = write_frame(port, HELLO, sequence)
+            capabilities = wait_for(decoder, port, 0x02, args.timeout)
+            if len(capabilities.payload) != 12:
+                raise RuntimeError(f"unexpected capabilities payload length {len(capabilities.payload)}")
+            protocol, dry_run, _web, modes, control_hz, motor_hz, max_payload, _keys = struct.unpack(
+                "<BBBBHHHH", capabilities.payload
+            )
+            if protocol != 1:
+                raise RuntimeError(f"unsupported Pi protocol {protocol}")
+            if dry_run:
+                raise RuntimeError("ESP32 reports dry-run firmware, refusing drive preflight")
+            if not modes & (1 << DRIVE_MODE):
+                raise RuntimeError("ESP32 does not advertise drive mode")
+            if max_payload < 10:
+                raise RuntimeError("ESP32 payload limit cannot carry a movement lease")
 
-        sequence = write_frame(port, SET_OPERATING_MODE, sequence, bytes((DRIVE_MODE,)))
-        sequence = write_frame(port, ARM, sequence)
-        sequence = write_frame(port, STATUS, sequence)
-        status = wait_for(decoder, port, STATUS, args.timeout)
-        if len(status.payload) != 16:
-            raise RuntimeError(f"unexpected status payload length {len(status.payload)}")
-        state, mode, source, health, faults, overruns, rejected = struct.unpack("<BBBBIII", status.payload)
-        if mode != DRIVE_MODE:
-            raise RuntimeError(f"ESP32 remained in operating mode {mode}, expected drive mode")
-        if faults:
-            raise RuntimeError(f"ESP32 reports active fault mask 0x{faults:08x}")
+            sequence = write_frame(port, SET_OPERATING_MODE, sequence, bytes((DRIVE_MODE,)))
+            sequence = write_frame(port, ARM, sequence)
+            sequence = write_frame(port, STATUS, sequence)
+            status = wait_for(decoder, port, STATUS, args.timeout)
+            if len(status.payload) != 16:
+                raise RuntimeError(f"unexpected status payload length {len(status.payload)}")
+            state, mode, source, health, faults, overruns, rejected = struct.unpack(
+                "<BBBBIII", status.payload
+            )
+            if mode != DRIVE_MODE:
+                raise RuntimeError(f"ESP32 remained in operating mode {mode}, expected drive mode")
+            if faults:
+                raise RuntimeError(f"ESP32 reports active fault mask 0x{faults:08x}")
 
-        print(
-            "PREFLIGHT PASS",
-            f"state={state}",
-            f"mode={mode}",
-            f"source={source}",
-            f"health=0x{health:02x}",
-            f"control_hz={control_hz}",
-            f"motor_hz={motor_hz}",
-            f"overruns={overruns}",
-            f"rejected={rejected}",
-        )
+            print(
+                "PREFLIGHT PASS",
+                f"state={state}",
+                f"mode={mode}",
+                f"source={source}",
+                f"health=0x{health:02x}",
+                f"control_hz={control_hz}",
+                f"motor_hz={motor_hz}",
+                f"overruns={overruns}",
+                f"rejected={rejected}",
+            )
+        finally:
+            try:
+                sequence = write_frame(port, STOP, sequence)
+                write_frame(port, DISARM, sequence)
+            except Exception:
+                pass
     return 0
 
 

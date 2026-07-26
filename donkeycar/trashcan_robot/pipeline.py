@@ -12,7 +12,7 @@ from .state import RobotState
 from .transport import MockMotorTransport, SerialMotorTransport
 
 
-def build_vehicle(config: AppConfig, donkey_config: Any, use_mock: bool = False) -> Any:
+def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     import donkeycar as dk
     from donkeycar.parts.camera import PiCamera
     from donkeycar.parts.controller import LocalWebController
@@ -29,11 +29,10 @@ def build_vehicle(config: AppConfig, donkey_config: Any, use_mock: bool = False)
         image_w=camera_cfg["width"],
         image_h=camera_cfg["height"],
         image_d=3,
-        framerate=camera_cfg["fps"],
     )
     vehicle.add(camera, outputs=["cam/image_array"], threaded=True)
 
-    controller = LocalWebController(port=donkey_config.WEB_CONTROL_PORT)
+    controller = LocalWebController(port=config.raw["controller"]["web_port"])
     vehicle.add(
         controller,
         inputs=["cam/image_array", "tub/num_records", "user/mode", "recording"],

@@ -76,7 +76,7 @@ cmp -s "$SERVICE_SOURCE" "$SERVICE_TARGET" || {
   echo "Installed service unit differs from canonical repository unit" >&2
   exit 1
 }
-"$APP/scripts/validate-service-unit.sh" "$SERVICE_TARGET" trashbot trashbot "$APP"
+bash "$APP/scripts/validate-service-unit.sh" "$SERVICE_TARGET" trashbot trashbot "$APP"
 systemctl enable trashcan-donkeycar.service
 systemctl is-enabled --quiet trashcan-donkeycar.service || {
   echo "trashcan-donkeycar.service was not enabled" >&2

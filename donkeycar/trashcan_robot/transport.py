@@ -10,7 +10,19 @@ from typing import Any
 import serial
 
 from .config import SerialConfig
-from .protocol import Frame, FrameDecoder, HELLO, SET_VELOCITY_YAW, STOP, encode_frame, encode_motion
+from .protocol import (
+    ARM,
+    DISARM,
+    DRIVE_MODE,
+    HELLO,
+    SET_OPERATING_MODE,
+    SET_VELOCITY_YAW,
+    STOP,
+    Frame,
+    FrameDecoder,
+    encode_frame,
+    encode_motion,
+)
 
 
 class MotorTransport(abc.ABC):
@@ -51,12 +63,15 @@ class SerialMotorTransport(MotorTransport):
             )
             self._serial.reset_input_buffer()
             self._write(HELLO, b"")
+            self._write(SET_OPERATING_MODE, bytes((DRIVE_MODE,)))
+            self._write(ARM, b"")
 
     def disconnect(self) -> None:
         with self._lock:
             if self._serial is not None:
                 try:
                     self._write(STOP, b"")
+                    self._write(DISARM, b"")
                 except Exception:
                     pass
                 self._serial.close()

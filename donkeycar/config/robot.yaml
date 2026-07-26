@@ -14,6 +14,8 @@ logging:
   directory: ./data/logs
   flush_every: 1
   telemetry_hz: 5
+data:
+  tubs_directory: ./data/tubs
 dashboard:
   host: 0.0.0.0
   port: 8888

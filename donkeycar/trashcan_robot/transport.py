@@ -43,6 +43,9 @@ class MotorTransport(abc.ABC):
 
 
 class SerialMotorTransport(MotorTransport):
+    _ARM_RETRY_COUNT = 20
+    _ARM_RETRY_INTERVAL_SECONDS = 0.1
+
     def __init__(self, config: SerialConfig) -> None:
         self._config = config
         self._serial: serial.Serial | None = None
@@ -64,7 +67,13 @@ class SerialMotorTransport(MotorTransport):
             self._serial.reset_input_buffer()
             self._write(HELLO, b"")
             self._write(SET_OPERATING_MODE, bytes((DRIVE_MODE,)))
-            self._write(ARM, b"")
+
+            # The ESP32 cannot arm until it has fresh motor feedback and an exact
+            # acknowledged zero command. Those gates may become healthy after the
+            # serial port opens, so retry the idempotent arm request during startup.
+            for _ in range(self._ARM_RETRY_COUNT):
+                self._write(ARM, b"")
+                time.sleep(self._ARM_RETRY_INTERVAL_SECONDS)
 
     def disconnect(self) -> None:
         with self._lock:

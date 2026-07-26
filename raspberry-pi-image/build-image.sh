@@ -57,6 +57,9 @@ grep -Fq 'http://deb.debian.org/debian/' "$PI_GEN_DIR/stage0/prerun.sh" || {
 }
 printf 'Using pi-gen %s from %s\n' "$resolved_pi_gen_commit" "$PI_GEN_BRANCH"
 
+# Never reuse a root filesystem or exported image from another architecture or
+# pi-gen revision. This is intentionally a clean production build.
+sudo rm -rf "$PI_GEN_DIR/work" "$PI_GEN_DIR/deploy"
 rm -rf "$PI_GEN_DIR/stage-trashcan"
 cp -a "$IMAGE_DIR/stage-trashcan" "$PI_GEN_DIR/stage-trashcan"
 find "$PI_GEN_DIR/stage-trashcan" -type f \( -name '*.sh' -o -name 'prerun.sh' \) -exec chmod 0755 {} +

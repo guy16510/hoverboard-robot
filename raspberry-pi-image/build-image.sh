@@ -62,6 +62,10 @@ image="$(find "$IMAGE_DIR/dist" -maxdepth 1 -name '*trashcan-robot*.img.xz' -pri
 xz --test "$image"
 (
   cd "$IMAGE_DIR/dist"
-  sha256sum -- * > SHA256SUMS
+  rm -f SHA256SUMS
+  mapfile -d '' artifacts < <(find . -maxdepth 1 -type f ! -name SHA256SUMS -print0 | sort -z)
+  ((${#artifacts[@]} > 0)) || { echo "no image artifacts available for checksum" >&2; exit 1; }
+  sha256sum -- "${artifacts[@]}" > SHA256SUMS
+  sha256sum --check SHA256SUMS
 )
 printf 'Image artifacts written to %s\n' "$IMAGE_DIR/dist"

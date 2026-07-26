@@ -4,6 +4,12 @@ set -euo pipefail
 
 APP=/opt/trashcan-robot/donkeycar
 VENV="$APP/.venv"
+SERVICE_SOURCE="$APP/systemd/trashcan-donkeycar.service"
+SERVICE_TARGET=/etc/systemd/system/trashcan-donkeycar.service
+MARKER=/etc/trashcan-robot-image-validated
+BUILD_INFO=/etc/trashcan-robot-build-info
+
+rm -f "$MARKER" "$BUILD_INFO"
 
 architecture="$(dpkg --print-architecture)"
 if [[ "$architecture" != "arm64" ]]; then
@@ -55,18 +61,28 @@ PY
 
 python3 -m venv --system-site-packages "$VENV"
 "$VENV/bin/python" -m pip install --upgrade 'pip<25' wheel setuptools
-"$VENV/bin/pip" install --only-binary=:all: -r "$APP/requirements.txt"
+# Prefer wheels where available, but allow source builds. RPi.GPIO does not
+# provide a compatible ARM64 wheel for this dependency set.
+"$VENV/bin/python" -m pip install --prefer-binary -r "$APP/requirements.txt"
+"$VENV/bin/python" -m pip check
+printf 'Raspberry Pi image dependency installation passed\n'
 
 install -d -o trashbot -g trashbot -m 0755 "$APP/data/tubs" "$APP/data/logs" "$APP/models"
 chown -R trashbot:trashbot /opt/trashcan-robot
 
-sed -i \
-  -e 's|User=pi|User=trashbot|' \
-  -e 's|Group=pi|Group=trashbot|' \
-  -e 's|SupplementaryGroups=dialout video|SupplementaryGroups=dialout video render gpio i2c input|' \
-  -e 's|/opt/hoverboard-robot/donkeycar|/opt/trashcan-robot/donkeycar|g' \
-  /etc/systemd/system/trashcan-donkeycar.service
+install -d -m 0755 /etc/systemd/system
+install -m 0644 "$SERVICE_SOURCE" "$SERVICE_TARGET"
+cmp -s "$SERVICE_SOURCE" "$SERVICE_TARGET" || {
+  echo "Installed service unit differs from canonical repository unit" >&2
+  exit 1
+}
+"$APP/scripts/validate-service-unit.sh" "$SERVICE_TARGET" trashbot trashbot "$APP"
 systemctl enable trashcan-donkeycar.service
+systemctl is-enabled --quiet trashcan-donkeycar.service || {
+  echo "trashcan-donkeycar.service was not enabled" >&2
+  exit 1
+}
+printf 'Trashcan robot service contract validated\n'
 
 PYTHONPATH="$APP" "$VENV/bin/python" - <<'PY'
 import flask
@@ -83,16 +99,36 @@ print('Raspberry Pi image Python smoke test passed')
 PY
 
 PYTHONPATH="$APP" "$VENV/bin/python" -m pytest -q "$APP/tests"
-systemd-analyze verify /etc/systemd/system/trashcan-donkeycar.service
+printf 'Raspberry Pi image application tests passed\n'
+systemd-analyze verify "$SERVICE_TARGET"
+printf 'Raspberry Pi image systemd verification passed\n'
 
-cat > /etc/trashcan-robot-build-info <<EOF
+bad_owner="$(find /opt/trashcan-robot \( ! -user trashbot -o ! -group trashbot \) -print -quit)"
+if [[ -n "$bad_owner" ]]; then
+  echo "Repository ownership validation failed at $bad_owner" >&2
+  stat -c '%U:%G %n' "$bad_owner" >&2 || true
+  exit 1
+fi
+printf 'Raspberry Pi image repository ownership validated\n'
+
+cat > "$BUILD_INFO" <<EOF_INFO
 architecture=$architecture
 release=$VERSION_CODENAME
 first_user=pi
 first_boot_userconfig=disabled
 ssh=enabled
 cloud_init=disabled
+robot_user=trashbot
+robot_group=trashbot
+robot_working_directory=$APP
 robot_service=enabled
-EOF
+robot_service_contract=validated
+python_smoke=passed
+application_tests=passed
+systemd_verify=passed
+dependency_check=passed
+repository_owner=trashbot:trashbot
+EOF_INFO
 
-touch /etc/trashcan-robot-image-validated
+touch "$MARKER"
+sync

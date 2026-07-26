@@ -1,0 +1,6 @@
+donkeycar>=5.2,<6
+pyserial>=3.5
+PyYAML>=6.0
+psutil>=5.9
+Flask>=3.0
+pytest>=8.0

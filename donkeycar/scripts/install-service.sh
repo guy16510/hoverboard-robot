@@ -19,7 +19,7 @@ sed \
   -e "s|/opt/trashcan-robot/donkeycar|$APP|g" \
   "$SERVICE_SOURCE" | sudo tee "$SERVICE_TARGET" >/dev/null
 
-sudo "$APP/scripts/validate-service-unit.sh" \
+sudo bash "$APP/scripts/validate-service-unit.sh" \
   "$SERVICE_TARGET" "$RUN_USER" "$RUN_GROUP" "$APP"
 sudo systemd-analyze verify "$SERVICE_TARGET"
 sudo systemctl daemon-reload

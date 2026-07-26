@@ -81,12 +81,15 @@ mkdir -p "$IMAGE_DIR/dist"
   sudo bash ./build.sh -c "$IMAGE_DIR/config"
 )
 
-# Independently revalidate the completed custom-stage root filesystem. This is
-# deliberately outside pi-gen's stage runner so a swallowed or skipped chroot
-# failure cannot be mistaken for a valid build.
-stage_root="$(find "$PI_GEN_DIR/work" -type d -path '*/stage-trashcan/rootfs' -print -quit)"
-[[ -n "$stage_root" ]] || {
-  echo "pi-gen completed without a stage-trashcan root filesystem" >&2
+# Independently revalidate the completed custom-stage root filesystem. pi-gen
+# invokes run_sub_stage from an if condition, so Bash errexit is suppressed
+# inside that function and a failed chroot command can otherwise be followed by
+# export. Use the deterministic pi-gen work path, not a recursive find through
+# root-owned directories.
+image_name="$(bash -c 'source "$1"; printf "%s" "$IMG_NAME"' _ "$IMAGE_DIR/config")"
+stage_root="$PI_GEN_DIR/work/$image_name/stage-trashcan/rootfs"
+[[ -d "$stage_root" ]] || {
+  echo "pi-gen completed without the expected stage rootfs: $stage_root" >&2
   exit 1
 }
 sudo env ROOTFS_DIR="$stage_root" \

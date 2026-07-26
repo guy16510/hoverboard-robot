@@ -20,6 +20,10 @@ on:
 permissions:
   contents: read
 
+concurrency:
+  group: raspberry-pi-image-${{ github.ref }}
+  cancel-in-progress: true
+
 jobs:
   build-image:
     runs-on: ubuntu-24.04-arm
@@ -45,27 +49,47 @@ jobs:
             dosfstools e2fsprogs libarchive-tools libcap2-bin grep rsync xz-utils \
             file git curl bc gpg pigz xxd arch-test bmap-tools kmod
 
+      - name: Validate canonical service contract
+        run: |
+          set -euo pipefail
+          bash donkeycar/scripts/validate-service-unit.sh \
+            donkeycar/systemd/trashcan-donkeycar.service \
+            trashbot trashbot /opt/trashcan-robot/donkeycar
+
       - name: Build Bookworm ARM64 robot image
         run: |
           set -euo pipefail
           bash raspberry-pi-image/build-image.sh 2>&1 | tee raspberry-pi-image-build.log
 
-      - name: Verify image artifact and boot invariants
+      - name: Verify exported image and boot invariants
         run: |
           set -euo pipefail
           dist="$GITHUB_WORKSPACE/raspberry-pi-image/dist"
           test -s "$dist/SHA256SUMS"
           test -s "$dist/IMAGE_SOURCE.txt"
 
-          grep -Fxq 'architecture=arm64' "$dist/IMAGE_SOURCE.txt"
-          grep -Fxq 'release=bookworm' "$dist/IMAGE_SOURCE.txt"
-          grep -Fxq 'first_boot_user_rename=disabled' "$dist/IMAGE_SOURCE.txt"
-          grep -Fxq 'ssh=enabled' "$dist/IMAGE_SOURCE.txt"
+          for fact in \
+            'architecture=arm64' \
+            'release=bookworm' \
+            'first_boot_user_rename=disabled' \
+            'ssh=enabled' \
+            'robot_user=trashbot' \
+            'robot_group=trashbot' \
+            'robot_working_directory=/opt/trashcan-robot/donkeycar' \
+            'robot_service_contract=validated'; do
+            grep -Fxq "$fact" "$dist/IMAGE_SOURCE.txt"
+          done
 
           grep -Fq 'TRASHCAN_IMAGE_ARCHITECTURE=arm64' raspberry-pi-image-build.log
           grep -Fq 'TRASHCAN_IMAGE_RELEASE=bookworm' raspberry-pi-image-build.log
           grep -Fq 'TRASHCAN_FIRST_BOOT_USERCONFIG=disabled' raspberry-pi-image-build.log
           grep -Fq 'TRASHCAN_SSH=enabled' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image dependency installation passed' raspberry-pi-image-build.log
+          grep -Fq 'Trashcan robot service contract validated' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image Python smoke test passed' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image application tests passed' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image systemd verification passed' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image repository ownership validated' raspberry-pi-image-build.log
 
           mapfile -d '' images < <(find "$dist" -maxdepth 1 -type f -name '*.img.xz' -print0)
           if (( ${#images[@]} != 1 )); then
@@ -79,6 +103,11 @@ jobs:
             cd "$dist"
             sha256sum --check --strict SHA256SUMS
           )
+
+          # Validate the actual compressed artifact, not only the pi-gen staging
+          # rootfs or systemd syntax. The image is uploaded only after this passes.
+          sudo bash raspberry-pi-image/validate-image.sh "${images[0]}"
+
           file "${images[0]}"
           cat "$dist/IMAGE_SOURCE.txt"
           ls -lh "$dist"

@@ -45,8 +45,8 @@ mkdir -p "$IMAGE_DIR/dist"
   sudo bash ./build.sh -c "$IMAGE_DIR/config"
 )
 
-validated_marker="$(find "$PI_GEN_DIR/work" -path '*/stage-trashcan/rootfs/etc/trashcan-robot-image-validated' -print -quit)"
-[[ -n "$validated_marker" ]] || {
+validated_marker="$PI_GEN_DIR/work/trashcan-robot/stage-trashcan/rootfs/etc/trashcan-robot-image-validated"
+sudo test -f "$validated_marker" || {
   echo "pi-gen exported an image without the required in-image validation marker" >&2
   exit 1
 }

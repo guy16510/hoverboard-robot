@@ -31,10 +31,10 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
           ./tools/bootstrap-tools.sh
 
-      - name: Test Donkeycar integration
+      - name: Test Pi integration boundary
         run: |
           set -euo pipefail
-          .venv/bin/pip install --disable-pip-version-check -r donkeycar/requirements.txt
+          .venv/bin/pip install --disable-pip-version-check -r donkeycar/requirements-test.txt
           PYTHONPATH=donkeycar .venv/bin/python -m pytest -q donkeycar/tests
 
       - name: Test differential drive mixer

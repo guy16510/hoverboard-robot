@@ -16,13 +16,14 @@ def main() -> None:
     parser.add_argument("--model")
     args = parser.parse_args()
 
-    import donkeycar as dk
-    donkey_config = dk.load_config()
     config = load_config(args.config)
     if args.model:
         config.raw["model"]["path"] = args.model
         config.raw["model"]["name"] = os.path.basename(args.model)
-    vehicle = build_vehicle(config, donkey_config, use_mock=args.mock or config.raw["runtime"]["mock_transport"])
+    vehicle = build_vehicle(
+        config,
+        use_mock=args.mock or config.raw["runtime"]["mock_transport"],
+    )
     vehicle.start(rate_hz=config.serial.command_hz, max_loop_count=None)
 
 

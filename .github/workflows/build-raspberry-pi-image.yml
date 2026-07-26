@@ -1,0 +1,80 @@
+name: Build Raspberry Pi image
+
+on:
+  push:
+    branches:
+      - goal/donkeycar-driveway-mvp
+    paths:
+      - 'raspberry-pi-image/**'
+      - 'donkeycar/**'
+      - '.github/workflows/build-raspberry-pi-image.yml'
+  pull_request:
+    branches:
+      - main
+    paths:
+      - 'raspberry-pi-image/**'
+      - 'donkeycar/**'
+      - '.github/workflows/build-raspberry-pi-image.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build-image:
+    runs-on: ubuntu-24.04-arm
+    timeout-minutes: 180
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - name: Reclaim runner disk
+        run: |
+          set -euo pipefail
+          sudo rm -rf /opt/hostedtoolcache /usr/local/lib/android /usr/share/dotnet || true
+          sudo apt-get clean
+          df -h
+
+      - name: Install pi-gen dependencies
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y \
+            coreutils quilt parted qemu-user-binfmt debootstrap zerofree zip \
+            dosfstools e2fsprogs libarchive-tools libcap2-bin grep rsync xz-utils \
+            file git curl bc gpg pigz xxd arch-test bmap-tools kmod
+
+      - name: Build Bookworm ARM64 robot image
+        run: |
+          set -euo pipefail
+          bash raspberry-pi-image/build-image.sh 2>&1 | tee raspberry-pi-image-build.log
+
+      - name: Verify image artifact
+        run: |
+          set -euo pipefail
+          test -s raspberry-pi-image/dist/SHA256SUMS
+          image="$(find raspberry-pi-image/dist -maxdepth 1 -name '*.img.xz' -print -quit)"
+          test -n "$image"
+          xz --test "$image"
+          sha256sum --check raspberry-pi-image/dist/SHA256SUMS
+          ls -lh raspberry-pi-image/dist
+
+      - name: Upload Raspberry Pi image
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: trashcan-robot-rpi5-image-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            raspberry-pi-image/dist/*
+            raspberry-pi-image-build.log
+          if-no-files-found: error
+          retention-days: 14
+
+      - name: Upload build log on failure
+        if: ${{ failure() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: trashcan-robot-rpi5-image-failure-${{ github.event.pull_request.head.sha || github.sha }}
+          path: raspberry-pi-image-build.log
+          if-no-files-found: ignore
+          retention-days: 30

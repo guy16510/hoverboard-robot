@@ -12,7 +12,7 @@ if [[ "$(uname -m)" != "aarch64" ]]; then
   exit 1
 fi
 
-for tool in git rsync sudo sha256sum; do
+for tool in git rsync sudo sha256sum xz; do
   command -v "$tool" >/dev/null || { echo "missing required tool: $tool" >&2; exit 1; }
 done
 
@@ -45,14 +45,21 @@ mkdir -p "$IMAGE_DIR/dist"
   sudo bash ./build.sh -c "$IMAGE_DIR/config"
 )
 
+validated_marker="$(find "$PI_GEN_DIR/work" -path '*/stage-trashcan/rootfs/etc/trashcan-robot-image-validated' -print -quit)"
+[[ -n "$validated_marker" ]] || {
+  echo "pi-gen exported an image without the required in-image validation marker" >&2
+  exit 1
+}
+
 find "$PI_GEN_DIR/deploy" -maxdepth 1 -type f \( \
-  -name 'trashcan-robot*.img.xz' -o \
-  -name 'trashcan-robot*.info' -o \
-  -name 'trashcan-robot*.bmap' \
+  -name '*trashcan-robot*.img.xz' -o \
+  -name '*trashcan-robot*.info' -o \
+  -name '*trashcan-robot*.bmap' \
 \) -exec cp -f {} "$IMAGE_DIR/dist/" \;
 
-image="$(find "$IMAGE_DIR/dist" -maxdepth 1 -name 'trashcan-robot*.img.xz' -print -quit)"
+image="$(find "$IMAGE_DIR/dist" -maxdepth 1 -name '*trashcan-robot*.img.xz' -print -quit)"
 [[ -n "$image" ]] || { echo "pi-gen completed without producing a compressed image" >&2; exit 1; }
+xz --test "$image"
 (
   cd "$IMAGE_DIR/dist"
   sha256sum -- * > SHA256SUMS

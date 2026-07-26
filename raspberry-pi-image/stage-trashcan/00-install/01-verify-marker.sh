@@ -51,7 +51,7 @@ cmp -s "$service_source" "$service_target" || {
   echo "Installed service unit differs from the canonical repository unit" >&2
   exit 1
 }
-"$app/scripts/validate-service-unit.sh" \
+bash "$app/scripts/validate-service-unit.sh" \
   "$service_target" trashbot trashbot /opt/trashcan-robot/donkeycar
 
 [[ -L "$enabled_link" ]] || {

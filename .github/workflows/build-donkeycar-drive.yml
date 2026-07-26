@@ -42,7 +42,11 @@ jobs:
           set -euo pipefail
           export PLATFORMIO_CORE_DIR="$PWD/.platformio"
           export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
-          .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator
+          if ! .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator > esp32-drive-build.log 2>&1; then
+            tail -250 esp32-drive-build.log
+            exit 1
+          fi
+          tail -80 esp32-drive-build.log
 
       - name: Upload production ESP32 firmware
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
@@ -55,4 +59,13 @@ jobs:
             .pio/build/esp32_drive_coordinator/bootloader.bin
             .pio/build/esp32_drive_coordinator/partitions.bin
           if-no-files-found: error
+          retention-days: 30
+
+      - name: Upload build log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: esp32-drive-build-log-${{ github.event.pull_request.head.sha || github.sha }}
+          path: esp32-drive-build.log
+          if-no-files-found: ignore
           retention-days: 30

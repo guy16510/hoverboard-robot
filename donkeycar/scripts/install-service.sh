@@ -14,11 +14,14 @@ RUN_GROUP="$(id -gn "$RUN_USER")"
 }
 
 sed \
-  -e "s|User=pi|User=$RUN_USER|" \
-  -e "s|Group=pi|Group=$RUN_GROUP|" \
-  -e "s|/opt/hoverboard-robot/donkeycar|$APP|g" \
+  -e "s|^User=trashbot$|User=$RUN_USER|" \
+  -e "s|^Group=trashbot$|Group=$RUN_GROUP|" \
+  -e "s|/opt/trashcan-robot/donkeycar|$APP|g" \
   "$SERVICE_SOURCE" | sudo tee "$SERVICE_TARGET" >/dev/null
 
+sudo "$APP/scripts/validate-service-unit.sh" \
+  "$SERVICE_TARGET" "$RUN_USER" "$RUN_GROUP" "$APP"
+sudo systemd-analyze verify "$SERVICE_TARGET"
 sudo systemctl daemon-reload
 sudo systemctl enable trashcan-donkeycar.service
 printf 'Installed %s. Run preflight before starting it.\n' "$SERVICE_TARGET"

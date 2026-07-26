@@ -1,0 +1,68 @@
+name: Build Donkeycar driveway MVP
+
+on:
+  push:
+    branches:
+      - goal/donkeycar-driveway-mvp
+  pull_request:
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  verify:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Bootstrap pinned build tools
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
+          ./tools/bootstrap-tools.sh
+
+      - name: Test Donkeycar integration
+        run: |
+          set -euo pipefail
+          .venv/bin/pip install --disable-pip-version-check -r donkeycar/requirements.txt
+          PYTHONPATH=donkeycar .venv/bin/python -m pytest -q donkeycar/tests
+
+      - name: Test differential drive mixer
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -Wall -Wextra -Werror \
+            -Ifirmware/esp32/control \
+            tests/esp32/test_differential_drive.cpp \
+            firmware/esp32/control/differential_drive_mixer.cpp \
+            -o /tmp/test-differential-drive
+          /tmp/test-differential-drive
+
+      - name: Build production ESP32 drive coordinator
+        run: |
+          set -euo pipefail
+          export PLATFORMIO_CORE_DIR="$PWD/.platformio"
+          export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
+          .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator
+
+      - name: Upload production ESP32 firmware
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: esp32-drive-coordinator-${{ github.event.pull_request.head.sha || github.sha }}
+          path: |
+            .pio/build/esp32_drive_coordinator/firmware.bin
+            .pio/build/esp32_drive_coordinator/firmware.elf
+            .pio/build/esp32_drive_coordinator/firmware.map
+            .pio/build/esp32_drive_coordinator/bootloader.bin
+            .pio/build/esp32_drive_coordinator/partitions.bin
+          if-no-files-found: error
+          retention-days: 30

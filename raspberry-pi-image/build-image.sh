@@ -40,7 +40,10 @@ rsync -a --delete \
 
 rm -rf "$IMAGE_DIR/dist"
 mkdir -p "$IMAGE_DIR/dist"
-sudo bash "$PI_GEN_DIR/build.sh" -c "$IMAGE_DIR/config"
+(
+  cd "$PI_GEN_DIR"
+  sudo bash ./build.sh -c "$IMAGE_DIR/config"
+)
 
 find "$PI_GEN_DIR/deploy" -maxdepth 1 -type f \( \
   -name 'trashcan-robot*.img.xz' -o \

@@ -1,0 +1,20 @@
+[Unit]
+Description=Trashcan Robot Donkeycar Drive Service
+After=network-online.target dev-ttyACM0.device
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=pi
+Group=pi
+SupplementaryGroups=dialout video
+WorkingDirectory=/opt/hoverboard-robot/donkeycar
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/hoverboard-robot/donkeycar/.venv/bin/python /opt/hoverboard-robot/donkeycar/manage.py drive --config /opt/hoverboard-robot/donkeycar/config/robot.yaml
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

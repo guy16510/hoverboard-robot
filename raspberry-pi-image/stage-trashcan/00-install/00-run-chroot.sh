@@ -68,7 +68,6 @@ python3 -m venv --system-site-packages "$VENV"
 printf 'Raspberry Pi image dependency installation passed\n'
 
 install -d -o trashbot -g trashbot -m 0755 "$APP/data/tubs" "$APP/data/logs" "$APP/models"
-chown -R trashbot:trashbot /opt/trashcan-robot
 
 install -d -m 0755 /etc/systemd/system
 install -m 0644 "$SERVICE_SOURCE" "$SERVICE_TARGET"
@@ -84,7 +83,7 @@ systemctl is-enabled --quiet trashcan-donkeycar.service || {
 }
 printf 'Trashcan robot service contract validated\n'
 
-PYTHONPATH="$APP" "$VENV/bin/python" - <<'PY'
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$APP" "$VENV/bin/python" - <<'PY'
 import flask
 import psutil
 import serial
@@ -98,11 +97,14 @@ assert crc16_ccitt_false(b'123456789') == 0x29B1
 print('Raspberry Pi image Python smoke test passed')
 PY
 
-PYTHONPATH="$APP" "$VENV/bin/python" -m pytest -q "$APP/tests"
+PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$APP" "$VENV/bin/python" -m pytest -q -p no:cacheprovider "$APP/tests"
 printf 'Raspberry Pi image application tests passed\n'
 systemd-analyze verify "$SERVICE_TARGET"
 printf 'Raspberry Pi image systemd verification passed\n'
 
+# Python imports and pytest can create cache files even after an earlier chown.
+# Make ownership the final mutation before validating and writing the marker.
+chown -R trashbot:trashbot /opt/trashcan-robot
 bad_owner="$(find /opt/trashcan-robot \( ! -user trashbot -o ! -group trashbot \) -print -quit)"
 if [[ -n "$bad_owner" ]]; then
   echo "Repository ownership validation failed at $bad_owner" >&2

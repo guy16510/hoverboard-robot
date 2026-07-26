@@ -50,11 +50,22 @@ jobs:
           set -euo pipefail
           bash raspberry-pi-image/build-image.sh 2>&1 | tee raspberry-pi-image-build.log
 
-      - name: Verify image artifact
+      - name: Verify image artifact and boot invariants
         run: |
           set -euo pipefail
           dist="$GITHUB_WORKSPACE/raspberry-pi-image/dist"
           test -s "$dist/SHA256SUMS"
+          test -s "$dist/IMAGE_SOURCE.txt"
+
+          grep -Fxq 'architecture=arm64' "$dist/IMAGE_SOURCE.txt"
+          grep -Fxq 'release=bookworm' "$dist/IMAGE_SOURCE.txt"
+          grep -Fxq 'first_boot_user_rename=disabled' "$dist/IMAGE_SOURCE.txt"
+          grep -Fxq 'ssh=enabled' "$dist/IMAGE_SOURCE.txt"
+
+          grep -Fq 'TRASHCAN_IMAGE_ARCHITECTURE=arm64' raspberry-pi-image-build.log
+          grep -Fq 'TRASHCAN_IMAGE_RELEASE=bookworm' raspberry-pi-image-build.log
+          grep -Fq 'TRASHCAN_FIRST_BOOT_USERCONFIG=disabled' raspberry-pi-image-build.log
+          grep -Fq 'TRASHCAN_SSH=enabled' raspberry-pi-image-build.log
 
           mapfile -d '' images < <(find "$dist" -maxdepth 1 -type f -name '*.img.xz' -print0)
           if (( ${#images[@]} != 1 )); then
@@ -69,6 +80,7 @@ jobs:
             sha256sum --check --strict SHA256SUMS
           )
           file "${images[0]}"
+          cat "$dist/IMAGE_SOURCE.txt"
           ls -lh "$dist"
 
       - name: Upload Raspberry Pi image

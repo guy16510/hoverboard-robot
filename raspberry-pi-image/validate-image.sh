@@ -7,7 +7,7 @@ IMAGE="${1:-}"
   exit 2
 }
 
-for tool in xz losetup lsblk mount umount mountpoint chroot awk grep find stat readlink; do
+for tool in xz losetup lsblk mount umount mountpoint chroot awk grep find stat readlink cmp; do
   command -v "$tool" >/dev/null 2>&1 || {
     echo "Missing required image validation tool: $tool" >&2
     exit 1
@@ -32,7 +32,7 @@ cleanup() {
   rm -rf "$work_dir"
   exit "$status"
 }
-trap cleanup EXIT INT TERM
+trap cleanup EXIT
 
 xz --test "$IMAGE"
 xz -dc -- "$IMAGE" > "$raw_image"
@@ -116,7 +116,8 @@ if [[ -n "$bad_owner" ]]; then
   exit 1
 fi
 
-chroot "$root_mount" /usr/bin/env PYTHONPATH="$app" \
+chroot "$root_mount" /usr/bin/env \
+  PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$app" \
   "$app/.venv/bin/python" - <<'PY'
 import flask
 import psutil
@@ -130,7 +131,8 @@ assert cfg.serial.baud == 115200
 assert crc16_ccitt_false(b'123456789') == 0x29B1
 print('Exported image Python smoke test passed')
 PY
-chroot "$root_mount" "$app/.venv/bin/python" -m pip check
+chroot "$root_mount" /usr/bin/env PYTHONDONTWRITEBYTECODE=1 \
+  "$app/.venv/bin/python" -m pip check
 
 if grep -R -Fq '/opt/hoverboard-robot' "$root_mount/etc/systemd/system"; then
   echo "Exported image contains a forbidden legacy service path" >&2

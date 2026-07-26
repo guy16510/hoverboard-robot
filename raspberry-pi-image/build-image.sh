@@ -57,8 +57,8 @@ grep -Fq 'http://deb.debian.org/debian/' "$PI_GEN_DIR/stage0/prerun.sh" || {
 }
 printf 'Using pi-gen %s from %s\n' "$resolved_pi_gen_commit" "$PI_GEN_BRANCH"
 
-# Never reuse a root filesystem or exported image from another architecture or
-# pi-gen revision. This is intentionally a clean production build.
+# Never reuse a root filesystem, validation marker, or exported image from an
+# earlier build. A failed customization must have nothing reusable to export.
 sudo rm -rf "$PI_GEN_DIR/work" "$PI_GEN_DIR/deploy"
 rm -rf "$PI_GEN_DIR/stage-trashcan"
 cp -a "$IMAGE_DIR/stage-trashcan" "$PI_GEN_DIR/stage-trashcan"
@@ -81,9 +81,16 @@ mkdir -p "$IMAGE_DIR/dist"
   sudo bash ./build.sh -c "$IMAGE_DIR/config"
 )
 
-# The in-image marker and build facts are verified inside stage-trashcan
-# immediately after the chroot smoke tests. pi-gen may remove or rotate
-# temporary rootfs directories during export.
+# Independently revalidate the completed custom-stage root filesystem. This is
+# deliberately outside pi-gen's stage runner so a swallowed or skipped chroot
+# failure cannot be mistaken for a valid build.
+stage_root="$(find "$PI_GEN_DIR/work" -type d -path '*/stage-trashcan/rootfs' -print -quit)"
+[[ -n "$stage_root" ]] || {
+  echo "pi-gen completed without a stage-trashcan root filesystem" >&2
+  exit 1
+}
+sudo env ROOTFS_DIR="$stage_root" \
+  bash "$IMAGE_DIR/stage-trashcan/00-install/01-verify-marker.sh"
 
 find "$PI_GEN_DIR/deploy" -maxdepth 1 -type f \( \
   -name '*trashcan-robot*.img.xz' -o \
@@ -95,7 +102,7 @@ image="$(find "$IMAGE_DIR/dist" -maxdepth 1 -name '*trashcan-robot*.img.xz' -pri
 [[ -n "$image" ]] || { echo "pi-gen completed without producing a compressed image" >&2; exit 1; }
 xz --test "$image"
 
-cat > "$IMAGE_DIR/dist/IMAGE_SOURCE.txt" <<EOF
+cat > "$IMAGE_DIR/dist/IMAGE_SOURCE.txt" <<EOF_INFO
 pi_gen_branch=$PI_GEN_BRANCH
 pi_gen_commit=$resolved_pi_gen_commit
 release=bookworm
@@ -103,7 +110,11 @@ architecture=arm64
 first_user=pi
 first_boot_user_rename=disabled
 ssh=enabled
-EOF
+robot_user=trashbot
+robot_group=trashbot
+robot_working_directory=/opt/trashcan-robot/donkeycar
+robot_service_contract=validated
+EOF_INFO
 
 (
   cd "$IMAGE_DIR/dist"

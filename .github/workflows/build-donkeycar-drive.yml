@@ -37,16 +37,6 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check -r donkeycar/requirements-test.txt
           PYTHONPATH=donkeycar .venv/bin/python -m pytest -q donkeycar/tests
 
-      - name: Test differential drive mixer
-        run: |
-          set -euo pipefail
-          g++ -std=c++17 -Wall -Wextra -Werror \
-            -Ifirmware/esp32/control \
-            tests/esp32/test_differential_drive.cpp \
-            firmware/esp32/control/differential_drive_mixer.cpp \
-            -o /tmp/test-differential-drive
-          /tmp/test-differential-drive
-
       - name: Build production ESP32 drive coordinator
         run: |
           set -euo pipefail

@@ -31,6 +31,20 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
           ./tools/bootstrap-tools.sh
 
+      - name: Validate deployment contract
+        run: |
+          set -euo pipefail
+          bash -n donkeycar/scripts/install-pi.sh
+          bash -n donkeycar/scripts/install-service.sh
+          bash -n donkeycar/scripts/validate-service-unit.sh
+          bash -n raspberry-pi-image/build-image.sh
+          bash -n raspberry-pi-image/validate-image.sh
+          find raspberry-pi-image/stage-trashcan -type f -name '*.sh' -print0 | \
+            xargs -0 -n1 bash -n
+          bash donkeycar/scripts/validate-service-unit.sh \
+            donkeycar/systemd/trashcan-donkeycar.service \
+            trashbot trashbot /opt/trashcan-robot/donkeycar
+
       - name: Test Pi integration boundary
         run: |
           set -euo pipefail

@@ -189,3 +189,21 @@ tools/tool-packages/tool-scons/package.json,New GAUSSTOP-specific code
 tools/tool-packages/tool-scons/scons.py,New GAUSSTOP-specific code
 tools/tool-packages/xtensa-package.json,New GAUSSTOP-specific code
 tools/verify-image.sh,New GAUSSTOP-specific code
+donkeycar/requirements.txt,New Raspberry Pi code
+donkeycar/config/robot.yaml,New Raspberry Pi code
+donkeycar/manage.py,New Raspberry Pi code
+donkeycar/README.md,New Raspberry Pi code
+donkeycar/MOCK_VALIDATION.md,New Raspberry Pi code
+donkeycar/scripts/install-pi.sh,New Raspberry Pi code
+donkeycar/trashcan_robot/__init__.py,New Raspberry Pi code
+donkeycar/trashcan_robot/config.py,New Raspberry Pi code
+donkeycar/trashcan_robot/dashboard.py,New Raspberry Pi code
+donkeycar/trashcan_robot/esp32_drive.py,New Raspberry Pi code
+donkeycar/trashcan_robot/logging_part.py,New Raspberry Pi code
+donkeycar/trashcan_robot/pipeline.py,New Raspberry Pi code
+donkeycar/trashcan_robot/protocol.py,New Raspberry Pi code
+donkeycar/trashcan_robot/state.py,New Raspberry Pi code
+donkeycar/trashcan_robot/transport.py,New Raspberry Pi code
+donkeycar/tests/test_esp32_drive.py,New Raspberry Pi code
+donkeycar/tests/test_pipeline.py,New Raspberry Pi code
+donkeycar/tests/test_protocol.py,New Raspberry Pi code

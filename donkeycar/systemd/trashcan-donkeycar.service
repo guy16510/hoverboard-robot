@@ -1,0 +1,20 @@
+[Unit]
+Description=Trashcan Robot Donkeycar Drive Service
+After=network-online.target dev-ttyACM0.device
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=trashbot
+Group=trashbot
+SupplementaryGroups=dialout video render gpio i2c input
+WorkingDirectory=/opt/trashcan-robot/donkeycar
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/trashcan-robot/donkeycar/.venv/bin/python /opt/trashcan-robot/donkeycar/manage.py drive --config /opt/trashcan-robot/donkeycar/config/robot.yaml
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+KillSignal=SIGINT
+
+[Install]
+WantedBy=multi-user.target

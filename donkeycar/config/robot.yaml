@@ -1,0 +1,34 @@
+camera:
+  type: picamera2
+  width: 640
+  height: 480
+  fps: 20
+controller:
+  web_port: 8887
+serial:
+  port: /dev/ttyACM0
+  baud: 115200
+  timeout_seconds: 0.05
+  reconnect_seconds: 1.0
+  lease_ms: 500
+  command_hz: 20
+logging:
+  directory: ./data/logs
+  flush_every: 1
+  telemetry_hz: 5
+data:
+  tubs_directory: ./data/tubs
+dashboard:
+  host: 0.0.0.0
+  port: 8888
+limits:
+  max_linear_velocity: 0.35
+  max_angular_velocity: 0.8
+  throttle_deadband: 0.03
+  steering_deadband: 0.03
+model:
+  path: ./models/driveway.h5
+  name: driveway
+runtime:
+  mock_transport: false
+  stop_inference_on_disconnect: true

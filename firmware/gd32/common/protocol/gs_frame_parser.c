@@ -22,8 +22,8 @@ static void preserve_nested_marker(gs_frame_parser *parser) {
   parser->length = 0;
 }
 
-void gs_frame_parser_init(gs_frame_parser *parser, const uint8_t *marker,
-                          size_t marker_size, size_t frame_size) {
+void gs_frame_parser_init_full(gs_frame_parser *parser, const uint8_t *marker,
+                               size_t marker_size, size_t frame_size) {
   if (parser == NULL) {
     return;
   }
@@ -36,6 +36,15 @@ void gs_frame_parser_init(gs_frame_parser *parser, const uint8_t *marker,
   memcpy(parser->marker, marker, marker_size);
   parser->marker_size = marker_size;
   parser->frame_size = frame_size;
+}
+
+void gs_frame_parser_init_master_feedback(gs_frame_parser *parser,
+                                          uint32_t legacy_timeout_ms) {
+  static const uint8_t marker[] = {GS_FEEDBACK_MARKER_0,
+                                   GS_FEEDBACK_MARKER_1};
+  (void)legacy_timeout_ms;
+  gs_frame_parser_init_full(parser, marker, sizeof(marker),
+                            GS_MASTER_FEEDBACK_SIZE);
 }
 
 static void accept_marker_byte(gs_frame_parser *parser, uint8_t byte,
@@ -60,8 +69,8 @@ static void accept_marker_byte(gs_frame_parser *parser, uint8_t byte,
 }
 
 gs_parse_result gs_frame_parser_feed(gs_frame_parser *parser, uint8_t byte,
-                                     uint32_t now_ms,
-                                     uint8_t out[GS_MAX_FRAME_SIZE]) {
+                                      uint32_t now_ms,
+                                      uint8_t out[GS_MAX_FRAME_SIZE]) {
   if (parser == NULL || parser->frame_size == 0u) {
     return GS_PARSE_NONE;
   }

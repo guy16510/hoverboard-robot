@@ -14,6 +14,7 @@ enum {
   GS_REMOTE_FEEDBACK_FALLBACK_MS = 60,
   GS_REMOTE_FEEDBACK_AFTER_SLAVE_MS = 2,
   GS_REMOTE_FEEDBACK_RETRY_MS = 10,
+  GS_REMOTE_FEEDBACK_PERIOD_MS = 100,
 };
 
 static gs_master_coordinator master;
@@ -24,6 +25,7 @@ static gs_frame_parser slave_parser;
 static bool feedback_pending;
 static uint16_t feedback_sequence;
 static uint32_t feedback_due_ms;
+static uint32_t next_periodic_feedback_ms;
 
 static void calibrate_protection(void) {
   for (uint8_t sample = 0; sample < GS_ADC_CALIBRATION_SAMPLES; ++sample) {
@@ -240,6 +242,7 @@ int main(void) {
   gs_board_uart_init(GS_UART_REMOTE, true);
   gs_board_watchdog_start();
   uint32_t next_link_ms = 0;
+  next_periodic_feedback_ms = gs_board_millis();
   for (;;) {
     service_esp_rx();
     service_slave_rx();
@@ -255,14 +258,21 @@ int main(void) {
         force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
       }
     }
-    if (feedback_pending && (int32_t)(now - feedback_due_ms) >= 0) {
+    const bool acknowledged_feedback_due =
+        feedback_pending && (int32_t)(now - feedback_due_ms) >= 0;
+    const bool periodic_feedback_due =
+        (int32_t)(now - next_periodic_feedback_ms) >= 0;
+    if (acknowledged_feedback_due || periodic_feedback_due) {
       uint8_t frame[GS_MASTER_FEEDBACK_SIZE];
       if (!gs_master_make_feedback(&master, frame, now)) {
         feedback_pending = false;
+        next_periodic_feedback_ms = now + GS_REMOTE_FEEDBACK_PERIOD_MS;
       } else if (gs_board_uart_write(GS_UART_REMOTE, frame, sizeof(frame))) {
         feedback_pending = false;
+        next_periodic_feedback_ms = now + GS_REMOTE_FEEDBACK_PERIOD_MS;
       } else {
         feedback_due_ms = now + GS_REMOTE_FEEDBACK_RETRY_MS;
+        next_periodic_feedback_ms = now + GS_REMOTE_FEEDBACK_RETRY_MS;
       }
     }
     gs_board_watchdog_reload();

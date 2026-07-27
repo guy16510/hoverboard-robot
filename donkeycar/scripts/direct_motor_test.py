@@ -38,7 +38,7 @@ def encode_direct(
     lease_id: int,
     lifetime_ms: int,
 ) -> bytes:
-    if max(abs(left), abs(right)) > 50:
+    if max(abs(left), abs(right)) > 100:
         raise ValueError("direct motor command exceeds firmware limit")
     return struct.pack(
         "<hhIH",

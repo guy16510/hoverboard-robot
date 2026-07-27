@@ -5,6 +5,6 @@
 
 namespace gs::balance {
 
-constexpr int16_t kMaximumTransportTestCommand = 50;
+constexpr int16_t kMaximumTransportTestCommand = 100;
 
 } // namespace gs::balance

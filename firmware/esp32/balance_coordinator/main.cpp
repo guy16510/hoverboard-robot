@@ -758,10 +758,16 @@ SafetySnapshot safetySnapshot(uint64_t now_us, const PitchEstimate &pitch) {
       imu_started && !imu.timedOut(now_us) &&
       (!diagnostics.calibration_complete || pitch.valid);
   safety.calibrated = diagnostics.calibration_complete;
+#if GS_STAGE5_TRANSPORT_ONLY
+  // Direct transport validation is not a balance-mode test. The chassis may
+  // be supported at an arbitrary angle while its wheels are lifted.
+  safety.approximately_upright = true;
+#else
   safety.approximately_upright =
       std::fabs(balanceFramePitchDeg(pitch.filtered_pitch_deg,
                                      balance_config)) <=
       user_config::kArmingToleranceDeg;
+#endif
   safety.motor_feedback_healthy = feedbackFresh(now_us) && !feedbackFaulted();
   safety.motor_transport_healthy =
       command_transport_ready && !motor_transport_fault;
@@ -857,7 +863,12 @@ void runControlLoop(uint64_t scheduled_us) {
   SafetySnapshot safety = safetySnapshot(started_us, pitch);
   latest_safety = safety;
   state_machine.update(
-      safety, balanceFramePitchDeg(pitch.filtered_pitch_deg, balance_config),
+      safety,
+#if GS_STAGE5_TRANSPORT_ONLY
+      0.0f,
+#else
+      balanceFramePitchDeg(pitch.filtered_pitch_deg, balance_config),
+#endif
       started_us);
   command_arbiter.setLocalDisarm(digitalRead(kLocalDisarmPin) == LOW);
   const ControlRequest request = command_arbiter.resolve(started_us);

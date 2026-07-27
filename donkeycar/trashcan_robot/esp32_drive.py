@@ -33,6 +33,7 @@ class ESP32Drive:
         self._connection_change = connection_change
         self._last_connect_attempt = 0.0
         self._last_connected = False
+        self._awaiting_neutral = True
         self.status = DriveStatus(False, None, 0.0, 0.0, None)
 
     def run(self, throttle: float | None, steering: float | None) -> tuple[bool, float, float, float | None, str | None]:
@@ -43,8 +44,17 @@ class ESP32Drive:
 
         try:
             self._ensure_connected()
-            latency = self._transport.send_command(linear, angular)
-            self.status = DriveStatus(True, latency, linear, angular, None)
+            if self._awaiting_neutral:
+                latency = self._transport.send_command(0.0, 0.0)
+                fault = None
+                if linear == 0.0 and angular == 0.0:
+                    self._awaiting_neutral = False
+                else:
+                    fault = "waiting for neutral input after ESP32 connection"
+                self.status = DriveStatus(True, latency, 0.0, 0.0, fault)
+            else:
+                latency = self._transport.send_command(linear, angular)
+                self.status = DriveStatus(True, latency, linear, angular, None)
         except Exception as exc:
             self._safe_disconnect()
             linear = 0.0
@@ -66,6 +76,7 @@ class ESP32Drive:
                 self._transport.send_command(0.0, 0.0)
         finally:
             self._transport.disconnect()
+            self._awaiting_neutral = True
 
     def _ensure_connected(self) -> None:
         if self._transport.is_connected():
@@ -75,6 +86,7 @@ class ESP32Drive:
             raise ConnectionError("waiting to retry ESP32 connection")
         self._last_connect_attempt = now
         self._transport.connect()
+        self._awaiting_neutral = True
 
     def _safe_disconnect(self) -> None:
         try:
@@ -83,6 +95,7 @@ class ESP32Drive:
         except Exception:
             pass
         self._transport.disconnect()
+        self._awaiting_neutral = True
 
     def _publish_connection(self, connected: bool) -> None:
         if connected != self._last_connected and self._connection_change is not None:

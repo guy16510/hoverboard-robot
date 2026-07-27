@@ -124,11 +124,28 @@ import psutil
 import serial
 import yaml
 import donkeycar
+from inspect import signature
+from pathlib import Path
+from donkeycar.parts.tub_v2 import TubWriter
 from trashcan_robot.config import load_config
+from trashcan_robot.pipeline import create_tub_writer
 from trashcan_robot.protocol import crc16_ccitt_false
 cfg = load_config('/opt/trashcan-robot/donkeycar/config/robot.yaml')
 assert cfg.serial.baud == 115200
 assert crc16_ccitt_false(b'123456789') == 0x29B1
+assert 'base_path' in signature(TubWriter).parameters
+
+class TubWriterContract:
+    def __init__(self, *, base_path, inputs, types):
+        self.base_path = base_path
+
+writer = create_tub_writer(
+    TubWriterContract,
+    Path('/tmp/tub-contract'),
+    ['cam/image_array'],
+    ['image_array'],
+)
+assert writer.base_path == '/tmp/tub-contract'
 print('Exported image Python smoke test passed')
 PY
 chroot "$root_mount" /usr/bin/env PYTHONDONTWRITEBYTECODE=1 \

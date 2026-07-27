@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
@@ -10,6 +12,25 @@ from .esp32_drive import ESP32Drive
 from .logging_part import JsonRunLogger
 from .state import RobotState
 from .transport import MockMotorTransport, SerialMotorTransport
+
+DRIVE_OUTPUTS = [
+    "esp32/connected",
+    "drive/linear",
+    "drive/angular",
+    "serial/latency_ms",
+    "drive/fault",
+]
+STATE_UPDATE_INPUTS = [
+    "robot/mode",
+    "recording",
+    "angle",
+    "throttle",
+    "esp32/connected",
+    "serial/latency_ms",
+    "drive/fault",
+    "camera/fps",
+    "inference/rate",
+]
 
 
 def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
@@ -31,6 +52,7 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         image_d=3,
     )
     vehicle.add(camera, outputs=["cam/image_array"], threaded=True)
+    vehicle.add(FrequencyMeter(), outputs=["camera/fps"])
 
     controller = LocalWebController(port=config.raw["controller"]["web_port"])
     vehicle.add(
@@ -75,13 +97,7 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     vehicle.add(
         drive,
         inputs=["throttle", "angle"],
-        outputs=[
-            "esp32/connected",
-            "drive/linear",
-            "drive/angular",
-            "serial/latency_ms",
-            "drive/fault",
-        ],
+        outputs=DRIVE_OUTPUTS,
     )
 
     tub_root = Path(config.raw["data"]["tubs_directory"])
@@ -89,7 +105,7 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     tub_path = tub_root / datetime.now(timezone.utc).strftime("tub_%Y%m%dT%H%M%SZ")
     tub_inputs = ["cam/image_array", "user/angle", "user/throttle", "user/mode"]
     tub_types = ["image_array", "float", "float", "str"]
-    tub = TubWriter(path=str(tub_path), inputs=tub_inputs, types=tub_types)
+    tub = create_tub_writer(TubWriter, tub_path, tub_inputs, tub_types)
     vehicle.add(
         tub,
         inputs=tub_inputs,
@@ -97,23 +113,17 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         run_condition="recording",
     )
 
+    logging_cfg = config.raw["logging"]
     logger = JsonRunLogger(
         state,
         transport,
-        config.raw["logging"]["directory"],
+        logging_cfg["directory"],
         model_cfg["name"],
+        telemetry_hz=logging_cfg["telemetry_hz"],
     )
     vehicle.add(
         StateUpdater(state, model_cfg["name"]),
-        inputs=[
-            "robot/mode",
-            "recording",
-            "angle",
-            "throttle",
-            "esp32/connected",
-            "serial/latency_ms",
-            "drive/fault",
-        ],
+        inputs=STATE_UPDATE_INPUTS,
     )
     vehicle.add(logger, inputs=["camera/fps", "inference/rate"], outputs=["log/path"])
 
@@ -124,9 +134,46 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     return vehicle
 
 
+def create_tub_writer(
+    writer_type: Any,
+    tub_path: Path,
+    inputs: list[str],
+    types: list[str],
+) -> Any:
+    return writer_type(
+        base_path=str(tub_path),
+        inputs=inputs,
+        types=types,
+    )
+
+
 class PilotCondition:
     def run(self, mode: str | None, connected: bool | None) -> bool:
         return bool(connected) and (mode or "user") != "user"
+
+
+class FrequencyMeter:
+    def __init__(
+        self,
+        window_seconds: float = 1.0,
+        clock: Callable[[], float] = time.monotonic,
+    ) -> None:
+        self._window_seconds = window_seconds
+        self._clock = clock
+        self._window_started_at = clock()
+        self._count = 0
+        self._frequency = 0.0
+
+    def run(self) -> float:
+        now = self._clock()
+        elapsed = now - self._window_started_at
+        if elapsed < self._window_seconds:
+            self._count += 1
+            return self._frequency
+        self._frequency = self._count / elapsed
+        self._window_started_at = now
+        self._count = 1
+        return self._frequency
 
 
 class ZeroPilot:
@@ -175,6 +222,8 @@ class StateUpdater:
         connected: bool | None,
         latency: float | None,
         fault: str | None,
+        fps: float | None,
+        inference_rate: float | None,
     ) -> None:
         self._state.update(
             mode=mode or "Stopped",
@@ -185,6 +234,8 @@ class StateUpdater:
             serial_latency_ms=latency,
             faults=[fault] if fault else [],
             model_name=self._model_name,
+            fps=float(fps or 0.0),
+            inference_rate=float(inference_rate or 0.0),
         )
 
 

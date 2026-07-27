@@ -72,6 +72,13 @@ class SerialMotorTransport(MotorTransport):
             # acknowledged zero command. Those gates may become healthy after the
             # serial port opens, so retry the idempotent arm request during startup.
             for _ in range(self._ARM_RETRY_COUNT):
+                zero_demand = encode_motion(
+                    0.0,
+                    0.0,
+                    self._lease_id,
+                    self._config.lease_ms,
+                )
+                self._write(SET_VELOCITY_YAW, zero_demand)
                 self._write(ARM, b"")
                 time.sleep(self._ARM_RETRY_INTERVAL_SECONDS)
 

@@ -1,4 +1,91 @@
-from trashcan_robot.pipeline import DriveMode, PilotCondition
+from pathlib import Path
+from typing import Any
+
+import pytest
+
+from trashcan_robot.pipeline import (
+    DRIVE_OUTPUTS,
+    STATE_UPDATE_INPUTS,
+    DriveMode,
+    FrequencyMeter,
+    PilotCondition,
+    StateUpdater,
+    create_tub_writer,
+)
+from trashcan_robot.state import RobotState
+
+
+def test_tub_writer_uses_donkeycar_53_base_path_keyword() -> None:
+    captured: dict[str, Any] = {}
+
+    class FakeTubWriter:
+        def __init__(
+            self,
+            *,
+            base_path: str,
+            inputs: list[str],
+            types: list[str],
+        ) -> None:
+            captured.update(
+                base_path=base_path,
+                inputs=inputs,
+                types=types,
+            )
+
+    inputs = ["cam/image_array", "user/angle"]
+    types = ["image_array", "float"]
+
+    writer = create_tub_writer(FakeTubWriter, Path("/tmp/tub"), inputs, types)
+
+    assert isinstance(writer, FakeTubWriter)
+    assert captured == {
+        "base_path": "/tmp/tub",
+        "inputs": inputs,
+        "types": types,
+    }
+
+
+def test_frequency_meter_reports_completed_one_second_window() -> None:
+    now = [10.0]
+    meter = FrequencyMeter(clock=lambda: now[0])
+
+    for _ in range(20):
+        meter.run()
+        now[0] += 0.05
+
+    assert meter.run() == pytest.approx(20.0)
+
+
+def test_state_updater_publishes_runtime_rates() -> None:
+    state = RobotState()
+    updater = StateUpdater(state, "driveway")
+
+    updater.run(
+        "Manual",
+        False,
+        0.0,
+        0.0,
+        False,
+        None,
+        None,
+        19.8,
+        0.0,
+    )
+
+    snapshot = state.snapshot()
+    assert snapshot["fps"] == 19.8
+    assert snapshot["inference_rate"] == 0.0
+
+
+def test_pipeline_keeps_drive_outputs_separate_from_state_telemetry() -> None:
+    assert DRIVE_OUTPUTS == [
+        "esp32/connected",
+        "drive/linear",
+        "drive/angular",
+        "serial/latency_ms",
+        "drive/fault",
+    ]
+    assert STATE_UPDATE_INPUTS[-2:] == ["camera/fps", "inference/rate"]
 
 
 def test_autonomous_is_blocked_when_esp32_disconnects() -> None:

@@ -146,11 +146,14 @@ bool gs_master_feedback_runtime_healthy(const gs_master_feedback *feedback) {
   }
   const uint8_t required_status = GS_FEEDBACK_PEER_HEALTHY;
   const uint8_t prohibited_status = GS_FEEDBACK_CLEAR_PENDING;
+  const bool master_pa4_bypass =
+      (feedback->status_flags & GS_FEEDBACK_PA4_BYPASS) != 0u;
   const bool master_pa4_safe =
-      (feedback->status_flags &
-       (GS_FEEDBACK_PA4_RAW_HIGH | GS_FEEDBACK_PA4_BYPASS)) != 0u;
+      (feedback->status_flags & GS_FEEDBACK_PA4_RAW_HIGH) != 0u ||
+      master_pa4_bypass;
   const bool slave_pa4_safe =
-      (feedback->motor_status_flags & GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH) != 0u;
+      (feedback->motor_status_flags & GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH) != 0u ||
+      master_pa4_bypass;
   if ((feedback->status_flags & required_status) != required_status ||
       (feedback->status_flags & prohibited_status) != 0u || !master_pa4_safe ||
       !slave_pa4_safe || !hall_valid(feedback->left_hall) ||

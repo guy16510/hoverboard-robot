@@ -50,7 +50,6 @@ bool DriveSafetyGate::requestArm(const DriveSafetyInputs &inputs) {
     return false;
   }
   if (current != 0u) {
-    latched_faults_ |= current;
     armed_ = false;
     return false;
   }
@@ -80,6 +79,9 @@ void DriveSafetyGate::clearRecoverableFaults(const DriveSafetyInputs &inputs) {
 }
 
 void DriveSafetyGate::evaluate(const DriveSafetyInputs &inputs) {
+  if (!armed_) {
+    return;
+  }
   const uint32_t current = currentFaults(inputs, false);
   if (current != 0u) {
     latched_faults_ |= current;

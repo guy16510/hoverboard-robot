@@ -16,15 +16,18 @@ from .config import SerialConfig
 from .protocol import (
     ACK,
     ARM,
+    CAPABILITIES,
     CLEAR_FAULT,
     DISARM,
     DRIVE_MODE,
     ERROR,
     HELLO,
+    MAX_PAYLOAD,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
     STATUS,
     STOP,
+    VERSION,
     Frame,
     FrameDecoder,
     decode_message,
@@ -57,6 +60,7 @@ class SerialMotorTransport(MotorTransport):
     _STARTUP_RETRY_COUNT = 80
     _STARTUP_RETRY_INTERVAL_SECONDS = 0.05
     _PREARM_HEALTH_FLAGS = 0x6D
+    _POSTARM_HEALTH_FLAGS = 0x7D
     _RENEWAL_FRESHNESS_FRACTION = 0.5
 
     def __init__(
@@ -121,7 +125,11 @@ class SerialMotorTransport(MotorTransport):
             self._session_valid = False
             try:
                 self._serial.reset_input_buffer()
-                self._write(HELLO, b"")
+                hello_sequence = self._write(HELLO, b"")
+                capabilities = self._wait_for_message(hello_sequence, CAPABILITIES)
+                if capabilities is None or not self._capabilities_compatible(capabilities):
+                    raise ConnectionError("ESP32 firmware capabilities are incompatible")
+
                 mode_sequence = self._write(
                     SET_OPERATING_MODE, bytes((DRIVE_MODE,))
                 )
@@ -135,6 +143,7 @@ class SerialMotorTransport(MotorTransport):
                 clear_sequence = self._write(CLEAR_FAULT, b"")
                 if not self._wait_for_ack(clear_sequence, CLEAR_FAULT):
                     raise ConnectionError("ESP32 rejected controller fault clear")
+
                 ready = False
                 for _ in range(self._STARTUP_RETRY_COUNT):
                     zero_sequence = self._write(
@@ -155,6 +164,7 @@ class SerialMotorTransport(MotorTransport):
                     raise ConnectionError(
                         "ESP32 did not acknowledge an exact healthy zero session"
                     )
+
                 zero_sequence = self._write(
                     SET_VELOCITY_YAW, self._zero_payload()
                 )
@@ -165,6 +175,28 @@ class SerialMotorTransport(MotorTransport):
                     raise ConnectionError(
                         "ESP32 rejected ARM after healthy zero acknowledgment"
                     )
+
+                armed = False
+                for _ in range(self._STARTUP_RETRY_COUNT):
+                    zero_sequence = self._write(
+                        SET_VELOCITY_YAW, self._zero_payload()
+                    )
+                    if not self._wait_for_ack(
+                        zero_sequence, SET_VELOCITY_YAW
+                    ):
+                        self._sleep(self._STARTUP_RETRY_INTERVAL_SECONDS)
+                        continue
+                    status_sequence = self._write(STATUS, b"")
+                    status = self._wait_for_status(status_sequence)
+                    if status is not None and self._postarm_ready(status):
+                        armed = True
+                        break
+                    self._sleep(self._STARTUP_RETRY_INTERVAL_SECONDS)
+                if not armed:
+                    raise ConnectionError(
+                        "ESP32 acknowledged ARM but did not remain safely armed at zero"
+                    )
+
                 self._session_valid = True
                 now = self._clock()
                 self._latest_motion = (0.0, 0.0)
@@ -172,6 +204,7 @@ class SerialMotorTransport(MotorTransport):
                 self._last_motion_write_at = now
                 start_renewer = self._renew_commands
             except Exception:
+                self._send_safe_shutdown_sequence(wait_for_ack=False)
                 self._close_endpoint()
                 raise
         if start_renewer:
@@ -185,15 +218,7 @@ class SerialMotorTransport(MotorTransport):
         with self._lock:
             if self._serial is None:
                 return
-            for message_type, payload in (
-                (SET_VELOCITY_YAW, self._zero_payload()),
-                (STOP, b""),
-                (DISARM, b""),
-            ):
-                try:
-                    self._write(message_type, payload)
-                except Exception:
-                    pass
+            self._send_safe_shutdown_sequence(wait_for_ack=True)
             self._close_endpoint()
 
     def send_command(self, linear_velocity: float, angular_velocity: float) -> float:
@@ -220,23 +245,28 @@ class SerialMotorTransport(MotorTransport):
             self._pending_telemetry.clear()
             if not self.is_connected() or self._serial is None:
                 return frames
-            waiting = int(getattr(self._serial, "in_waiting", 0))
-            if waiting:
-                received = self._decoder.feed(self._serial.read(waiting))
-                frames.extend(received)
-                decoded = [decode_message(frame) for frame in received]
-                if any(frame.message_type == ERROR for frame in received) or any(
-                    (
-                        message.get("name") == "status"
-                        and int(message.get("faults", 0)) != 0
-                    )
-                    or (
-                        message.get("name") == "drive"
-                        and int(message.get("safety_faults", 0)) != 0
-                    )
-                    for message in decoded
-                ):
-                    self._session_valid = False
+            try:
+                received = self._read_available_frames()
+            except ConnectionError:
+                self._send_safe_shutdown_sequence(wait_for_ack=False)
+                self._close_endpoint()
+                return frames
+            frames.extend(received)
+            decoded = [decode_message(frame) for frame in received]
+            unsafe = any(frame.message_type == ERROR for frame in received) or any(
+                (
+                    message.get("name") == "status"
+                    and int(message.get("faults", 0)) != 0
+                )
+                or (
+                    message.get("name") == "drive"
+                    and int(message.get("safety_faults", 0)) != 0
+                )
+                for message in decoded
+            )
+            if unsafe:
+                self._send_safe_shutdown_sequence(wait_for_ack=False)
+                self._close_endpoint()
             return frames
 
     def is_connected(self) -> bool:
@@ -315,51 +345,104 @@ class SerialMotorTransport(MotorTransport):
         self._sequence = (sequence + 1) & 0xFFFF
         return sequence
 
-    def _wait_for_ack(self, sequence: int, request_type: int) -> bool:
+    def _read_available_frames(self) -> list[Frame]:
         if self._serial is None:
-            return False
+            return []
+        waiting = int(getattr(self._serial, "in_waiting", 0))
+        if waiting <= 0:
+            return []
+        crc_before = self._decoder.crc_errors
+        malformed_before = self._decoder.malformed_frames
+        frames = self._decoder.feed(self._serial.read(waiting))
+        if (
+            self._decoder.crc_errors != crc_before
+            or self._decoder.malformed_frames != malformed_before
+        ):
+            raise ConnectionError("corrupted ESP32 telemetry frame")
+        return frames
+
+    def _wait_for_ack(self, sequence: int, request_type: int) -> bool:
         deadline = self._clock() + self._config.timeout_seconds
         while self._clock() <= deadline:
-            waiting = int(getattr(self._serial, "in_waiting", 0))
-            if waiting:
-                for frame in self._decoder.feed(self._serial.read(waiting)):
-                    decoded = decode_message(frame)
-                    if frame.sequence == sequence and frame.message_type == ACK:
-                        if decoded.get("request_type") == request_type and decoded.get("status") == 0:
-                            return True
-                    if frame.sequence == sequence and frame.message_type == ERROR:
-                        return False
-                    self._pending_telemetry.append(frame)
+            for frame in self._read_available_frames():
+                decoded = decode_message(frame)
+                if frame.sequence == sequence and frame.message_type == ACK:
+                    if decoded.get("request_type") == request_type and decoded.get("status") == 0:
+                        return True
+                if frame.sequence == sequence and frame.message_type == ERROR:
+                    return False
+                self._pending_telemetry.append(frame)
             self._sleep(min(0.001, self._config.timeout_seconds))
         return False
 
-    def _wait_for_status(self, sequence: int) -> dict[str, Any] | None:
-        if self._serial is None:
-            return None
+    def _wait_for_message(
+        self, sequence: int, message_type: int
+    ) -> dict[str, Any] | None:
         deadline = self._clock() + self._config.timeout_seconds
         while self._clock() <= deadline:
-            waiting = int(getattr(self._serial, "in_waiting", 0))
-            if waiting:
-                for frame in self._decoder.feed(self._serial.read(waiting)):
-                    decoded = decode_message(frame)
-                    if frame.sequence == sequence and frame.message_type == STATUS:
-                        return decoded
-                    if frame.sequence == sequence and frame.message_type == ERROR:
-                        return None
-                    self._pending_telemetry.append(frame)
+            for frame in self._read_available_frames():
+                decoded = decode_message(frame)
+                if frame.sequence == sequence and frame.message_type == message_type:
+                    return decoded
+                if frame.sequence == sequence and frame.message_type == ERROR:
+                    return None
+                self._pending_telemetry.append(frame)
             self._sleep(min(0.001, self._config.timeout_seconds))
         return None
+
+    def _wait_for_status(self, sequence: int) -> dict[str, Any] | None:
+        return self._wait_for_message(sequence, STATUS)
+
+    @staticmethod
+    def _capabilities_compatible(capabilities: dict[str, Any]) -> bool:
+        return (
+            capabilities.get("name") == "capabilities"
+            and capabilities.get("protocol_version") == VERSION
+            and capabilities.get("dry_run") is False
+            and int(capabilities.get("supported_modes", 0)) & (1 << DRIVE_MODE)
+            and int(capabilities.get("maximum_payload", 0)) >= min(MAX_PAYLOAD, 10)
+            and int(capabilities.get("control_rate_hz", 0)) > 0
+            and int(capabilities.get("motor_rate_hz", 0)) > 0
+        )
 
     @classmethod
     def _prearm_ready(cls, status: dict[str, Any]) -> bool:
         health = int(status.get("health_flags", 0))
         return (
-            status.get("operating_mode") == DRIVE_MODE
+            status.get("state") == 2
+            and status.get("operating_mode") == DRIVE_MODE
             and status.get("active_source") == 2
             and health & cls._PREARM_HEALTH_FLAGS
             == cls._PREARM_HEALTH_FLAGS
             and status.get("faults") == 0
         )
+
+    @classmethod
+    def _postarm_ready(cls, status: dict[str, Any]) -> bool:
+        health = int(status.get("health_flags", 0))
+        return (
+            status.get("state") == 4
+            and status.get("operating_mode") == DRIVE_MODE
+            and status.get("active_source") == 2
+            and health & cls._POSTARM_HEALTH_FLAGS
+            == cls._POSTARM_HEALTH_FLAGS
+            and status.get("faults") == 0
+        )
+
+    def _send_safe_shutdown_sequence(self, *, wait_for_ack: bool) -> None:
+        if self._serial is None:
+            return
+        for message_type, payload in (
+            (SET_VELOCITY_YAW, self._zero_payload()),
+            (STOP, b""),
+            (DISARM, b""),
+        ):
+            try:
+                sequence = self._write(message_type, payload)
+                if wait_for_ack:
+                    self._wait_for_ack(sequence, message_type)
+            except Exception:
+                pass
 
     def _close_endpoint(self) -> None:
         endpoint = self._serial

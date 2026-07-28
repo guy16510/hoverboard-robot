@@ -38,8 +38,14 @@ int main() {
   establishing.exact_zero_acknowledged = false;
   assert(gate.zeroEstablishmentAllowed(establishing));
 
+  // STOP/DISARM intentionally releases command ownership. A neutral, connected
+  // controller must still be able to send the exact-zero READY handshake or the
+  // system deadlocks forever in DISABLED with health 0x45.
   establishing.lease_active = false;
+  assert(gate.zeroEstablishmentAllowed(establishing));
+  establishing.serial_connected = false;
   assert(!gate.zeroEstablishmentAllowed(establishing));
+
   establishing = healthy();
   establishing.feedback_runtime_healthy = false;
   establishing.exact_zero_acknowledged = false;

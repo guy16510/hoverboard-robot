@@ -38,7 +38,7 @@ mkdir -p "$build_dir"
   -Ifirmware/gd32/common/control \
   -Ifirmware/gd32/common/safety \
   -Ifirmware/gd32/common/coordination \
-  tests/native/test_startup_zero_preemption.c \
+  tests/regression/test_startup_zero_preemption.c \
   firmware/gd32/common/protocol/gs_protocol.c \
   firmware/gd32/common/control/gs_wheel_mix.c \
   firmware/gd32/common/coordination/gs_master.c \

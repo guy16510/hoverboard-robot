@@ -4,54 +4,38 @@
 
 This branch completes and validates the Raspberry Pi web controller to Donkeycar pipeline to USB serial to ESP32 manual-drive path without connecting to a Raspberry Pi, ESP32, GD32 controller, MPU6050, camera, motor, or robot.
 
-The prior user-provided hardware baseline remains the only physical evidence: `esp32_stage5_transport` moved both motors at direct left/right output `250`, both Hall odometers changed, and CRC errors and acknowledgment timeouts remained zero. Everything added and reported below is simulation, native-test, static-validation, or build evidence.
+The user-provided hardware baseline remains the only physical evidence: `esp32_stage5_transport` moved both motors at direct left/right output `250`, both Hall odometers changed, and CRC errors and acknowledgment timeouts remained zero. Everything below is simulation, native-test, static-validation, build, or image-artifact evidence.
 
 ## Source and architecture changes
 
-- Reworked `esp32_drive_coordinator` around the proven Stage 5 GD32 transport primitives:
-  - RMT pulse command transport and timing;
-  - production GS frame parser and feedback decoder;
-  - command sequencer with exact ESP32, MASTER-forwarded, and SLAVE-applied acknowledgments;
-  - feedback freshness, controller runtime-health, fault, CRC, timeout, and applied-output handling;
-  - zero and bridge-disable behavior when output is not permitted.
-- Kept the Raspberry Pi protocol at USB serial `115200`, operating mode `2`, with leased linear-velocity and yaw commands.
-- Added a production differential-drive mixer with proportional saturation, a hard `-250..250` ceiling, conservative `500 units/second` slew limiting, and fail-closed handling for non-finite or invalid configuration.
-- Added a portable drive safety state machine requiring:
-  - mode `2`;
-  - neutral input after every connection or mode change;
-  - fresh and runtime-healthy feedback;
-  - exact acknowledged zero applied output;
-  - zero MASTER and SLAVE faults;
-  - healthy MPU samples and safe orientation;
-  - explicit ARM;
-  - no latched safety fault.
-- Kept the MPU6050 only for pitch, roll, missing-sample, invalid-value, and timeout shutdown. No balancing logic was added.
-- Added drive telemetry for requested velocity/yaw, mixed output, slew-limited command, applied output, source, mode, ARM state, safety faults, feedback health, CRC errors, acknowledgment timeouts, and odometry.
-- Changed production Raspberry Pi serial configuration to the known Linux by-id candidate:
-  `/dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0`
-  with `TRASHCAN_SERIAL_PORT` as an override.
-- Removed the systemd unit dependency on `dev-ttyACM0.device`; the application starts without the ESP32 and retries when the configured path appears.
-- Explicitly bound the Donkeycar web controller to `0.0.0.0:8887` and the dashboard to `0.0.0.0:8888`.
-- Updated shutdown behavior so the Python and Node clients independently attempt zero demand, STOP, and DISARM before closing.
-- Decoded ESP32 telemetry into shared robot state so the dashboard API receives the real production protocol fields.
+- Reworked `esp32_drive_coordinator` around the proven Stage 5 GD32 transport primitives: RMT timing, GS feedback parsing, exact ESP32/MASTER/SLAVE acknowledgments, feedback freshness, controller faults, CRC accounting, acknowledgment timeouts, applied-output tracking, zero output, and bridge disable.
+- Kept the Pi protocol at USB serial `115200`, operating mode `2`, with leased linear-velocity and yaw commands.
+- Added proportional differential-drive mixing, a hard `-250..250` limit, conservative `500 units/second` slew limiting, and fail-closed handling for invalid values.
+- Added a safety state machine requiring mode `2`, neutral input, fresh healthy feedback, exact acknowledged zero output, zero MASTER and SLAVE faults, healthy MPU samples, safe orientation, explicit ARM, and no latched safety fault.
+- Kept the MPU6050 only for tilt, rollover, invalid/missing sample, and timeout shutdown. No balancing logic was added.
+- Preserved telemetry for requested velocity/yaw, mixed output, slew-limited output, applied output, command source, mode, ARM state, faults, CRC errors, acknowledgment timeouts, feedback health, and odometry.
+- Changed production serial configuration to a Linux `/dev/serial/by-id/...` candidate with `TRASHCAN_SERIAL_PORT` override.
+- Removed the systemd dependency on `dev-ttyACM0.device`; the application starts without the ESP32 and reconnects later.
+- Explicitly bound the web controller to `0.0.0.0:8887` and dashboard to `0.0.0.0:8888`.
+- Updated Python and Node shutdown paths to attempt zero demand, STOP, and DISARM independently.
+- Added Node.js and npm to both the immutable Raspberry Pi image and standalone Pi installer.
+- Required Node.js 18 or newer, ran a production-protocol smoke test, and ran the real Node client tests inside the ARM64 Bookworm image chroot.
+- Aligned the Node direct-transport ceiling with the proven firmware ceiling: `250` is accepted and `251` is rejected.
 
 ## Simulation components
 
-- `SimulatedEsp32Serial`, a pyserial-compatible endpoint that parses and emits the production binary Raspberry Pi protocol.
+- `SimulatedEsp32Serial`, a pyserial-compatible endpoint speaking the production binary Pi protocol.
 - `SimulatedGd32Boundary`, modeling command sequencing, exact/delayed/dropped/stale acknowledgments, malformed feedback, CRC failure, MASTER and SLAVE faults, feedback timeout, applied outputs, odometry, one-motor failure, and left/right disagreement.
-- `SimulatedMpu6050`, modeling level operation, pitch, roll, missing samples, invalid values, and sensor timeout.
+- `SimulatedMpu6050`, modeling healthy orientation, excessive pitch/roll, missing samples, invalid values, and timeout.
 - `FakeClock` and deterministic scheduling for leases, feedback age, acknowledgment deadlines, telemetry cadence, reconnects, and slew limiting.
-- `SimulatedSerialFactory`, modeling service startup with no ESP32, later device appearance, USB disconnect, and reconnect.
-- End-to-end simulated coverage through web input, Donkeycar `DriveMode`, `ESP32Drive`, Python serial transport, simulated ESP32/GD32/MPU, telemetry decoding, logging, shared state, and dashboard API.
+- `SimulatedSerialFactory`, modeling startup without an ESP32, later device appearance, disconnect, and reconnect.
+- End-to-end coverage through web input, Donkeycar `DriveMode`, `ESP32Drive`, Python serial transport, simulated ESP32/GD32/MPU, telemetry decoding, shared state, logging, and dashboard API.
 
-## Commands executed in GitHub Actions
+## Commands run
 
 ```bash
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=donkeycar \
   .venv/bin/python -m pytest -vv --tb=short donkeycar/tests
-
-PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=donkeycar \
-  .venv/bin/python -m compileall -q donkeycar/trashcan_robot donkeycar/manage.py
 
 node --test tools/pi-client/test/*.test.mjs
 
@@ -74,118 +58,92 @@ g++ -std=c++17 -Wall -Wextra -Werror \
 ./tools/test-esp32-balance.sh
 .venv/bin/pio run -e native_tests
 .pio/build/native_tests/program
-
 .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator
 
-bash -n donkeycar/scripts/install-pi.sh
-bash -n donkeycar/scripts/install-service.sh
-bash -n donkeycar/scripts/validate-service-unit.sh
 bash donkeycar/scripts/validate-service-unit.sh \
   donkeycar/systemd/trashcan-donkeycar.service \
   trashbot trashbot /opt/trashcan-robot/donkeycar
+
+bash raspberry-pi-image/build-image.sh
+sudo bash raspberry-pi-image/validate-image.sh \
+  raspberry-pi-image/dist/*.img.xz
 ```
 
-## Test and build results
+The image chroot also ran:
 
-Validation run `30321370983` completed successfully against branch commit `ec1feac188d9f3856b3adc14d165d5cd3ee4e25a` before this report was added.
+```bash
+node --version
+npm --version
+node --input-type=module  # production protocol CRC/frame smoke test
+node --test /opt/trashcan-robot/tools/pi-client/test/*.test.mjs
+```
 
-- Python Donkeycar, protocol, transport, simulation, reconnect, service-start, dashboard, and integration tests: **56 passed**.
-- Node protocol and client tests: **passed**.
-- Deterministic C++ differential-drive mixer tests: **passed**.
-- Deterministic C++ drive safety-gate tests: **passed**.
-- Existing native firmware tests: **passed**.
-- Sanitized native tests: **passed**.
-- Existing ESP32 balance/control native tests: **passed**.
-- PlatformIO `native_tests`: **passed**.
-- `esp32_drive_coordinator` production build: **passed** with `-Wall -Wextra -Werror`.
+## Final test and build results
+
+Final code commit validated by the full suite: `2ffcb11b81f2125da21d50f6cb37fb6f9af4987f`.
+
+- Manual-drive hardware-free workflow `30322745580`: **passed**.
+- Donkeycar driveway workflow `30322745581`: **passed**.
+- SWD/full firmware matrix workflow `30322745578`: **passed**, including clean-build reproducibility.
+- Raspberry Pi image workflow `30322745575`: **passed**.
+- Python Donkeycar, protocol, transport, simulation, reconnect, startup, dashboard, and integration tests: **56 passed**.
+- Node protocol and client tests: **passed** on the host and inside the ARM64 image.
+- Deterministic C++ differential-drive mixer and safety-gate tests: **passed**.
+- Native, sanitized, ESP32 control, and PlatformIO native tests: **passed**.
+- `esp32_drive_coordinator` production build with `-Wall -Wextra -Werror`: **passed**.
   - RAM: `23,500 / 327,680 bytes`, `7.2%`.
   - Flash: `307,717 / 1,310,720 bytes`, `23.5%`.
   - `firmware.bin` SHA-256: `69ec218c004d21834dc4853bcc164215e4ee64ce82a062b34385230700d711b3`.
-  - `firmware.elf` SHA-256: `5aabf5c6817ea4ee33f948052a31c439e2a662ddd1d60370399057f4d67051c4`.
-  - `firmware.map` SHA-256: `470ce2c21b619819814b8e3b76a2e30b7726767fad609452a2eaf9e8c718c28a`.
-- Raspberry Pi scripts and service contract: **passed**.
-- Confirmed no macOS `/dev/cu.*` production path and no systemd serial-device unit dependency.
-- Confirmed configured web bind `0.0.0.0:8887` and dashboard bind `0.0.0.0:8888`.
+- Raspberry Pi service/deployment contract: **passed**.
+- ARM64 Bookworm image build, compressed-image mount, boot-invariant validation, Python smoke test, Node.js 18+ smoke test, npm presence, Node protocol tests, dependency check, ownership check, service enablement, and systemd validation: **passed**.
+- Uploaded image artifact: `trashcan-robot-rpi5-image-2ffcb11b81f2125da21d50f6cb37fb6f9af4987f`.
+  - Artifact ZIP size: `1,065,459,516 bytes`.
+  - Artifact digest: `sha256:42dfbc674489efc860402ef4dcc8632df7acb6b056533b36d16b2bf8775532c7`.
+  - Retention expiration: `2026-08-11`.
 
 No firmware was flashed, no serial device was enumerated, no GPIO or camera was opened, and no real motor command was issued.
 
 ## Simulated success paths
 
-- HELLO, capabilities, mode `2`, neutral zero demand, exact zero acknowledgment, ARM, leased movement, telemetry streaming, STOP, DISARM, and clean shutdown.
-- Straight throttle produced equal left and right output.
-- Steering produced the expected differential output.
-- Combined throttle and steering remained proportionally bounded.
-- Slew limiting prevented instantaneous command jumps.
-- Releasing throttle reached zero.
-- Both motors applied output and advanced odometry in the healthy model.
-- Service startup succeeded with no serial endpoint, then connected safely after the endpoint appeared.
-- Reconnect repeated HELLO, mode `2`, zero demand, neutral gating, and ARM, without restoring a stale nonzero command.
-- Active command telemetry reached the dashboard API through the complete simulated production pipeline.
+- HELLO, capabilities, mode `2`, neutral zero demand, exact zero acknowledgment, ARM, leased movement, telemetry streaming, STOP, DISARM, and shutdown.
+- Straight throttle produced equal outputs; steering produced differential output; combined input remained bounded.
+- Slew limiting prevented instantaneous jumps and throttle release reached zero.
+- Healthy simulated motors applied output and advanced odometry.
+- Startup succeeded with no serial endpoint, then connected safely after the endpoint appeared.
+- Reconnect repeated HELLO, mode selection, zero demand, neutral gating, and ARM without restoring stale nonzero output.
+- Active command telemetry reached the dashboard through the complete production pipeline.
 
 ## Injected fault cases
 
-The test suite injected and verified fail-closed behavior for:
-
-- command lease expiration;
-- USB serial disconnect and reconnect;
-- stale and duplicate Raspberry Pi sequences;
-- malformed commands and bad command CRC;
-- non-neutral startup and reconnect input;
-- delayed, dropped, and stale GD32 acknowledgments;
-- acknowledgment timeout;
-- malformed GD32 feedback and feedback CRC failure;
-- feedback timeout;
-- MASTER fault and SLAVE fault;
-- excessive pitch and roll;
-- missing, invalid, and timed-out MPU samples;
-- local disarm;
-- STOP, DISARM, emergency stop, and process shutdown;
-- one motor failing to respond;
-- left/right odometry disagreement;
-- repeated web commands after a latched ESP32 safety fault.
+The suite verified fail-closed behavior for lease expiration, USB disconnect, stale/duplicate sequences, malformed commands, command CRC failure, non-neutral startup/reconnect, delayed/dropped/stale acknowledgments, acknowledgment timeout, malformed feedback, feedback CRC failure, feedback timeout, MASTER fault, SLAVE fault, excessive pitch/roll, missing/invalid/timed-out MPU samples, local disarm, STOP, DISARM, emergency stop, process shutdown, one-motor failure, odometry disagreement, and repeated web commands after a latched fault.
 
 ## Confirmed safety invariants
 
-Simulation and native tests confirm:
-
 - No nonzero GD32 command is emitted before explicit ARM.
-- ARM is rejected until mode `2`, neutral input, fresh healthy feedback, exact acknowledged zero output, healthy orientation, and zero controller faults are present.
+- ARM is rejected until neutral input, fresh healthy feedback, exact acknowledged zero output, safe orientation, and zero controller faults are present.
 - Every mixed, commanded, and transmitted output remains within `-250..250`.
-- The legacy unvalidated `700` ceiling is rejected.
-- Lease expiration, disconnect, STOP, DISARM, local disarm, unsafe orientation, feedback loss, acknowledgment timeout, controller fault, malformed command, stale sequence, or feedback CRC failure results in zero output and bridge-disable commands.
+- The legacy `700` ceiling and values above `250` are rejected.
+- Every listed shutdown condition results in zero output and bridge-disable commands.
 - Latched faults cannot be bypassed by the web controller and require a healthy explicit clear before re-ARM.
-- Shutdown attempts zero demand, STOP, and DISARM independently, even if an earlier shutdown write fails.
-- Reconnect cannot restore a stale nonzero command.
-- The Raspberry Pi application and systemd service do not require the ESP32 to exist at process startup.
+- Shutdown attempts zero demand, STOP, and DISARM even if an earlier write fails.
+- Reconnect cannot restore stale nonzero demand.
+- The application and systemd service start without an ESP32 present.
 
 ## Physical verification still required
 
-This work does **not** validate:
-
-- motor direction or left/right polarity;
-- steering sign;
-- braking or coast behavior and braking strength;
-- unloaded or loaded acceleration and deceleration;
-- loaded current, torque, thermal behavior, traction, or hill behavior;
-- actual Raspberry Pi USB `/dev/serial/by-id/...` naming;
-- actual MPU mounting orientation, pitch/roll signs, noise, or cutoff behavior;
-- Wi-Fi reachability of ports `8887` and `8888` from another device;
-- physical emergency-stop wiring or effectiveness;
-- real USB disconnect timing;
-- real controller feedback timing under load;
-- one-wheel stall detection or odometry disagreement thresholds as a physical shutdown policy.
+This work does **not** validate motor direction, left/right polarity, steering sign, braking/coast behavior, loaded acceleration, current draw, torque, thermals, traction, hill behavior, actual `/dev/serial/by-id/...` naming, MPU mounting orientation or signs, Wi-Fi reachability, physical emergency-stop behavior, real USB timing, or real controller feedback timing under load.
 
 ## Exact next hardware-validation steps
 
-1. Check out `feature/pi-esp32-wifi-simulated-drive` on the machine used for flashing. Build `esp32_drive_coordinator` again and retain the generated binary hash.
-2. With motor wheels lifted and the robot mechanically secured, flash only `esp32_drive_coordinator`. Do not begin with wheels on the ground.
-3. Connect the ESP32 to the Raspberry Pi by USB. Run `ls -l /dev/serial/by-id/` and compare the actual path with the configured candidate. Set `TRASHCAN_SERIAL_PORT` in `/etc/default/trashcan-donkeycar` if it differs.
-4. Start or restart `trashcan-donkeycar.service`. Verify it remains running before the ESP32 is connected, then reconnect the ESP32 and confirm the application performs HELLO, mode `2`, zero demand, and ARM only after exact zero acknowledgment.
-5. With the robot level, verify actual MPU pitch and roll values, signs, sample age, and mounting orientation. Physically tilt each axis with motors disabled and confirm the configured shutdown direction and threshold before allowing motion.
-6. Confirm MASTER and SLAVE faults are zero, feedback is fresh and runtime-healthy, applied output is exactly zero, CRC errors are zero, and acknowledgment timeouts are zero.
-7. From another device on the intended Wi-Fi network, verify the web controller at port `8887` and dashboard at port `8888`. Confirm telemetry fields update while commands are active.
-8. With wheels still lifted, command straight motion at small bounded values such as `25`, `50`, and `100`. Verify both wheel directions, left/right identity, applied outputs, Hall odometry direction, and no faults or protocol errors.
-9. Test left/right steering separately at small values. Correct motor polarity or mixer sign only from observed physical evidence.
-10. With wheels lifted, test release-to-zero, lease expiration, STOP, DISARM, serial unplug, service restart, excessive tilt, and physical emergency stop. Confirm the bridges disable and wheels stop in every case.
-11. Perform the first ground test unloaded at the lowest useful command in a clear area. Validate steering, stopping distance, coast/brake behavior, and emergency-stop access.
-12. Only after unloaded validation, test the trash-can load at low speed on level ground, then incrementally validate driveway grade, traction, braking, current draw, temperatures, and fault behavior.
+1. Flash the uploaded Raspberry Pi image or install this branch on the Pi. Confirm `node --version`, `npm --version`, and `systemctl status trashcan-donkeycar.service`.
+2. Build `esp32_drive_coordinator` from this branch and retain the generated firmware hash.
+3. Secure the robot with both drive wheels lifted, then flash only `esp32_drive_coordinator`.
+4. Connect the ESP32 by USB, inspect `/dev/serial/by-id/`, and set `TRASHCAN_SERIAL_PORT` if the real path differs.
+5. Verify the service stays running with the ESP32 absent, then reconnect it and confirm HELLO, mode `2`, zero demand, exact zero acknowledgment, neutral gating, and ARM.
+6. With motors disabled, verify actual MPU pitch/roll signs, level offsets, sample age, and shutdown thresholds.
+7. Confirm zero controller faults, fresh feedback, applied output exactly zero, zero CRC errors, and zero acknowledgment timeouts.
+8. From another device, verify `http://<pi>:8887` and `http://<pi>:8888` and confirm telemetry updates.
+9. With wheels lifted, test straight commands `25`, `50`, and `100`, then steering in each direction. Verify wheel identity, direction, applied output, and Hall odometry.
+10. Test release-to-zero, lease expiry, STOP, DISARM, serial unplug, service restart, excessive tilt, and physical emergency stop.
+11. Perform the first unloaded ground test at the lowest useful command in a clear area.
+12. Only after unloaded validation, test the trash-can load on level ground, then incrementally test the driveway grade while monitoring current, temperature, traction, stopping distance, and faults.

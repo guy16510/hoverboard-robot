@@ -103,20 +103,20 @@ test("movement encoder rejects invalid lease identifiers", () => {
   );
 });
 
-test("direct motor encoder enforces the transport-test command ceiling", () => {
+test("direct motor encoder enforces the proven 250 command ceiling", () => {
   const payload = encodeDirectMotor({
-    left: 20,
-    right: -30,
+    left: 250,
+    right: -250,
     leaseId: 0x12345678,
     lifetimeMs: 400,
   });
-  assert.equal(payload.readInt16LE(0), 20);
-  assert.equal(payload.readInt16LE(2), -30);
+  assert.equal(payload.readInt16LE(0), 250);
+  assert.equal(payload.readInt16LE(2), -250);
   assert.equal(payload.readUInt32LE(4), 0x12345678);
   assert.equal(payload.readUInt16LE(8), 400);
   assert.throws(
     () => encodeDirectMotor({
-      left: 101,
+      left: 251,
       right: 0,
       leaseId: 1,
       lifetimeMs: 500,
@@ -410,7 +410,7 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
       { atMs: 1000, command: "mode", value: 3 },
       { atMs: 1500, command: "direct", left: 0, right: 0 },
       { atMs: 2000, command: "arm" },
-      { atMs: 2500, command: "direct", left: 10, right: 0 },
+      { atMs: 2500, command: "direct", left: 250, right: -250 },
       { atMs: 3500, command: "direct", left: 0, right: 0 },
       { atMs: 4000, command: "stop" },
       { atMs: 4500, command: "disarm" },
@@ -418,7 +418,7 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
   }, { stage: "motor-transport", durationSeconds: 10 });
   assert.equal(plan.sendsArm, true);
   assert.equal(plan.sendsMovement, true);
-  assert.equal(plan.maximumAbsoluteCommand, 10);
+  assert.equal(plan.maximumAbsoluteCommand, 250);
   const offset = encodeUprightOffset(-16.3);
   assert.equal(offset[0], 14);
   assert.equal(offset.readInt32LE(1), -16300);
@@ -427,7 +427,7 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
       { atMs: 1000, command: "mode", value: 3 },
       { atMs: 1250, command: "direct", left: 0, right: 0 },
       { atMs: 1500, command: "arm" },
-      { atMs: 2000, command: "direct", left: 101, right: 0 },
+      { atMs: 2000, command: "direct", left: 251, right: 0 },
       { atMs: 3000, command: "direct", left: 0, right: 0 },
       { atMs: 3500, command: "stop" },
       { atMs: 4000, command: "disarm" },

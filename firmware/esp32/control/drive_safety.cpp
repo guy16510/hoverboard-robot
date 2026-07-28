@@ -8,6 +8,7 @@ namespace gs::drive {
 void DriveSafetyGate::onConnectionEstablished() {
   armed_ = false;
   neutral_observed_ = false;
+  latched_faults_ &= ~(kDriveFaultSerialDisconnected | kDriveFaultLeaseExpired);
 }
 
 void DriveSafetyGate::onConnectionLost() {
@@ -24,12 +25,15 @@ void DriveSafetyGate::setOperatingMode(uint8_t mode) {
   operating_mode_ = mode;
   if (mode != kManualDriveMode) {
     latched_faults_ |= kDriveFaultWrongOperatingMode;
+  } else {
+    latched_faults_ &= ~kDriveFaultWrongOperatingMode;
   }
 }
 
 void DriveSafetyGate::observeDemand(float linear_velocity, float yaw_rate) {
   if (nearZero(linear_velocity) && nearZero(yaw_rate)) {
     neutral_observed_ = true;
+    latched_faults_ &= ~kDriveFaultNonNeutralArm;
   }
 }
 
@@ -50,10 +54,16 @@ bool DriveSafetyGate::requestArm(const DriveSafetyInputs &inputs) {
     armed_ = false;
     return false;
   }
-  armed_ = true;
   latched_faults_ &= ~(kDriveFaultNonNeutralArm |
                        kDriveFaultWrongOperatingMode |
-                       kDriveFaultZeroNotAcknowledged);
+                       kDriveFaultZeroNotAcknowledged |
+                       kDriveFaultLeaseExpired |
+                       kDriveFaultSerialDisconnected);
+  if (latched_faults_ != 0u) {
+    armed_ = false;
+    return false;
+  }
+  armed_ = true;
   return true;
 }
 
@@ -90,7 +100,8 @@ uint8_t DriveSafetyGate::operatingMode() const { return operating_mode_; }
 uint32_t DriveSafetyGate::faults() const { return latched_faults_; }
 
 bool DriveSafetyGate::outputEnabled(const DriveSafetyInputs &inputs) const {
-  return armed_ && operating_mode_ == kManualDriveMode &&
+  return armed_ && latched_faults_ == 0u &&
+         operating_mode_ == kManualDriveMode &&
          currentFaults(inputs, false) == 0u && inputs.lease_active;
 }
 

@@ -3,14 +3,20 @@
 
 namespace gs::drive {
 
+constexpr float kDriveOutputLimit = 250.0f;
+
 struct DifferentialDriveConfig {
   float linear_gain = 650.0f;
   float angular_gain = 350.0f;
-  float maximum_command = 700.0f;
-  float slew_per_second = 900.0f;
+  float maximum_command = kDriveOutputLimit;
+  float slew_per_second = 500.0f;
 };
 
 struct DifferentialDriveOutput {
+  float requested_linear = 0.0f;
+  float requested_yaw = 0.0f;
+  float target_left = 0.0f;
+  float target_right = 0.0f;
   float left = 0.0f;
   float right = 0.0f;
   bool valid = true;

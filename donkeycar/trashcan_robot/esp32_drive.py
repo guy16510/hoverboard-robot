@@ -91,6 +91,10 @@ class ESP32Drive:
         if self._transport.is_connected():
             return
         now = self._clock()
+        if self._last_connected:
+            self._last_connect_attempt = now
+            self._awaiting_neutral = True
+            raise ConnectionError("ESP32 serial transport disconnected; waiting to reconnect")
         if now - self._last_connect_attempt < self._reconnect_seconds:
             raise ConnectionError("waiting to retry ESP32 connection")
         self._last_connect_attempt = now

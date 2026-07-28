@@ -303,8 +303,9 @@ void tripSafety(uint32_t reason) {
 void serviceImu(uint64_t now_us) {
   Wire.beginTransmission(kMpuAddress);
   Wire.write(0x3Bu);
-  if (Wire.endTransmission(false) != 0u ||
-      Wire.requestFrom(kMpuAddress, static_cast<uint8_t>(6u), true) != 6u) {
+  const size_t requested = Wire.requestFrom(
+      static_cast<uint8_t>(kMpuAddress), static_cast<size_t>(6u), true);
+  if (Wire.endTransmission(false) != 0u || requested != 6u) {
     ++imu_errors;
     imu_healthy = false;
     return;

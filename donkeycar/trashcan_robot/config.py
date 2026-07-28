@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import os
 from dataclasses import dataclass
 from pathlib import Path
 from typing import Any
@@ -36,7 +37,11 @@ def load_config(path: str | Path) -> AppConfig:
     source = Path(path)
     with source.open("r", encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}
-    serial = raw["serial"]
+    serial = dict(raw["serial"])
+    configured_port = os.environ.get("TRASHCAN_SERIAL_PORT", "").strip()
+    if configured_port:
+        serial["port"] = configured_port
+    raw["serial"] = serial
     limits = raw["limits"]
     return AppConfig(
         raw=raw,

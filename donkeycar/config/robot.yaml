@@ -4,9 +4,10 @@ camera:
   height: 480
   fps: 20
 controller:
+  web_host: 0.0.0.0
   web_port: 8887
 serial:
-  port: /dev/cu.usbserial-0001
+  port: /dev/serial/by-id/usb-ESP32_Drive_Controller-if00-port0
   baud: 115200
   timeout_seconds: 0.05
   reconnect_seconds: 1.0

@@ -1,6 +1,5 @@
 from __future__ import annotations
 
-import struct
 from pathlib import Path
 
 import pytest
@@ -9,17 +8,12 @@ from trashcan_robot.config import LimitsConfig, SerialConfig, load_config
 from trashcan_robot.esp32_drive import ESP32Drive
 from trashcan_robot.pipeline import DriveMode
 from trashcan_robot.protocol import (
-    ACK,
     ARM,
-    DISARM,
-    DRIVE_TELEMETRY,
     ERROR,
     HELLO,
-    MOTOR,
     ODOMETRY,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
-    STATUS,
     STOP,
     FrameDecoder,
     decode_message,
@@ -121,9 +115,13 @@ def test_straight_steering_combined_and_slew_are_bounded() -> None:
     clock, gd32, _, endpoint, _, transport = build_stack()
     transport.connect()
     transport.send_command(0.35, 0.0)
-    endpoint.advance(0.01)
-    assert endpoint.commanded == (5, 5)
-    endpoint.advance(0.29)
+    first_left, first_right = endpoint.commanded
+    assert (first_left, first_right) == (5, 5)
+    endpoint._on_time(clock.monotonic())
+    second_left, second_right = endpoint.commanded
+    assert second_left - first_left == 5
+    assert second_right - first_right == 5
+    endpoint.advance(0.28)
     left, right = endpoint.commanded
     assert left == right
     assert 0 < left <= 250

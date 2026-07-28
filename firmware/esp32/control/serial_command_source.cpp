@@ -164,6 +164,7 @@ bool SerialCommandSource::acceptFrame(const SerialFrame &frame,
   case SerialMessageType::kMotorTelemetry:
   case SerialMessageType::kOdometry:
   case SerialMessageType::kActiveFaults:
+  case SerialMessageType::kDriveTelemetry:
     if (frame.payload_length == 0u) {
       return true;
     }

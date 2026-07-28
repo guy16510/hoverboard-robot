@@ -72,6 +72,28 @@ static bool command_payload_equal(const gs_esp_command *first,
          first->slave_flags == second->slave_flags;
 }
 
+static bool ready_zero_preempts_unacknowledged_disable(
+    const gs_command_sequencer *sequencer, const gs_esp_command *desired) {
+  if (sequencer == NULL || desired == NULL || !sequencer->sent ||
+      desired->speed != 0 || desired->steer != 0 ||
+      (desired->master_flags & GS_COMMAND_DIRECT_LR) == 0u ||
+      (desired->master_flags &
+       (GS_COMMAND_CLEAR_FAULT | GS_COMMAND_DISABLE | GS_COMMAND_SHUTDOWN)) !=
+          0u ||
+      desired->slave_flags != 0u) {
+    return false;
+  }
+
+  const gs_esp_command *current = &sequencer->in_flight;
+  return current->speed == 0 && current->steer == 0 &&
+         (current->master_flags & GS_COMMAND_DISABLE) != 0u &&
+         (current->slave_flags & GS_COMMAND_DISABLE) != 0u &&
+         (current->master_flags &
+          (GS_COMMAND_CLEAR_FAULT | GS_COMMAND_SHUTDOWN)) == 0u &&
+         (current->slave_flags &
+          (GS_COMMAND_CLEAR_FAULT | GS_COMMAND_SHUTDOWN)) == 0u;
+}
+
 void gs_command_sequencer_init(gs_command_sequencer *sequencer) {
   if (sequencer != NULL) {
     memset(sequencer, 0, sizeof(*sequencer));
@@ -90,7 +112,12 @@ gs_command_sequencer_select(gs_command_sequencer *sequencer,
       !command_payload_equal(desired, &sequencer->in_flight);
   const bool safety_preemption =
       (desired->master_flags & GS_COMMAND_DISABLE) != 0u && payload_changed;
-  if (payload_changed && (!sequencer->sent || exact_ack || safety_preemption)) {
+  const bool zero_ready_preemption =
+      payload_changed &&
+      ready_zero_preempts_unacknowledged_disable(sequencer, desired);
+  if (payload_changed &&
+      (!sequencer->sent || exact_ack || safety_preemption ||
+       zero_ready_preemption)) {
     ++sequencer->sequence;
     if (sequencer->sequence == 0u) {
       ++sequencer->sequence;

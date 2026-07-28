@@ -1,5 +1,7 @@
 from pathlib import Path
+from types import ModuleType
 from typing import Any
+import sys
 
 import pytest
 
@@ -11,6 +13,7 @@ from trashcan_robot.pipeline import (
     PilotCondition,
     StateUpdater,
     create_tub_writer,
+    create_web_controller,
 )
 from trashcan_robot.state import RobotState
 
@@ -43,6 +46,46 @@ def test_tub_writer_uses_donkeycar_53_base_path_keyword() -> None:
         "inputs": inputs,
         "types": types,
     }
+
+
+def test_web_controller_binds_explicitly_to_all_interfaces(monkeypatch) -> None:
+    calls: list[tuple[int, str]] = []
+    loop_started = []
+
+    class FakeLoop:
+        @staticmethod
+        def instance():
+            return FakeLoop()
+
+        def start(self) -> None:
+            loop_started.append(True)
+
+    tornado = ModuleType("tornado")
+    ioloop = ModuleType("tornado.ioloop")
+    ioloop.IOLoop = FakeLoop
+    monkeypatch.setitem(sys.modules, "tornado", tornado)
+    monkeypatch.setitem(sys.modules, "tornado.ioloop", ioloop)
+
+    class FakeController:
+        def __init__(self, port: int) -> None:
+            self.port = port
+            self.loop = None
+
+        def listen(self, port: int, *, address: str) -> None:
+            calls.append((port, address))
+
+    controller = create_web_controller(FakeController, "0.0.0.0", 8887)
+    controller.update()
+
+    assert calls == [(8887, "0.0.0.0")]
+    assert loop_started == [True]
+    assert controller.bind_host == "0.0.0.0"
+    assert controller.bind_port == 8887
+
+
+def test_web_controller_rejects_loopback_only_binding() -> None:
+    with pytest.raises(ValueError):
+        create_web_controller(lambda port: object(), "127.0.0.1", 8887)
 
 
 def test_frequency_meter_reports_completed_one_second_window() -> None:

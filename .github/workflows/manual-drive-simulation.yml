@@ -36,8 +36,15 @@ jobs:
         run: |
           set -euo pipefail
           .venv/bin/pip install --disable-pip-version-check -r donkeycar/requirements-test.txt
+          set +e
           PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=donkeycar \
-            .venv/bin/python -m pytest -q donkeycar/tests
+            .venv/bin/python -m pytest -vv --tb=short donkeycar/tests \
+            | tee pytest.log
+          pytest_status=${PIPESTATUS[0]}
+          set -e
+          if (( pytest_status != 0 )); then
+            exit "$pytest_status"
+          fi
           PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=donkeycar \
             .venv/bin/python -m compileall -q donkeycar/trashcan_robot donkeycar/manage.py
 
@@ -104,6 +111,7 @@ jobs:
         with:
           name: manual-drive-validation-${{ github.sha }}
           path: |
+            pytest.log
             esp32-drive-build.log
             .pio/build/esp32_drive_coordinator/firmware.bin
             .pio/build/esp32_drive_coordinator/firmware.elf

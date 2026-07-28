@@ -1,57 +1,55 @@
 from trashcan_robot.config import SerialConfig
-from trashcan_robot.protocol import (
-    ARM,
-    HELLO,
-    SET_OPERATING_MODE,
-    SET_VELOCITY_YAW,
-    FrameDecoder,
-)
+from trashcan_robot.protocol import ARM, DISARM, HELLO, SET_OPERATING_MODE, SET_VELOCITY_YAW, STOP
+from trashcan_robot.simulation import FakeClock, SimulatedEsp32Serial, SimulatedSerialFactory
 from trashcan_robot.transport import SerialMotorTransport
 
 
-def test_connect_sends_zero_demand_before_every_arm_attempt(monkeypatch) -> None:
-    writes: list[bytes] = []
-
-    class FakeSerial:
-        is_open = True
-        in_waiting = 0
-
-        def reset_input_buffer(self) -> None:
-            return
-
-        def write(self, data: bytes) -> None:
-            writes.append(data)
-
-        def flush(self) -> None:
-            return
-
-        def close(self) -> None:
-            self.is_open = False
-
-    monkeypatch.setattr(
-        "trashcan_robot.transport.serial.Serial",
-        lambda *args, **kwargs: FakeSerial(),
+def config() -> SerialConfig:
+    return SerialConfig(
+        port="/dev/serial/by-id/simulated",
+        baud=115200,
+        timeout_seconds=0.05,
+        reconnect_seconds=1.0,
+        lease_ms=500,
+        command_hz=20,
     )
-    monkeypatch.setattr("trashcan_robot.transport.time.sleep", lambda _: None)
+
+
+def test_connect_sends_hello_mode_zero_and_arm_with_real_acknowledgments() -> None:
+    clock = FakeClock()
+    endpoint = SimulatedEsp32Serial(clock)
     transport = SerialMotorTransport(
-        SerialConfig(
-            port="/dev/ttyACM0",
-            baud=115200,
-            timeout_seconds=0.05,
-            reconnect_seconds=1.0,
-            lease_ms=500,
-            command_hz=20,
-        )
+        config(),
+        serial_factory=SimulatedSerialFactory(endpoint),
+        clock=clock.monotonic,
+        sleeper=clock.sleep,
+        lease_id_factory=lambda: 1,
     )
 
     transport.connect()
 
-    frames = FrameDecoder().feed(b"".join(writes))
-    message_types = [frame.message_type for frame in frames]
-    assert message_types[:2] == [HELLO, SET_OPERATING_MODE]
-    assert message_types.count(ARM) == 20
-    assert all(
-        message_types[index - 1] == SET_VELOCITY_YAW
-        for index, message_type in enumerate(message_types)
-        if message_type == ARM
+    assert transport.write_history[:4] == (
+        HELLO,
+        SET_OPERATING_MODE,
+        SET_VELOCITY_YAW,
+        ARM,
     )
+    assert endpoint.armed
+
+
+def test_shutdown_attempts_zero_stop_and_disarm() -> None:
+    clock = FakeClock()
+    endpoint = SimulatedEsp32Serial(clock)
+    transport = SerialMotorTransport(
+        config(),
+        serial_factory=SimulatedSerialFactory(endpoint),
+        clock=clock.monotonic,
+        sleeper=clock.sleep,
+        lease_id_factory=lambda: 1,
+    )
+    transport.connect()
+
+    transport.shutdown()
+
+    assert transport.write_history[-3:] == (SET_VELOCITY_YAW, STOP, DISARM)
+    assert not transport.is_connected()

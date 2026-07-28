@@ -101,10 +101,13 @@ bool DriveSafetyGate::neutralObserved() const { return neutral_observed_; }
 
 bool DriveSafetyGate::zeroEstablishmentAllowed(
     const DriveSafetyInputs &inputs) const {
-  if (armed_ || operating_mode_ != kManualDriveMode || !neutral_observed_ ||
-      !inputs.lease_active) {
+  if (armed_ || operating_mode_ != kManualDriveMode || !neutral_observed_) {
     return false;
   }
+  // STOP and DISARM release command ownership, so an active motion lease cannot
+  // be a prerequisite for the zero-only READY handshake. All normal connection,
+  // transport, feedback, IMU, orientation, local-disarm, and controller-fault
+  // checks still apply, and motor output remains disabled until ARM succeeds.
   DriveSafetyInputs establishing = inputs;
   establishing.feedback_runtime_healthy = true;
   establishing.exact_zero_acknowledged = true;

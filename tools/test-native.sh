@@ -18,6 +18,7 @@ mkdir -p "$build_dir"
   tests/native/test_main.c tests/native/test_protocol.c tests/native/test_control.c \
   tests/native/test_architecture.c tests/native/test_simulation.c \
   tests/native/test_swd_timing.c tests/native/test_resync.c \
+  tests/native/test_startup_zero_preemption.c \
   firmware/gd32/boards/gausstop_dphc_v33/gausstop_swd_pulse.c \
   firmware/gd32/common/protocol/gs_protocol.c \
   firmware/gd32/common/protocol/gs_frame_parser.c \
@@ -31,17 +32,3 @@ mkdir -p "$build_dir"
   firmware/gd32/common/coordination/gs_slave.c \
   -o "$build_dir/native_tests"
 "$build_dir/native_tests"
-
-"$compiler" \
-  -std=c11 -Wall -Wextra -Wpedantic -Werror \
-  -Ifirmware/gd32/common/protocol \
-  -Ifirmware/gd32/common/control \
-  -Ifirmware/gd32/common/safety \
-  -Ifirmware/gd32/common/coordination \
-  tests/regression/test_startup_zero_preemption.c \
-  firmware/gd32/common/protocol/gs_protocol.c \
-  firmware/gd32/common/control/gs_wheel_mix.c \
-  firmware/gd32/common/coordination/gs_master.c \
-  firmware/gd32/common/coordination/gs_slave.c \
-  -o "$build_dir/startup_zero_preemption"
-"$build_dir/startup_zero_preemption"

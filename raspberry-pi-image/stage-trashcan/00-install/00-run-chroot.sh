@@ -2,7 +2,8 @@
 
 set -euo pipefail
 
-APP=/opt/trashcan-robot/donkeycar
+REPOSITORY=/opt/trashcan-robot
+APP="$REPOSITORY/donkeycar"
 VENV="$APP/.venv"
 SERVICE_SOURCE="$APP/systemd/trashcan-donkeycar.service"
 SERVICE_TARGET=/etc/systemd/system/trashcan-donkeycar.service
@@ -58,6 +59,40 @@ import sys
 if sys.version_info[:2] != (3, 11):
     raise SystemExit(f"Raspberry Pi OS Bookworm Python 3.11 required, got {sys.version}")
 PY
+
+command -v node >/dev/null 2>&1 || {
+  echo "Raspberry Pi image is missing Node.js" >&2
+  exit 1
+}
+command -v npm >/dev/null 2>&1 || {
+  echo "Raspberry Pi image is missing npm" >&2
+  exit 1
+}
+node_version="$(node --version)"
+node_major="${node_version#v}"
+node_major="${node_major%%.*}"
+if ! [[ "$node_major" =~ ^[0-9]+$ ]] || (( node_major < 18 )); then
+  echo "Node.js 18 or newer is required, got $node_version" >&2
+  exit 1
+fi
+npm_version="$(npm --version)"
+node --input-type=module - <<'JS'
+import assert from 'node:assert/strict';
+import {
+  MessageType,
+  crc16,
+  encodeFrame,
+} from 'file:///opt/trashcan-robot/tools/pi-client/protocol.mjs';
+
+assert.equal(crc16(Buffer.from('123456789')), 0x29b1);
+const frame = encodeFrame({ type: MessageType.STOP, sequence: 1 });
+assert.equal(frame[0], 0xa5);
+assert.equal(frame[1], 0x5a);
+console.log('Raspberry Pi image Node.js protocol smoke test passed');
+JS
+printf 'Raspberry Pi image Node.js smoke test passed: node %s, npm %s\n' "$node_version" "$npm_version"
+node --test "$REPOSITORY/tools/pi-client/test/"*.test.mjs
+printf 'Raspberry Pi image Node protocol tests passed\n'
 
 python3 -m venv --system-site-packages "$VENV"
 "$VENV/bin/python" -m pip install --upgrade 'pip<25' wheel setuptools
@@ -119,10 +154,10 @@ printf 'Raspberry Pi image application tests passed\n'
 systemd-analyze verify "$SERVICE_TARGET"
 printf 'Raspberry Pi image systemd verification passed\n'
 
-# Python imports and pytest can create cache files even after an earlier chown.
-# Make ownership the final mutation before validating and writing the marker.
-chown -R trashbot:trashbot /opt/trashcan-robot
-bad_owner="$(find /opt/trashcan-robot \( ! -user trashbot -o ! -group trashbot \) -print -quit)"
+# Python imports, pytest, and Node tests can create cache files after an earlier
+# chown. Make ownership the final mutation before validating and writing marker.
+chown -R trashbot:trashbot "$REPOSITORY"
+bad_owner="$(find "$REPOSITORY" \( ! -user trashbot -o ! -group trashbot \) -print -quit)"
 if [[ -n "$bad_owner" ]]; then
   echo "Repository ownership validation failed at $bad_owner" >&2
   stat -c '%U:%G %n' "$bad_owner" >&2 || true
@@ -137,6 +172,11 @@ first_user=pi
 first_boot_userconfig=disabled
 ssh=enabled
 cloud_init=disabled
+nodejs=installed
+nodejs_minimum_major=18
+nodejs_smoke=passed
+npm=installed
+node_protocol_tests=passed
 robot_user=trashbot
 robot_group=trashbot
 robot_working_directory=$APP

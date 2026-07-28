@@ -6,6 +6,7 @@ repo_dir="$(cd "$(dirname "$0")/.." && pwd)"
 build_dir="${TMPDIR:-/tmp}/gausstop-native-tests"
 compiler="${CC:-clang}"
 
+cd "$repo_dir"
 mkdir -p "$build_dir"
 "$compiler" \
   -std=c11 -Wall -Wextra -Wpedantic -Werror \
@@ -30,3 +31,17 @@ mkdir -p "$build_dir"
   firmware/gd32/common/coordination/gs_slave.c \
   -o "$build_dir/native_tests"
 "$build_dir/native_tests"
+
+"$compiler" \
+  -std=c11 -Wall -Wextra -Wpedantic -Werror \
+  -Ifirmware/gd32/common/protocol \
+  -Ifirmware/gd32/common/control \
+  -Ifirmware/gd32/common/safety \
+  -Ifirmware/gd32/common/coordination \
+  tests/native/test_startup_zero_preemption.c \
+  firmware/gd32/common/protocol/gs_protocol.c \
+  firmware/gd32/common/control/gs_wheel_mix.c \
+  firmware/gd32/common/coordination/gs_master.c \
+  firmware/gd32/common/coordination/gs_slave.c \
+  -o "$build_dir/startup_zero_preemption"
+"$build_dir/startup_zero_preemption"

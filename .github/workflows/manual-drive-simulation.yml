@@ -87,7 +87,7 @@ jobs:
           export PLATFORMIO_CORE_DIR="$PWD/.platformio"
           export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
           .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator \
-            | tee esp32-drive-build.log
+            2>&1 | tee esp32-drive-build.log
 
       - name: Validate Raspberry Pi deployment contract
         run: |

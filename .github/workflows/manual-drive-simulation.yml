@@ -1,0 +1,109 @@
+name: Manual drive hardware-free validation
+
+on:
+  push:
+    branches:
+      - feature/pi-esp32-wifi-simulated-drive
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  validate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
+        with:
+          fetch-depth: 0
+
+      - uses: actions/setup-python@a26af69be951a213d495a4c3e4e4022e16d87065
+        with:
+          python-version: '3.12'
+
+      - name: Bootstrap pinned firmware tools
+        run: |
+          set -euo pipefail
+          python -m venv .venv
+          .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
+          ./tools/bootstrap-tools.sh
+
+      - name: Validate Python application and simulations
+        run: |
+          set -euo pipefail
+          .venv/bin/pip install --disable-pip-version-check -r donkeycar/requirements-test.txt
+          PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=donkeycar \
+            .venv/bin/python -m pytest -q donkeycar/tests
+          PYTHONDONTWRITEBYTECODE=1 PYTHONPATH=donkeycar \
+            .venv/bin/python -m compileall -q donkeycar/trashcan_robot donkeycar/manage.py
+
+      - name: Validate Node protocol and client
+        run: |
+          set -euo pipefail
+          node --version
+          node --test tools/pi-client/test/*.test.mjs
+
+      - name: Test differential-drive mixer and safety gate
+        run: |
+          set -euo pipefail
+          g++ -std=c++17 -Wall -Wextra -Werror \
+            -Ifirmware/esp32/control \
+            tests/esp32/test_differential_drive.cpp \
+            firmware/esp32/control/differential_drive_mixer.cpp \
+            -o /tmp/test-differential-drive
+          /tmp/test-differential-drive
+          g++ -std=c++17 -Wall -Wextra -Werror \
+            -Ifirmware/esp32/control \
+            tests/esp32/test_drive_safety.cpp \
+            firmware/esp32/control/drive_safety.cpp \
+            -o /tmp/test-drive-safety
+          /tmp/test-drive-safety
+
+      - name: Run native firmware tests
+        run: |
+          set -euo pipefail
+          ./tools/test-native.sh
+          ./tools/test-sanitized.sh
+          ./tools/test-esp32-balance.sh
+          export PLATFORMIO_CORE_DIR="$PWD/.platformio"
+          export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
+          .venv/bin/pio run -e native_tests
+          .pio/build/native_tests/program
+
+      - name: Build production ESP32 drive coordinator
+        run: |
+          set -euo pipefail
+          export PLATFORMIO_CORE_DIR="$PWD/.platformio"
+          export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
+          .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator \
+            | tee esp32-drive-build.log
+
+      - name: Validate Raspberry Pi deployment contract
+        run: |
+          set -euo pipefail
+          bash -n donkeycar/scripts/install-pi.sh
+          bash -n donkeycar/scripts/install-service.sh
+          bash -n donkeycar/scripts/validate-service-unit.sh
+          bash donkeycar/scripts/validate-service-unit.sh \
+            donkeycar/systemd/trashcan-donkeycar.service \
+            trashbot trashbot /opt/trashcan-robot/donkeycar
+          ! grep -R '/dev/cu\.' donkeycar/config donkeycar/systemd donkeycar/trashcan_robot
+          ! grep -R -E 'dev-tty|\.device' donkeycar/systemd
+          grep -F 'web_host: 0.0.0.0' donkeycar/config/robot.yaml
+          grep -F 'web_port: 8887' donkeycar/config/robot.yaml
+          grep -F 'host: 0.0.0.0' donkeycar/config/robot.yaml
+          grep -F 'port: 8888' donkeycar/config/robot.yaml
+
+      - name: Upload firmware and validation log
+        if: ${{ always() }}
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: manual-drive-validation-${{ github.sha }}
+          path: |
+            esp32-drive-build.log
+            .pio/build/esp32_drive_coordinator/firmware.bin
+            .pio/build/esp32_drive_coordinator/firmware.elf
+            .pio/build/esp32_drive_coordinator/firmware.map
+          if-no-files-found: ignore
+          retention-days: 30

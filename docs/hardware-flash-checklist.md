@@ -4,7 +4,7 @@ Use this checklist only with both drive wheels lifted clear of the ground and an
 
 ## Use one immutable bundle
 
-Do not mix locally built files or artifacts from different workflow runs. Download the successful `final-flash-bundle-<commit>` artifact produced by the **Final three-controller flash bundle** workflow.
+Do not mix locally built files or artifacts from different workflow runs. Download the successful `final-flash-bundle-<commit>` artifact produced by the **Manual drive hardware-free validation** workflow.
 
 Before flashing:
 
@@ -24,7 +24,9 @@ gausstop_slave/firmware.bin
 gausstop_master_swd/firmware.bin
 esp32_drive_coordinator/bootloader.bin
 esp32_drive_coordinator/partitions.bin
+esp32_drive_coordinator/boot_app0.bin
 esp32_drive_coordinator/firmware.bin
+esp32_drive_coordinator/FLASH_LAYOUT.txt
 ```
 
 The current branch changes the SLAVE commutation profile, ESP32 startup handshake, Pi startup verification, and the complete southbound protocol epoch. All three controllers must be flashed from this same artifact.
@@ -36,7 +38,7 @@ The current branch changes the SLAVE commutation profile, ESP32 startup handshak
 3. Flash and read back `gausstop_slave/firmware.bin` to the confirmed SLAVE controller.
 4. Flash and read back `gausstop_master_swd/firmware.bin` to the confirmed MASTER controller.
 5. Remove the ST-Link completely from the MASTER SWD header.
-6. Flash the ESP32 bootloader, partition table, and application from `esp32_drive_coordinator`, preserving NVS unless recovery requires otherwise.
+6. Flash the ESP32 files at the offsets in `esp32_drive_coordinator/FLASH_LAYOUT.txt`, preserving NVS unless recovery requires otherwise.
 7. Read back the ESP32 application region and compare it with `firmware.bin`.
 8. Power-cycle the complete controller stack. Do not rely on software reset alone.
 

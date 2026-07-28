@@ -52,22 +52,13 @@ def main() -> int:
     sequence = 0
     lease_id = random.getrandbits(32)
     zero = encode_direct(0, 0, lease_id, 1000)
+    # Start at the SWD profile's full-scale command. Lower commands previously
+    # reached only partial PWM, failed to overcome startup torque, and latched
+    # the Hall startup timeout before a meaningful powered attempt occurred.
     tests = [
-        ("left", 10, 0, 250),
-        ("right", 0, 10, 250),
-        ("both", 10, 10, 500),
-        ("both", 20, 20, 500),
-        ("both", 30, 30, 500),
-        ("both", 40, 40, 500),
-        ("left", 50, 0, 1000),
-        ("right", 0, 50, 1000),
-        ("both", 50, 50, 2000),
-        ("left", 75, 0, 1000),
-        ("right", 0, 75, 1000),
-        ("both", 75, 75, 1500),
-        ("left", 100, 0, 1000),
-        ("right", 0, 100, 1000),
-        ("both", 100, 100, 2000),
+        ("both", 250, 250, 1500),
+        ("left", 250, 0, 1000),
+        ("right", 0, 250, 1000),
     ]
     results = []
 

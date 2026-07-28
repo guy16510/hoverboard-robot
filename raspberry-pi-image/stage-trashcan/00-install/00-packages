@@ -9,6 +9,8 @@ git
 rsync
 joystick
 ffmpeg
+nodejs
+npm
 libopenblas-dev
 libatlas-base-dev
 libhdf5-dev

@@ -3,7 +3,7 @@
 export const VERSION = 1;
 export const MAX_PAYLOAD = 48;
 export const MAX_FRAME = 11 + MAX_PAYLOAD;
-export const MAX_TRANSPORT_TEST_COMMAND = 100;
+export const MAX_TRANSPORT_TEST_COMMAND = 250;
 export const UPRIGHT_OFFSET_CONFIGURATION_KEY = 14;
 
 function requireUnsignedWireInteger(name, value, maximum) {

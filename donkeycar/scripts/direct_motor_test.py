@@ -31,6 +31,7 @@ CAPABILITIES = 0x02
 SET_DIRECT_MOTOR = 0x24
 DIRECT_MODE = 3
 MAX_DIRECT_MOTOR_COMMAND = 250
+FULL_POWER_TEST_DURATION_MS = 1500
 
 
 def encode_direct(
@@ -56,7 +57,15 @@ def bounded_direct_requests(lease_id: int) -> list[tuple[int, bytes]]:
         (SET_DIRECT_MOTOR, encode_direct(0, 0, lease_id, 500)),
         (ARM, b""),
         (STATUS, b""),
-        (SET_DIRECT_MOTOR, encode_direct(10, 10, lease_id, 250)),
+        (
+            SET_DIRECT_MOTOR,
+            encode_direct(
+                MAX_DIRECT_MOTOR_COMMAND,
+                MAX_DIRECT_MOTOR_COMMAND,
+                lease_id,
+                FULL_POWER_TEST_DURATION_MS + 500,
+            ),
+        ),
         (SET_DIRECT_MOTOR, encode_direct(0, 0, lease_id, 500)),
         (STOP, b""),
         (DISARM, b""),
@@ -146,7 +155,7 @@ def require_armed_status(payload: bytes) -> dict[str, int]:
 
 def main() -> int:
     parser = argparse.ArgumentParser(
-        description="One bounded low-demand direct-motor transport test",
+        description="One bounded full-power direct-motor startup test",
     )
     parser.add_argument("--config", default=str(ROOT / "config/robot.yaml"))
     parser.add_argument("--timeout", type=float, default=3.0)
@@ -187,18 +196,21 @@ def main() -> int:
             status_decoded = require_armed_status(status.payload)
 
             sequence = send_request(port, requests[4], sequence)
-            time.sleep(0.125)
+            time.sleep(FULL_POWER_TEST_DURATION_MS / 2000.0)
             sequence = write_frame(port, MOTOR, sequence)
             motor = wait_for(decoder, port, MOTOR, args.timeout)
-            time.sleep(0.125)
+            time.sleep(FULL_POWER_TEST_DURATION_MS / 2000.0)
             sequence = send_request(port, requests[5], sequence)
             sequence = send_request(port, requests[6], sequence)
             sequence = send_request(port, requests[7], sequence)
             print(
                 json.dumps(
                     {
-                        "command": [10, 10],
-                        "duration_ms": 250,
+                        "command": [
+                            MAX_DIRECT_MOTOR_COMMAND,
+                            MAX_DIRECT_MOTOR_COMMAND,
+                        ],
+                        "duration_ms": FULL_POWER_TEST_DURATION_MS,
                         "motor": list(motor.payload),
                         "status": status_decoded,
                     },

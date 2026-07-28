@@ -17,6 +17,7 @@ struct DriveSafetyInputs {
   bool exact_zero_acknowledged = false;
   bool imu_healthy = false;
   bool acknowledgment_timed_out = false;
+  bool feedback_crc_error = false;
   bool malformed_command = false;
   bool local_disarm = false;
   uint32_t master_faults = 0u;
@@ -41,6 +42,7 @@ enum DriveSafetyFault : uint32_t {
   kDriveFaultSlaveController = 1u << 12u,
   kDriveFaultNonNeutralArm = 1u << 13u,
   kDriveFaultWrongOperatingMode = 1u << 14u,
+  kDriveFaultFeedbackCrc = 1u << 15u,
 };
 
 class DriveSafetyGate {

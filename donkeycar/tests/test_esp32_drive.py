@@ -52,7 +52,11 @@ def test_reconnect_requires_neutral_input_again() -> None:
     transport.disconnect()
 
     connected, linear, angular, _, fault = drive.run(0.5, 0.25)
+    assert connected is False
+    assert (linear, angular) == (0.0, 0.0)
+    assert "waiting to reconnect" in fault
 
+    connected, linear, angular, _, fault = drive.run(0.5, 0.25)
     assert connected is True
     assert (linear, angular) == (0.0, 0.0)
     assert fault == "waiting for neutral input after ESP32 connection"

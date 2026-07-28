@@ -3,13 +3,14 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
 
 import psutil
 
+from .protocol import decode_message
 from .state import RobotState
 from .transport import MotorTransport
 
@@ -49,10 +50,23 @@ class JsonRunLogger:
             and now - self._last_write_at < self._minimum_interval_seconds
         ):
             return str(self._path)
-        telemetry = [
-            {"message_type": frame.message_type, "sequence": frame.sequence, "payload_hex": frame.payload.hex()}
-            for frame in self._transport.read_telemetry()
+        frames = self._transport.read_telemetry()
+        telemetry_packets = [
+            {
+                "message_type": frame.message_type,
+                "sequence": frame.sequence,
+                "payload_hex": frame.payload.hex(),
+            }
+            for frame in frames
         ]
+        decoded_messages = [decode_message(frame) for frame in frames]
+        telemetry = {
+            message["name"]: message
+            for message in decoded_messages
+            if message.get("name") not in {None, "unknown", "invalid-payload"}
+        }
+        if telemetry:
+            self._state.update(telemetry=telemetry)
         snapshot = self._state.snapshot()
         record: dict[str, Any] = {
             "timestamp": datetime.now(timezone.utc).isoformat(),
@@ -63,11 +77,12 @@ class JsonRunLogger:
             "process_rss_bytes": self._process.memory_info().rss,
             "serial_latency_ms": snapshot.get("serial_latency_ms"),
             "esp32_heartbeat": snapshot.get("esp32_connected", False),
-            "telemetry_packets": telemetry,
-            "wheel_speed": snapshot.get("telemetry", {}).get("wheel_speed"),
-            "pitch": snapshot.get("telemetry", {}).get("pitch"),
-            "roll": snapshot.get("telemetry", {}).get("roll"),
-            "yaw": snapshot.get("telemetry", {}).get("yaw"),
+            "telemetry_packets": telemetry_packets,
+            "telemetry": telemetry,
+            "wheel_speed": telemetry.get("odometry", {}).get("velocity"),
+            "pitch": telemetry.get("imu", {}).get("pitch"),
+            "roll": telemetry.get("imu", {}).get("roll"),
+            "yaw": telemetry.get("drive", {}).get("requested_yaw"),
             "model_name": self._model_name,
             "mode": snapshot.get("mode"),
             "faults": snapshot.get("faults", []),

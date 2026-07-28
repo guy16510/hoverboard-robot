@@ -18,6 +18,7 @@ cd "$repo_dir"
   tests/native/test_main.c tests/native/test_protocol.c tests/native/test_control.c \
   tests/native/test_architecture.c tests/native/test_simulation.c \
   tests/native/test_swd_timing.c tests/native/test_resync.c \
+  tests/native/test_startup_zero_preemption.c \
   firmware/gd32/boards/gausstop_dphc_v33/gausstop_swd_pulse.c \
   firmware/gd32/common/protocol/gs_protocol.c \
   firmware/gd32/common/protocol/gs_frame_parser.c \

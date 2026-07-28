@@ -15,7 +15,7 @@ permissions:
 jobs:
   validate:
     runs-on: ubuntu-latest
-    timeout-minutes: 45
+    timeout-minutes: 60
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262
         with:
@@ -81,13 +81,104 @@ jobs:
           .venv/bin/pio run -e native_tests
           .pio/build/native_tests/program
 
-      - name: Build production ESP32 drive coordinator
+      - name: Clean-build exact final firmware set
         run: |
           set -euo pipefail
           export PLATFORMIO_CORE_DIR="$PWD/.platformio"
           export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
+          rm -rf \
+            .pio/build/gausstop_slave \
+            .pio/build/gausstop_master_swd \
+            .pio/build/esp32_drive_coordinator
+          .venv/bin/pio run -e gausstop_slave \
+            2>&1 | tee gausstop-slave-build.log
+          .venv/bin/pio run -e gausstop_master_swd \
+            2>&1 | tee gausstop-master-swd-build.log
           .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator \
             2>&1 | tee esp32-drive-build.log
+
+      - name: Create immutable matched flash bundle
+        run: |
+          set -euo pipefail
+          bundle="$PWD/final-flash-bundle"
+          rm -rf "$bundle"
+          mkdir -p \
+            "$bundle/gausstop_slave" \
+            "$bundle/gausstop_master_swd" \
+            "$bundle/esp32_drive_coordinator"
+
+          cp .pio/build/gausstop_slave/firmware.bin \
+            "$bundle/gausstop_slave/"
+          cp .pio/build/gausstop_slave/firmware.elf \
+            "$bundle/gausstop_slave/"
+          cp .pio/build/gausstop_master_swd/firmware.bin \
+            "$bundle/gausstop_master_swd/"
+          cp .pio/build/gausstop_master_swd/firmware.elf \
+            "$bundle/gausstop_master_swd/"
+          cp .pio/build/esp32_drive_coordinator/firmware.bin \
+            "$bundle/esp32_drive_coordinator/"
+          cp .pio/build/esp32_drive_coordinator/firmware.elf \
+            "$bundle/esp32_drive_coordinator/"
+          cp .pio/build/esp32_drive_coordinator/partitions.bin \
+            "$bundle/esp32_drive_coordinator/"
+          cp .pio/build/esp32_drive_coordinator/bootloader.bin \
+            "$bundle/esp32_drive_coordinator/"
+          cp .platformio/packages/framework-arduinoespressif32/tools/partitions/boot_app0.bin \
+            "$bundle/esp32_drive_coordinator/"
+
+          {
+            echo "repository=${GITHUB_REPOSITORY}"
+            echo "commit=${GITHUB_SHA}"
+            echo "ref=${GITHUB_REF}"
+            echo "protocol_version=3"
+            echo "command_marker=0x32"
+            echo "slave_feedback_marker=0x33"
+            echo "generated_utc=$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+            echo
+            echo "These three firmware directories are one indivisible matched set."
+            echo "Mixed protocol epochs fail closed and cannot arm."
+          } > "$bundle/MANIFEST.txt"
+
+          cat > "$bundle/esp32_drive_coordinator/FLASH_LAYOUT.txt" <<'EOF'
+          ESP32 flash offsets for the esp32dev production image:
+          0x1000  bootloader.bin
+          0x8000  partitions.bin
+          0xE000  boot_app0.bin
+          0x10000 firmware.bin
+          Preserve NVS unless an explicit recovery procedure requires erasing it.
+          EOF
+
+          (
+            cd "$bundle"
+            find . -type f ! -name SHA256SUMS -print0 \
+              | sort -z \
+              | xargs -0 sha256sum > SHA256SUMS
+            sha256sum -c SHA256SUMS
+          )
+
+      - name: Verify second clean build is byte-identical
+        run: |
+          set -euo pipefail
+          export PLATFORMIO_CORE_DIR="$PWD/.platformio"
+          export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
+          rm -rf \
+            .pio/build/gausstop_slave \
+            .pio/build/gausstop_master_swd \
+            .pio/build/esp32_drive_coordinator
+          .venv/bin/pio run -e gausstop_slave
+          .venv/bin/pio run -e gausstop_master_swd
+          .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator
+
+          cmp final-flash-bundle/gausstop_slave/firmware.bin \
+              .pio/build/gausstop_slave/firmware.bin
+          cmp final-flash-bundle/gausstop_master_swd/firmware.bin \
+              .pio/build/gausstop_master_swd/firmware.bin
+          cmp final-flash-bundle/esp32_drive_coordinator/firmware.bin \
+              .pio/build/esp32_drive_coordinator/firmware.bin
+          cmp final-flash-bundle/esp32_drive_coordinator/bootloader.bin \
+              .pio/build/esp32_drive_coordinator/bootloader.bin
+          cmp final-flash-bundle/esp32_drive_coordinator/partitions.bin \
+              .pio/build/esp32_drive_coordinator/partitions.bin
 
       - name: Validate Raspberry Pi deployment contract
         run: |
@@ -105,16 +196,23 @@ jobs:
           grep -F 'host: 0.0.0.0' donkeycar/config/robot.yaml
           grep -F 'port: 8888' donkeycar/config/robot.yaml
 
-      - name: Upload firmware and validation log
+      - name: Upload final matched flash bundle
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
+        with:
+          name: final-flash-bundle-${{ github.sha }}
+          path: final-flash-bundle
+          if-no-files-found: error
+          retention-days: 90
+
+      - name: Upload validation logs
         if: ${{ always() }}
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
           name: manual-drive-validation-${{ github.sha }}
           path: |
             pytest.log
+            gausstop-slave-build.log
+            gausstop-master-swd-build.log
             esp32-drive-build.log
-            .pio/build/esp32_drive_coordinator/firmware.bin
-            .pio/build/esp32_drive_coordinator/firmware.elf
-            .pio/build/esp32_drive_coordinator/firmware.map
           if-no-files-found: ignore
           retention-days: 30

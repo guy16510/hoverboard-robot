@@ -7,9 +7,14 @@
 #include <stdint.h>
 
 enum {
-  GS_PROTOCOL_VERSION = 2,
-  GS_COMMAND_MARKER = 0x30,
-  GS_SLAVE_FEEDBACK_MARKER = 0x31,
+  /*
+   * Wire epoch 3 deliberately changes every southbound frame discriminator.
+   * ESP32, MASTER, and SLAVE images from another epoch cannot exchange valid
+   * commands or feedback, so a partial or mistaken flash fails closed.
+   */
+  GS_PROTOCOL_VERSION = 3,
+  GS_COMMAND_MARKER = 0x32,
+  GS_SLAVE_FEEDBACK_MARKER = 0x33,
   GS_FEEDBACK_MARKER_0 = 0xCE,
   GS_FEEDBACK_MARKER_1 = 0xB2,
   GS_ESP_COMMAND_SIZE = 11,

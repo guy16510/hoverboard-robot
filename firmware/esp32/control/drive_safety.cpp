@@ -107,6 +107,7 @@ uint32_t DriveSafetyGate::currentFaults(const DriveSafetyInputs &inputs,
   faults |= inputs.acknowledgment_timed_out
                 ? kDriveFaultAcknowledgmentTimeout
                 : 0u;
+  faults |= inputs.feedback_crc_error ? kDriveFaultFeedbackCrc : 0u;
   faults |= inputs.malformed_command ? kDriveFaultMalformedCommand : 0u;
   faults |= inputs.local_disarm ? kDriveFaultLocalDisarm : 0u;
   faults |= inputs.master_faults != 0u ? kDriveFaultMasterController : 0u;

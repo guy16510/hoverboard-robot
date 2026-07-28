@@ -5,6 +5,9 @@
 
 namespace gs::balance {
 
-constexpr int16_t kMaximumTransportTestCommand = 100;
+// The GD32 SWD motor profile reaches full PWM at command 250. Keeping this
+// transport ceiling at 100 prevented powered tests from reaching the profile's
+// proven startup output.
+constexpr int16_t kMaximumTransportTestCommand = 250;
 
 } // namespace gs::balance

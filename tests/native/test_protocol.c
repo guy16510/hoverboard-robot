@@ -4,6 +4,12 @@
 #include "gs_frame_parser.h"
 #include "gs_protocol.h"
 
+static void write_crc(uint8_t *frame, size_t size) {
+  const uint16_t crc = gs_crc16(frame, size - 2u);
+  frame[size - 2u] = (uint8_t)crc;
+  frame[size - 1u] = (uint8_t)(crc >> 8u);
+}
+
 static void test_crc_vectors(void) {
   static const uint8_t check[] = "123456789";
   GS_EXPECT_EQ(0x31C3, gs_crc16(check, sizeof(check) - 1u));
@@ -17,12 +23,12 @@ static void test_exact_sizes_and_endianness(void) {
       .slave_flags = 0u,
       .sequence = 0x1234u,
   };
-  const uint8_t prefix[] = {0x30, 0x34, 0x12, 0x18, 0xFC,
+  const uint8_t prefix[] = {0x32, 0x34, 0x12, 0x18, 0xFC,
                             0xE8, 0x03, 0x20, 0x00};
   uint8_t frame[GS_ESP_COMMAND_SIZE] = {0};
   gs_esp_command decoded = {0};
 
-  GS_EXPECT_EQ(2, GS_PROTOCOL_VERSION);
+  GS_EXPECT_EQ(3, GS_PROTOCOL_VERSION);
   GS_EXPECT_EQ(11, GS_ESP_COMMAND_SIZE);
   GS_EXPECT_EQ(8, GS_SLAVE_COMMAND_SIZE);
   GS_EXPECT_EQ(22, GS_SLAVE_FEEDBACK_SIZE);
@@ -163,16 +169,34 @@ static void test_semantic_crc_and_version_rejection(void) {
 
   GS_EXPECT_TRUE(
       gs_encode_esp_command(frame, &(gs_esp_command){.sequence = 2u}));
-  frame[0] = 0x2Fu;
+  frame[0] = 0x30u;
+  write_crc(frame, sizeof(frame));
   GS_EXPECT_FALSE(gs_decode_esp_command(&out, frame));
+
+  const gs_slave_command slave_command = {.sequence = 2u};
+  uint8_t slave_command_frame[GS_SLAVE_COMMAND_SIZE];
+  gs_slave_command slave_command_out = {0};
+  GS_EXPECT_TRUE(gs_encode_slave_command(slave_command_frame, &slave_command));
+  slave_command_frame[0] = 0x30u;
+  write_crc(slave_command_frame, sizeof(slave_command_frame));
+  GS_EXPECT_FALSE(
+      gs_decode_slave_command(&slave_command_out, slave_command_frame));
+
+  const gs_slave_feedback slave_feedback = {0};
+  uint8_t slave_feedback_frame[GS_SLAVE_FEEDBACK_SIZE];
+  gs_slave_feedback slave_feedback_out = {0};
+  GS_EXPECT_TRUE(
+      gs_encode_slave_feedback(slave_feedback_frame, &slave_feedback));
+  slave_feedback_frame[0] = 0x31u;
+  write_crc(slave_feedback_frame, sizeof(slave_feedback_frame));
+  GS_EXPECT_FALSE(
+      gs_decode_slave_feedback(&slave_feedback_out, slave_feedback_frame));
 
   gs_master_feedback feedback = {.protocol_version = GS_PROTOCOL_VERSION};
   uint8_t feedback_frame[GS_MASTER_FEEDBACK_SIZE];
   GS_EXPECT_TRUE(gs_encode_master_feedback(feedback_frame, &feedback));
-  feedback_frame[2] = 1u;
-  const uint16_t crc = gs_crc16(feedback_frame, GS_MASTER_FEEDBACK_SIZE - 2u);
-  feedback_frame[GS_MASTER_FEEDBACK_SIZE - 2u] = (uint8_t)crc;
-  feedback_frame[GS_MASTER_FEEDBACK_SIZE - 1u] = (uint8_t)(crc >> 8);
+  feedback_frame[2] = 2u;
+  write_crc(feedback_frame, sizeof(feedback_frame));
   GS_EXPECT_FALSE(gs_decode_master_feedback(&feedback, feedback_frame));
 }
 

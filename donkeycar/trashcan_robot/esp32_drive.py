@@ -5,6 +5,7 @@ from dataclasses import dataclass
 from typing import Callable
 
 from .config import LimitsConfig
+from .protocol import Frame
 from .transport import MotorTransport
 
 
@@ -26,12 +27,14 @@ class ESP32Drive:
         limits: LimitsConfig,
         reconnect_seconds: float = 1.0,
         connection_change: Callable[[bool], None] | None = None,
+        clock: Callable[[], float] = time.monotonic,
     ) -> None:
         self._transport = transport
         self._limits = limits
         self._reconnect_seconds = reconnect_seconds
         self._connection_change = connection_change
-        self._last_connect_attempt = 0.0
+        self._clock = clock
+        self._last_connect_attempt = float("-inf")
         self._last_connected = False
         self._awaiting_neutral = True
         self.status = DriveStatus(False, None, 0.0, 0.0, None)
@@ -57,9 +60,7 @@ class ESP32Drive:
                 self.status = DriveStatus(True, latency, linear, angular, None)
         except Exception as exc:
             self._safe_disconnect()
-            linear = 0.0
-            angular = 0.0
-            self.status = DriveStatus(False, None, linear, angular, str(exc))
+            self.status = DriveStatus(False, None, 0.0, 0.0, str(exc))
 
         self._publish_connection(self.status.connected)
         return (
@@ -70,18 +71,26 @@ class ESP32Drive:
             self.status.fault,
         )
 
+    def read_telemetry(self) -> list[Frame]:
+        return self._transport.read_telemetry()
+
     def shutdown(self) -> None:
         try:
             if self._transport.is_connected():
-                self._transport.send_command(0.0, 0.0)
+                try:
+                    self._transport.send_command(0.0, 0.0)
+                except Exception:
+                    pass
+                self._transport.shutdown()
         finally:
-            self._transport.disconnect()
             self._awaiting_neutral = True
+            self.status = DriveStatus(False, None, 0.0, 0.0, None)
+            self._publish_connection(False)
 
     def _ensure_connected(self) -> None:
         if self._transport.is_connected():
             return
-        now = time.monotonic()
+        now = self._clock()
         if now - self._last_connect_attempt < self._reconnect_seconds:
             raise ConnectionError("waiting to retry ESP32 connection")
         self._last_connect_attempt = now
@@ -90,11 +99,12 @@ class ESP32Drive:
 
     def _safe_disconnect(self) -> None:
         try:
-            if self._transport.is_connected():
-                self._transport.send_command(0.0, 0.0)
+            self._transport.shutdown()
         except Exception:
-            pass
-        self._transport.disconnect()
+            try:
+                self._transport.disconnect()
+            except Exception:
+                pass
         self._awaiting_neutral = True
 
     def _publish_connection(self, connected: bool) -> None:

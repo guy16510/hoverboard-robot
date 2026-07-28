@@ -63,6 +63,22 @@ struct ProtocolMotorTelemetry {
   uint16_t transmit_rate_centi_hz = 0u;
 };
 
+struct ProtocolDriveTelemetry {
+  int16_t requested_linear_milli = 0;
+  int16_t requested_yaw_milli = 0;
+  int16_t mixed_left = 0;
+  int16_t mixed_right = 0;
+  int16_t commanded_left = 0;
+  int16_t commanded_right = 0;
+  int16_t applied_left = 0;
+  int16_t applied_right = 0;
+  uint32_t safety_faults = 0u;
+  uint8_t active_source = 0u;
+  uint8_t operating_mode = 0u;
+  uint8_t arm_state = 0u;
+  uint8_t flags = 0u;
+};
+
 struct ProtocolOdometry {
   int32_t left = 0;
   int32_t right = 0;
@@ -87,6 +103,8 @@ public:
                           size_t capacity);
   static size_t encodeMotor(const ProtocolMotorTelemetry &value,
                             uint8_t *payload, size_t capacity);
+  static size_t encodeDrive(const ProtocolDriveTelemetry &value,
+                            uint8_t *payload, size_t capacity);
   static size_t encodeOdometry(const ProtocolOdometry &value, uint8_t *payload,
                                size_t capacity);
   static size_t encodeFaults(const ProtocolFaults &value, uint8_t *payload,
@@ -95,7 +113,7 @@ public:
 
 class SerialFrameQueue {
 public:
-  static constexpr size_t kCapacity = 8u;
+  static constexpr size_t kCapacity = 12u;
 
   bool push(const SerialFrame &frame);
   bool pop(SerialFrame &frame);

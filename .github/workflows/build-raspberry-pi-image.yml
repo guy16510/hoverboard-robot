@@ -49,12 +49,17 @@ jobs:
             dosfstools e2fsprogs libarchive-tools libcap2-bin grep rsync xz-utils \
             file git curl bc gpg pigz xxd arch-test bmap-tools kmod
 
-      - name: Validate canonical service contract
+      - name: Validate image source contract
         run: |
           set -euo pipefail
           bash donkeycar/scripts/validate-service-unit.sh \
             donkeycar/systemd/trashcan-donkeycar.service \
             trashbot trashbot /opt/trashcan-robot/donkeycar
+          grep -Fxq 'nodejs' raspberry-pi-image/stage-trashcan/00-install/00-packages
+          grep -Fxq 'npm' raspberry-pi-image/stage-trashcan/00-install/00-packages
+          bash -n raspberry-pi-image/stage-trashcan/00-install/00-run-chroot.sh
+          bash -n raspberry-pi-image/stage-trashcan/00-install/01-verify-marker.sh
+          bash -n raspberry-pi-image/validate-image.sh
 
       - name: Build Bookworm ARM64 robot image
         run: |
@@ -73,6 +78,10 @@ jobs:
             'release=bookworm' \
             'first_boot_user_rename=disabled' \
             'ssh=enabled' \
+            'nodejs=installed' \
+            'nodejs_minimum_major=18' \
+            'npm=installed' \
+            'node_protocol_tests=passed' \
             'robot_user=trashbot' \
             'robot_group=trashbot' \
             'robot_working_directory=/opt/trashcan-robot/donkeycar' \
@@ -84,6 +93,9 @@ jobs:
           grep -Fq 'TRASHCAN_IMAGE_RELEASE=bookworm' raspberry-pi-image-build.log
           grep -Fq 'TRASHCAN_FIRST_BOOT_USERCONFIG=disabled' raspberry-pi-image-build.log
           grep -Fq 'TRASHCAN_SSH=enabled' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image Node.js protocol smoke test passed' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image Node.js smoke test passed: node v' raspberry-pi-image-build.log
+          grep -Fq 'Raspberry Pi image Node protocol tests passed' raspberry-pi-image-build.log
           grep -Fq 'Raspberry Pi image dependency installation passed' raspberry-pi-image-build.log
           grep -Fq 'Trashcan robot service contract validated' raspberry-pi-image-build.log
           grep -Fq 'Raspberry Pi image Python smoke test passed' raspberry-pi-image-build.log

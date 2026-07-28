@@ -58,6 +58,7 @@ public:
 
   bool armed() const;
   bool neutralObserved() const;
+  bool zeroEstablishmentAllowed(const DriveSafetyInputs &inputs) const;
   uint8_t operatingMode() const;
   uint32_t faults() const;
   bool outputEnabled(const DriveSafetyInputs &inputs) const;

@@ -160,7 +160,8 @@ int main(void) {
   rcu_all_reset_flag_clear();
   gs_board_operational_init();
   gs_slave_init(&slave, gs_board_millis());
-  gs_motor_init(&motor, gs_board_bridge_port(), gs_board_millis());
+  gs_motor_init_profile(&motor, gs_board_bridge_port(),
+                        GS_COMMUTATION_SYMMETRIC_REVERSE, gs_board_millis());
   gs_safety_init(&safety, GS_SAFETY_SLAVE, watchdog_reset, gs_board_millis());
   calibrate_protection();
   const uint8_t marker[] = {GS_COMMAND_MARKER};

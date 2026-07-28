@@ -10,6 +10,7 @@
 #include <cstdint>
 
 #include "command_arbiter.h"
+#include "controller_fault_clear.h"
 #include "differential_drive_mixer.h"
 #include "drive_safety.h"
 #include "motor_transport_metrics.h"
@@ -149,6 +150,7 @@ DifferentialDriveMixer mixer(driveMixerConfig());
 DriveSafetyGate safety_gate;
 SerialTelemetrySink telemetry_sink;
 MotorTransportMetrics transport_metrics;
+ControllerFaultClear controller_fault_clear;
 gs_frame_parser feedback_parser;
 gs_master_feedback feedback{};
 gs_command_sequencer command_sequencer;
@@ -353,6 +355,11 @@ void serviceFeedback(uint64_t now_us) {
       if (transport_metrics.statistics().applied_commands > applied_before) {
         last_motor_applied_us = now_us;
       }
+      if (controller_fault_clear.observe(
+              feedback, command_sequencer.in_flight.sequence,
+              command_sequencer.sent)) {
+        safety_gate.clearRecoverableFaults(safetyInputs(now_us, true));
+      }
       if (feedback.master_faults != 0u) {
         tripSafety(kDriveFaultMasterController);
       }
@@ -514,6 +521,30 @@ bool queueFaults(uint16_t sequence) {
                                      payload, length);
 }
 
+bool queueControllerTelemetry(uint16_t sequence) {
+  ProtocolControllerTelemetry value;
+  value.master_state = feedback.master_state;
+  value.slave_state = feedback.slave_state;
+  value.status_flags = feedback.status_flags;
+  value.motor_status_flags = feedback.motor_status_flags;
+  value.master_command_age_ms = feedback.master_command_age_ms;
+  value.slave_feedback_age_ms = feedback.slave_feedback_age_ms;
+  value.slave_command_age_ms = feedback.slave_command_age_ms;
+  value.left_hall = feedback.left_hall;
+  value.right_hall = feedback.right_hall;
+  value.left_compare_offset = feedback.left_compare_offset;
+  value.right_compare_offset = feedback.right_compare_offset;
+  value.remote_rx_bytes = feedback.remote_rx_bytes;
+  value.remote_valid_frames = feedback.remote_valid_frames;
+  value.remote_invalid_frames = feedback.remote_invalid_frames;
+  value.remote_framing_errors = feedback.remote_framing_errors;
+  uint8_t payload[kSerialMaximumPayloadSize] = {};
+  const size_t length =
+      SerialMessageCodec::encodeController(value, payload, sizeof(payload));
+  return telemetry_sink.queuePayload(SerialMessageType::kControllerTelemetry,
+                                     sequence, payload, length);
+}
+
 bool decodeMovement(const SerialFrame &frame, MovementCommand &movement) {
   return MovementCommandCodec::decode(frame.payload.data(), frame.payload_length,
                                       movement);
@@ -560,6 +591,9 @@ bool handleAcceptedFrame(const SerialFrame &frame, uint64_t now_us) {
     return true;
   case SerialMessageType::kActiveFaults:
     (void)queueFaults(frame.sequence);
+    return true;
+  case SerialMessageType::kControllerTelemetry:
+    (void)queueControllerTelemetry(frame.sequence);
     return true;
   case SerialMessageType::kSetOperatingMode:
     safety_gate.setOperatingMode(frame.payload[0]);
@@ -611,21 +645,12 @@ bool handleAcceptedFrame(const SerialFrame &frame, uint64_t now_us) {
     (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     return true;
   case SerialMessageType::kClearFault: {
-    const bool previous_ack_timeout = acknowledgment_timeout_latched;
-    const bool previous_crc_fault = feedback_crc_latched;
+    controller_fault_clear.request();
     acknowledgment_timeout_latched = false;
     feedback_crc_latched = false;
     const DriveSafetyInputs inputs = safetyInputs(now_us, true);
     safety_gate.clearRecoverableFaults(inputs);
-    if (safety_gate.faults() == 0u) {
-      (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
-    } else {
-      acknowledgment_timeout_latched = previous_ack_timeout;
-      feedback_crc_latched = previous_crc_fault;
-      (void)telemetry_sink.queueError(
-          frame.type, frame.sequence,
-          static_cast<uint8_t>(SerialErrorCode::kUnsafeState));
-    }
+    (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     return true;
   }
   default:
@@ -726,12 +751,20 @@ void serviceMotorHeartbeat(uint64_t now_us) {
     requested.master_flags = GS_COMMAND_DIRECT_LR;
     requested.speed = boundedCommand(latest_mix.left);
     requested.steer = boundedCommand(latest_mix.right);
+  } else if (safety_gate.zeroEstablishmentAllowed(inputs)) {
+    // Bring both motor controllers to READY with an exact zero command. This
+    // cannot energize either bridge, but it lets their end-to-end zero
+    // acknowledgment satisfy the full ARM gate.
+    requested.master_flags = GS_COMMAND_DIRECT_LR;
+    requested.speed = 0;
+    requested.steer = 0;
   } else {
     requested.master_flags = GS_COMMAND_DISABLE;
     requested.slave_flags = GS_COMMAND_DISABLE;
     requested.speed = 0;
     requested.steer = 0;
   }
+  controller_fault_clear.apply(requested);
 
   const gs_esp_command *selected = gs_command_sequencer_select(
       &command_sequencer, &requested, exactAck(),
@@ -769,6 +802,7 @@ void queueTelemetryStream(uint64_t now_us) {
   (void)queueMotorTelemetry(sequence);
   (void)queueOdometry(sequence, now_us);
   (void)queueFaults(sequence);
+  (void)queueControllerTelemetry(sequence);
 }
 
 } // namespace

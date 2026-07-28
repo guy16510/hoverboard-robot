@@ -28,12 +28,43 @@ int main() {
 
   gate.onConnectionEstablished();
   gate.setOperatingMode(kManualDriveMode);
+  assert(!gate.zeroEstablishmentAllowed(inputs));
   assert(!gate.requestArm(inputs));
   assert(gate.faults() & kDriveFaultNonNeutralArm);
 
   gate.observeDemand(0.0f, 0.0f);
+  auto establishing = healthy();
+  establishing.feedback_runtime_healthy = false;
+  establishing.exact_zero_acknowledged = false;
+  assert(gate.zeroEstablishmentAllowed(establishing));
+
+  establishing.lease_active = false;
+  assert(!gate.zeroEstablishmentAllowed(establishing));
+  establishing = healthy();
+  establishing.feedback_runtime_healthy = false;
+  establishing.exact_zero_acknowledged = false;
+  establishing.feedback_fresh = false;
+  assert(!gate.zeroEstablishmentAllowed(establishing));
+  establishing = healthy();
+  establishing.feedback_runtime_healthy = false;
+  establishing.exact_zero_acknowledged = false;
+  establishing.pitch_deg = kMaximumSafeTiltDeg;
+  assert(!gate.zeroEstablishmentAllowed(establishing));
+  establishing = healthy();
+  establishing.feedback_runtime_healthy = false;
+  establishing.exact_zero_acknowledged = false;
+  establishing.local_disarm = true;
+  assert(!gate.zeroEstablishmentAllowed(establishing));
+
+  gate.observeDemand(0.1f, 0.0f);
+  assert(!gate.neutralObserved());
+  assert(!gate.zeroEstablishmentAllowed(inputs));
+  assert(!gate.requestArm(inputs));
+  gate.observeDemand(0.0f, 0.0f);
+
   assert(gate.requestArm(inputs));
   assert(gate.armed());
+  assert(!gate.zeroEstablishmentAllowed(inputs));
   assert(gate.outputEnabled(inputs));
 
   inputs.lease_active = false;

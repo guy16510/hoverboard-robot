@@ -163,6 +163,31 @@ size_t SerialMessageCodec::encodeFaults(const ProtocolFaults &value,
   return kLength;
 }
 
+size_t SerialMessageCodec::encodeController(
+    const ProtocolControllerTelemetry &value, uint8_t *payload,
+    size_t capacity) {
+  constexpr size_t kLength = 24u;
+  if (payload == nullptr || capacity < kLength) {
+    return 0u;
+  }
+  payload[0] = value.master_state;
+  payload[1] = value.slave_state;
+  payload[2] = value.status_flags;
+  payload[3] = value.motor_status_flags;
+  writeU16(&payload[4], value.master_command_age_ms);
+  writeU16(&payload[6], value.slave_feedback_age_ms);
+  writeU16(&payload[8], value.slave_command_age_ms);
+  payload[10] = value.left_hall;
+  payload[11] = value.right_hall;
+  writeU16(&payload[12], value.left_compare_offset);
+  writeU16(&payload[14], value.right_compare_offset);
+  writeU16(&payload[16], value.remote_rx_bytes);
+  writeU16(&payload[18], value.remote_valid_frames);
+  writeU16(&payload[20], value.remote_invalid_frames);
+  writeU16(&payload[22], value.remote_framing_errors);
+  return kLength;
+}
+
 bool SerialFrameQueue::push(const SerialFrame &frame) {
   if (size_ == kCapacity) {
     ++dropped_frames_;

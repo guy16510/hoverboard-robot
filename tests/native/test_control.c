@@ -78,6 +78,20 @@ static void test_commutation_and_hall_sequences(void) {
   GS_EXPECT_EQ(GS_HALL_INVALID, gs_validate_hall_transition(0, 2, 1, 500));
 }
 
+static void test_symmetric_reverse_profile_opposes_each_forward_vector(void) {
+  for (uint8_t hall = 1u; hall <= 6u; ++hall) {
+    gs_commutation_vector forward = {0};
+    gs_commutation_vector reverse = {0};
+    GS_EXPECT_TRUE(gs_commutation_for_hall_profile(
+        hall, 1, GS_COMMUTATION_PHASE_ADVANCED_REVERSE, &forward));
+    GS_EXPECT_TRUE(gs_commutation_for_hall_profile(
+        hall, -1, GS_COMMUTATION_SYMMETRIC_REVERSE, &reverse));
+    GS_EXPECT_EQ(forward.source, reverse.sink);
+    GS_EXPECT_EQ(forward.sink, reverse.source);
+    GS_EXPECT_EQ(forward.floating, reverse.floating);
+  }
+}
+
 static void test_proven_bridge_and_power_profiles(void) {
   const gs_motor_power_profile *power = gs_motor_power_profile_current();
 
@@ -320,6 +334,24 @@ static bool fake_apply(void *context, const gs_commutation_vector *vector,
   return true;
 }
 
+static void test_motor_uses_configured_symmetric_reverse_profile(void) {
+  fake_bridge fake = {0};
+  const gs_bridge_port port = {&fake, fake_disable, fake_apply};
+  gs_motor_controller motor;
+
+  gs_motor_init_profile(&motor, port, GS_COMMUTATION_SYMMETRIC_REVERSE, 0);
+  gs_motor_clear_fault(&motor, 10);
+  GS_EXPECT_EQ(GS_COMMUTATION_SYMMETRIC_REVERSE,
+               motor.commutation_profile);
+  const gs_motor_output out = gs_motor_step(
+      &motor, &(gs_motor_input){2, false, 0, true, -250, 210});
+
+  GS_EXPECT_TRUE(out.demand.bridge_enabled);
+  GS_EXPECT_EQ(GS_PHASE_G, fake.last_vector.source);
+  GS_EXPECT_EQ(GS_PHASE_Y, fake.last_vector.sink);
+  GS_EXPECT_EQ(GS_PHASE_B, fake.last_vector.floating);
+}
+
 static void test_motor_ramps_limits_stops_and_reverses(void) {
   fake_bridge fake = {0};
   const gs_bridge_port port = {&fake, fake_disable, fake_apply};
@@ -483,11 +515,13 @@ static void test_startup_timeout_begins_after_bridge_activation(void) {
 void gs_test_control(void) {
   test_wheel_coordination();
   test_commutation_and_hall_sequences();
+  test_symmetric_reverse_profile_opposes_each_forward_vector();
   test_proven_bridge_and_power_profiles();
   test_console_strict_state_transitions();
   test_console_ramp_waits_for_motion_ready();
   test_safety_zero_startup_timeouts_and_inputs();
   test_safety_adc_watchdog_latching_and_clear();
+  test_motor_uses_configured_symmetric_reverse_profile();
   test_motor_ramps_limits_stops_and_reverses();
   test_motor_hall_faults_and_immediate_off();
   test_motor_reanchors_hall_after_coast_stop();

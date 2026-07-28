@@ -1,13 +1,17 @@
 /* SPDX-License-Identifier: GPL-3.0-only
- * Modified from the six-step commutation concepts in RoboDurden upstream and
- * the GAUSSTOP-specific Hall order recorded by the legacy project.
+ * Modified from the six-step commutation concepts in RoboDurden upstream.
+ * The phase-advanced reverse profile was physically proven only on the first
+ * GAUSSTOP wheel. The symmetric profile keeps the shared measured Hall order
+ * but opposes each positive vector for the separately calibrated slave wheel.
  */
 #include "gs_commutation.h"
 
 #include <stddef.h>
 
 static const int8_t forward_map[8] = {-1, 3, 1, 2, 5, 4, 0, -1};
-static const int8_t reverse_map[8] = {-1, 1, 5, 0, 3, 2, 4, -1};
+static const int8_t phase_advanced_reverse_map[8] = {-1, 1, 5, 0,
+                                                     3,  2, 4, -1};
+static const int8_t symmetric_reverse_map[8] = {-1, 0, 4, 5, 2, 1, 3, -1};
 
 static const gs_commutation_vector vectors[6] = {
     {GS_PHASE_Y, GS_PHASE_B, GS_PHASE_G}, {GS_PHASE_Y, GS_PHASE_G, GS_PHASE_B},
@@ -17,9 +21,24 @@ static const gs_commutation_vector vectors[6] = {
 
 bool gs_commutation_for_hall(uint8_t hall, int8_t direction,
                              gs_commutation_vector *out) {
+  return gs_commutation_for_hall_profile(
+      hall, direction, GS_COMMUTATION_PHASE_ADVANCED_REVERSE, out);
+}
+
+bool gs_commutation_for_hall_profile(uint8_t hall, int8_t direction,
+                                     gs_commutation_profile profile,
+                                     gs_commutation_vector *out) {
   if (hall > 7u || out == NULL || direction == 0) {
     return false;
   }
+  if (profile != GS_COMMUTATION_PHASE_ADVANCED_REVERSE &&
+      profile != GS_COMMUTATION_SYMMETRIC_REVERSE) {
+    return false;
+  }
+  const int8_t *reverse_map =
+      profile == GS_COMMUTATION_SYMMETRIC_REVERSE
+          ? symmetric_reverse_map
+          : phase_advanced_reverse_map;
   const int8_t index = direction > 0 ? forward_map[hall] : reverse_map[hall];
   if (index < 0) {
     return false;

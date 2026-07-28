@@ -26,6 +26,7 @@ typedef enum {
 
 typedef struct {
   gs_motor_state state;
+  gs_commutation_profile commutation_profile;
   int16_t applied_command;
   int16_t requested_command;
   int32_t odometer;
@@ -57,6 +58,9 @@ typedef struct {
 
 void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
                    uint32_t now_ms);
+void gs_motor_init_profile(gs_motor_controller *motor, gs_bridge_port bridge,
+                           gs_commutation_profile commutation_profile,
+                           uint32_t now_ms);
 gs_motor_output gs_motor_step(gs_motor_controller *motor,
                               const gs_motor_input *input);
 bool gs_motor_bridge_active(const gs_motor_controller *motor);

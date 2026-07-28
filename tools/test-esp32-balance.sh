@@ -19,6 +19,7 @@ common_flags=(
   -Wpedantic
   -Werror
   -Ifirmware/esp32/control
+  -Ifirmware/gd32/common/protocol
   -Itests/esp32
 )
 
@@ -33,3 +34,20 @@ common_flags=(
   "${sources[@]}" \
   -o "$build_dir/esp32_balance_tests_sanitized"
 "$build_dir/esp32_balance_tests_sanitized"
+
+safety_sources=(
+  tests/esp32/test_drive_safety.cpp
+  firmware/esp32/control/drive_safety.cpp
+)
+
+"$compiler" "${common_flags[@]}" \
+  "${safety_sources[@]}" \
+  -o "$build_dir/esp32_drive_safety_tests"
+"$build_dir/esp32_drive_safety_tests"
+
+"$compiler" "${common_flags[@]}" \
+  -fsanitize=address,undefined -fno-omit-frame-pointer \
+  -fno-sanitize-recover=all \
+  "${safety_sources[@]}" \
+  -o "$build_dir/esp32_drive_safety_tests_sanitized"
+"$build_dir/esp32_drive_safety_tests_sanitized"

@@ -91,8 +91,14 @@ def test_safe_handshake_uses_real_binary_protocol_and_arms_only_after_zero_ack()
     transport.connect()
 
     assert endpoint.armed is True
-    assert endpoint.event_log[:4] == ["HELLO", "MODE_2", "MOVE:0:0", "ARM"]
+    assert endpoint.event_log[:4] == [
+        "HELLO",
+        "MODE_2",
+        "MOVE:0:0",
+        "CLEAR_FAULT",
+    ]
     arm_index = endpoint.event_log.index("ARM")
+    assert endpoint.event_log[arm_index - 1] == "MOVE:0:0"
     assert all(command[3] for command in gd32.commands[: arm_index + 1])
     assert all(abs(command[1]) <= 250 and abs(command[2]) <= 250 for command in gd32.commands)
 
@@ -301,7 +307,14 @@ def test_disconnect_reconnect_requires_hello_mode_zero_and_neutral_again() -> No
     assert fault == "waiting for neutral input after ESP32 connection"
     assert endpoint.event_log.count("HELLO") == 2
     second_hello = len(endpoint.event_log) - 1 - endpoint.event_log[::-1].index("HELLO")
-    assert endpoint.event_log[second_hello : second_hello + 4] == ["HELLO", "MODE_2", "MOVE:0:0", "ARM"]
+    reconnect_events = endpoint.event_log[second_hello:]
+    assert reconnect_events[:4] == [
+        "HELLO",
+        "MODE_2",
+        "MOVE:0:0",
+        "CLEAR_FAULT",
+    ]
+    assert reconnect_events[reconnect_events.index("ARM") - 1] == "MOVE:0:0"
     assert gd32.applied_left == 0 and gd32.applied_right == 0
 
 

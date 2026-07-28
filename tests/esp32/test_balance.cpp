@@ -7,6 +7,7 @@
 #include "balance_state_machine.h"
 #include "command_arbiter.h"
 #include "complementary_pitch_estimator.h"
+#include "controller_fault_clear.h"
 #include "control_runtime.h"
 #include "loop_metrics.h"
 #include "motor_transport_metrics.h"
@@ -1048,6 +1049,28 @@ void testEveryBinaryTelemetrySchemaHasDeterministicWidthAndOffsets() {
       16, SerialMessageCodec::encodeFaults(faults, payload, sizeof(payload)));
   GS_ESP32_EXPECT_EQ(0xdd, payload[8]);
   GS_ESP32_EXPECT_EQ(0xaa, payload[11]);
+
+  ProtocolControllerTelemetry controller{};
+  controller.master_state = 2u;
+  controller.slave_state = 3u;
+  controller.master_command_age_ms = 0x1234u;
+  controller.left_hall = 5u;
+  controller.right_hall = 6u;
+  controller.right_compare_offset = 0x5678u;
+  controller.remote_framing_errors = 9u;
+  GS_ESP32_EXPECT_EQ(
+      24, SerialMessageCodec::encodeController(controller, payload,
+                                                sizeof(payload)));
+  GS_ESP32_EXPECT_EQ(2, payload[0]);
+  GS_ESP32_EXPECT_EQ(3, payload[1]);
+  GS_ESP32_EXPECT_EQ(0x34, payload[4]);
+  GS_ESP32_EXPECT_EQ(0x12, payload[5]);
+  GS_ESP32_EXPECT_EQ(5, payload[10]);
+  GS_ESP32_EXPECT_EQ(6, payload[11]);
+  GS_ESP32_EXPECT_EQ(0x78, payload[14]);
+  GS_ESP32_EXPECT_EQ(0x56, payload[15]);
+  GS_ESP32_EXPECT_EQ(9, payload[22]);
+  GS_ESP32_EXPECT_EQ(0, payload[23]);
 }
 
 void testProtocolDeclaresRequiredMessageTypes() {
@@ -1064,6 +1087,8 @@ void testProtocolDeclaresRequiredMessageTypes() {
   GS_ESP32_EXPECT_TRUE(
       static_cast<uint8_t>(SerialMessageType::kAcknowledgment) !=
       static_cast<uint8_t>(SerialMessageType::kErrorResponse));
+  GS_ESP32_EXPECT_EQ(
+      0x36, static_cast<uint8_t>(SerialMessageType::kControllerTelemetry));
 }
 
 void feedEncodedFrame(SerialCommandSource &source, const SerialFrame &frame,
@@ -1349,6 +1374,42 @@ void testTransportMetricsModelSustainedCommandsAndLatency() {
   GS_ESP32_EXPECT_EQ(0, statistics.timeouts);
 }
 
+void testControllerFaultClearStaysDisabledUntilBothPeersConfirm() {
+  ControllerFaultClear clear;
+  gs_esp_command command{};
+  command.speed = 100;
+  command.steer = -100;
+
+  clear.request();
+  clear.apply(command);
+  GS_ESP32_EXPECT_TRUE(clear.pending());
+  GS_ESP32_EXPECT_EQ(0, command.speed);
+  GS_ESP32_EXPECT_EQ(0, command.steer);
+  GS_ESP32_EXPECT_EQ(
+      GS_COMMAND_DISABLE | GS_COMMAND_CLEAR_FAULT,
+      command.master_flags);
+  GS_ESP32_EXPECT_EQ(
+      GS_COMMAND_DISABLE | GS_COMMAND_CLEAR_FAULT,
+      command.slave_flags);
+
+  gs_master_feedback feedback{};
+  feedback.accepted_esp_sequence = 7u;
+  feedback.forwarded_slave_sequence = 7u;
+  feedback.accepted_slave_sequence = 7u;
+  feedback.master_faults = 1u;
+  GS_ESP32_EXPECT_FALSE(clear.observe(feedback, 7u, true));
+  GS_ESP32_EXPECT_TRUE(clear.pending());
+
+  feedback.master_faults = 0u;
+  feedback.status_flags = GS_FEEDBACK_CLEAR_PENDING;
+  GS_ESP32_EXPECT_FALSE(clear.observe(feedback, 7u, true));
+  GS_ESP32_EXPECT_TRUE(clear.pending());
+
+  feedback.status_flags = 0u;
+  GS_ESP32_EXPECT_TRUE(clear.observe(feedback, 7u, true));
+  GS_ESP32_EXPECT_FALSE(clear.pending());
+}
+
 } // namespace
 
 int main() {
@@ -1404,6 +1465,7 @@ int main() {
   testWebDisconnectExpiresMovementWithoutDisarmingBalance();
   testPulseTransportBudgetBoundsSustainableRate();
   testTransportMetricsModelSustainedCommandsAndLatency();
+  testControllerFaultClearStaysDisabledUntilBothPeersConfirm();
 
   if (gs_esp32_tests_failed != 0u) {
     std::fprintf(stderr, "%u/%u ESP32 assertions failed\n",

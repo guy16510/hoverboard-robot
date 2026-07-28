@@ -23,6 +23,7 @@ MOTOR = 0x32
 ODOMETRY = 0x33
 FAULTS = 0x34
 DRIVE_TELEMETRY = 0x35
+CONTROLLER_TELEMETRY = 0x36
 ACK = 0x7E
 ERROR = 0x7F
 DRIVE_MODE = 2
@@ -181,12 +182,48 @@ def decode_message(frame: Frame) -> dict[str, Any]:
         }
     if frame.message_type == FAULTS and len(payload) == 16:
         balance, master, slave, feedback_health = struct.unpack("<IIII", payload)
+        controller_status_flags = feedback_health & 0xFF
+        motor_status_flags = (feedback_health >> 8) & 0xFF
         return {
             "name": "faults",
             "balance": balance,
             "master": master,
             "slave": slave,
             "feedback_health": feedback_health,
+            "controller_status_flags": controller_status_flags,
+            "motor_status_flags": motor_status_flags,
+            "peer_healthy": bool(controller_status_flags & (1 << 0)),
+            "master_pa4_high": bool(controller_status_flags & (1 << 1)),
+            "pa4_bypass": bool(controller_status_flags & (1 << 2)),
+            "clear_pending": bool(controller_status_flags & (1 << 3)),
+            "transport_overflow": bool(controller_status_flags & 0xF0),
+            "left_bridge_enabled": bool(motor_status_flags & (1 << 0)),
+            "right_bridge_enabled": bool(motor_status_flags & (1 << 1)),
+            "slave_pa4_high": bool(motor_status_flags & (1 << 2)),
+        }
+    if frame.message_type == CONTROLLER_TELEMETRY and len(payload) == 24:
+        values = struct.unpack("<BBBBHHHBBHHHHHH", payload)
+        motor_status_flags = values[3]
+        return {
+            "name": "controller",
+            "states": [values[0], values[1]],
+            "status_flags": values[2],
+            "motor_status_flags": motor_status_flags,
+            "command_ages_ms": {
+                "master": values[4],
+                "slave_feedback": values[5],
+                "slave_command": values[6],
+            },
+            "halls": [values[7], values[8]],
+            "bridges_enabled": [
+                bool(motor_status_flags & (1 << 0)),
+                bool(motor_status_flags & (1 << 1)),
+            ],
+            "compare_offsets": [values[9], values[10]],
+            "remote_rx_bytes": values[11],
+            "remote_valid_frames": values[12],
+            "remote_invalid_frames": values[13],
+            "remote_framing_errors": values[14],
         }
     if frame.message_type == ACK and len(payload) == 2:
         return {"name": "acknowledgment", "request_type": payload[0], "status": payload[1]}

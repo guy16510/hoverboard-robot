@@ -31,8 +31,9 @@ void DriveSafetyGate::setOperatingMode(uint8_t mode) {
 }
 
 void DriveSafetyGate::observeDemand(float linear_velocity, float yaw_rate) {
-  if (nearZero(linear_velocity) && nearZero(yaw_rate)) {
-    neutral_observed_ = true;
+  neutral_observed_ =
+      nearZero(linear_velocity) && nearZero(yaw_rate);
+  if (neutral_observed_) {
     latched_faults_ &= ~kDriveFaultNonNeutralArm;
   }
 }
@@ -72,7 +73,8 @@ void DriveSafetyGate::disarm(uint32_t reason) {
 }
 
 void DriveSafetyGate::clearRecoverableFaults(const DriveSafetyInputs &inputs) {
-  if (currentFaults(inputs, true) == 0u &&
+  if ((currentFaults(inputs, true) == 0u ||
+       zeroEstablishmentAllowed(inputs)) &&
       operating_mode_ == kManualDriveMode && neutral_observed_) {
     latched_faults_ = 0u;
   }
@@ -96,6 +98,18 @@ void DriveSafetyGate::evaluate(const DriveSafetyInputs &inputs) {
 bool DriveSafetyGate::armed() const { return armed_; }
 
 bool DriveSafetyGate::neutralObserved() const { return neutral_observed_; }
+
+bool DriveSafetyGate::zeroEstablishmentAllowed(
+    const DriveSafetyInputs &inputs) const {
+  if (armed_ || operating_mode_ != kManualDriveMode || !neutral_observed_ ||
+      !inputs.lease_active) {
+    return false;
+  }
+  DriveSafetyInputs establishing = inputs;
+  establishing.feedback_runtime_healthy = true;
+  establishing.exact_zero_acknowledged = true;
+  return currentFaults(establishing, true) == 0u;
+}
 
 uint8_t DriveSafetyGate::operatingMode() const { return operating_mode_; }
 

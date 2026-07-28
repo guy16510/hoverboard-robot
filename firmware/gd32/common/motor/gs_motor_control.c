@@ -64,11 +64,19 @@ static void reset_hall_tracking(gs_motor_controller *motor) {
 
 void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
                    uint32_t now_ms) {
+  gs_motor_init_profile(motor, bridge, GS_COMMUTATION_PHASE_ADVANCED_REVERSE,
+                        now_ms);
+}
+
+void gs_motor_init_profile(gs_motor_controller *motor, gs_bridge_port bridge,
+                           gs_commutation_profile commutation_profile,
+                           uint32_t now_ms) {
   if (motor == NULL) {
     return;
   }
   *motor = (gs_motor_controller){0};
   motor->bridge = bridge;
+  motor->commutation_profile = commutation_profile;
   motor->state = GS_MOTOR_DISABLED;
   motor->last_step_ms = now_ms;
   disable_bridge(motor);
@@ -96,9 +104,12 @@ void gs_motor_clear_fault(gs_motor_controller *motor, uint32_t now_ms) {
     return;
   }
   const gs_bridge_port bridge = motor->bridge;
+  const gs_commutation_profile commutation_profile =
+      motor->commutation_profile;
   const int32_t odometer = motor->odometer;
   *motor = (gs_motor_controller){0};
   motor->bridge = bridge;
+  motor->commutation_profile = commutation_profile;
   motor->odometer = odometer;
   motor->state = GS_MOTOR_DISABLED;
   motor->last_step_ms = now_ms;
@@ -215,7 +226,8 @@ gs_motor_output gs_motor_step(gs_motor_controller *motor,
     return motor_output(motor, hall_result, false);
   }
   gs_commutation_vector vector;
-  if (!gs_commutation_for_hall(input->hall, motor->direction, &vector) ||
+  if (!gs_commutation_for_hall_profile(input->hall, motor->direction,
+                                       motor->commutation_profile, &vector) ||
       motor->bridge.apply == NULL ||
       !motor->bridge.apply(motor->bridge.context, &vector, compare)) {
     return fault_motor(motor, GS_HALL_INVALID);

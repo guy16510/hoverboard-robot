@@ -93,6 +93,24 @@ struct ProtocolFaults {
   uint32_t feedback_health = 0u;
 };
 
+struct ProtocolControllerTelemetry {
+  uint8_t master_state = 0u;
+  uint8_t slave_state = 0u;
+  uint8_t status_flags = 0u;
+  uint8_t motor_status_flags = 0u;
+  uint16_t master_command_age_ms = 0u;
+  uint16_t slave_feedback_age_ms = 0u;
+  uint16_t slave_command_age_ms = 0u;
+  uint8_t left_hall = 0u;
+  uint8_t right_hall = 0u;
+  uint16_t left_compare_offset = 0u;
+  uint16_t right_compare_offset = 0u;
+  uint16_t remote_rx_bytes = 0u;
+  uint16_t remote_valid_frames = 0u;
+  uint16_t remote_invalid_frames = 0u;
+  uint16_t remote_framing_errors = 0u;
+};
+
 class SerialMessageCodec {
 public:
   static size_t encodeCapabilities(const ProtocolCapabilities &value,
@@ -109,6 +127,8 @@ public:
                                size_t capacity);
   static size_t encodeFaults(const ProtocolFaults &value, uint8_t *payload,
                              size_t capacity);
+  static size_t encodeController(const ProtocolControllerTelemetry &value,
+                                 uint8_t *payload, size_t capacity);
 };
 
 class SerialFrameQueue {

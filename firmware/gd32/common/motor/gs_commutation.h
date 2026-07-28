@@ -11,6 +11,11 @@ typedef enum {
   GS_PHASE_B = 2,
 } gs_phase;
 
+typedef enum {
+  GS_COMMUTATION_PHASE_ADVANCED_REVERSE = 1,
+  GS_COMMUTATION_SYMMETRIC_REVERSE = 2,
+} gs_commutation_profile;
+
 typedef struct {
   gs_phase source;
   gs_phase sink;
@@ -27,6 +32,9 @@ typedef enum {
 
 bool gs_commutation_for_hall(uint8_t hall, int8_t direction,
                              gs_commutation_vector *out);
+bool gs_commutation_for_hall_profile(uint8_t hall, int8_t direction,
+                                     gs_commutation_profile profile,
+                                     gs_commutation_vector *out);
 gs_hall_transition gs_validate_hall_transition(uint8_t previous,
                                                uint8_t current,
                                                int8_t direction,

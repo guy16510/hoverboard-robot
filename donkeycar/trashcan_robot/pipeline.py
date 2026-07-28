@@ -40,10 +40,17 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     from donkeycar.parts.controller import LocalWebController
     from donkeycar.parts.keras import KerasLinear
     from donkeycar.parts.tub_v2 import TubWriter
+    from donkeycar.parts.web_controller.web import WebSocketDriveAPI
+
+    install_safe_websocket_close_handler(WebSocketDriveAPI)
 
     vehicle = dk.Vehicle()
     state = RobotState()
-    transport = MockMotorTransport() if use_mock else SerialMotorTransport(config.serial)
+    transport = (
+        MockMotorTransport()
+        if use_mock
+        else SerialMotorTransport(config.serial, renew_commands=True)
+    )
     drive = ESP32Drive(transport, config.limits, config.serial.reconnect_seconds)
 
     camera_cfg = config.raw["camera"]
@@ -160,6 +167,23 @@ def create_web_controller(controller_type: Any, host: str, port: int) -> Any:
     controller.bind_host = host
     controller.bind_port = port
     return controller
+
+
+def install_safe_websocket_close_handler(handler_type: Any) -> None:
+    """Force neutral controls before Donkeycar removes a websocket client."""
+    if getattr(handler_type, "_trashcan_safe_close_installed", False):
+        return
+    original_close = handler_type.on_close
+
+    def safe_close(handler: Any) -> Any:
+        handler.application.angle = 0.0
+        handler.application.throttle = 0.0
+        handler.application.recording = False
+        handler.application.mode = "user"
+        return original_close(handler)
+
+    handler_type.on_close = safe_close
+    handler_type._trashcan_safe_close_installed = True
 
 
 def create_tub_writer(

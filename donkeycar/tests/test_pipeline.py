@@ -1,5 +1,5 @@
 from pathlib import Path
-from types import ModuleType
+from types import ModuleType, SimpleNamespace
 from typing import Any
 import sys
 
@@ -14,6 +14,7 @@ from trashcan_robot.pipeline import (
     StateUpdater,
     create_tub_writer,
     create_web_controller,
+    install_safe_websocket_close_handler,
 )
 from trashcan_robot.state import RobotState
 
@@ -129,6 +130,32 @@ def test_pipeline_keeps_drive_outputs_separate_from_state_telemetry() -> None:
         "drive/fault",
     ]
     assert STATE_UPDATE_INPUTS[-2:] == ["camera/fps", "inference/rate"]
+
+
+def test_websocket_disconnect_forces_neutral_before_client_removal() -> None:
+    events: list[tuple[float, float]] = []
+
+    class Handler:
+        def on_close(self) -> None:
+            events.append((self.application.angle, self.application.throttle))
+
+    install_safe_websocket_close_handler(Handler)
+    install_safe_websocket_close_handler(Handler)
+    handler = Handler()
+    handler.application = SimpleNamespace(
+        angle=0.8,
+        throttle=-0.6,
+        recording=True,
+        mode="local",
+    )
+
+    handler.on_close()
+
+    assert events == [(0.0, 0.0)]
+    assert handler.application.angle == 0.0
+    assert handler.application.throttle == 0.0
+    assert handler.application.recording is False
+    assert handler.application.mode == "user"
 
 
 def test_autonomous_is_blocked_when_esp32_disconnects() -> None:

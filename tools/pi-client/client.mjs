@@ -10,6 +10,7 @@ import {
   encodeFrame,
   encodeMovement,
 } from "./protocol.mjs";
+import { DRIVE_MODE } from "./manual_drive.mjs";
 
 export class Sequence {
   #value;
@@ -95,16 +96,24 @@ export class SerialClient {
   #descriptor;
   #leaseId;
   #sequence;
+  #write;
+  #close;
+  #closed = false;
 
   constructor(port, {
     baud = 115200,
     configure = true,
     hello = true,
     leaseId = Date.now(),
+    openPort = openConfiguredSerialPort,
+    write = fs.writeSync,
+    close = fs.closeSync,
   } = {}) {
-    this.#descriptor = openConfiguredSerialPort(port, { baud, configure });
+    this.#descriptor = openPort(port, { baud, configure });
     this.#leaseId = leaseId >>> 0;
     this.#sequence = new Sequence();
+    this.#write = write;
+    this.#close = close;
     if (hello) this.send(MessageType.HELLO);
   }
 
@@ -113,13 +122,14 @@ export class SerialClient {
   }
 
   sendDetailed(type, payload = Buffer.alloc(0), flags = 0) {
+    if (this.#closed) throw new Error("serial client is closed");
     const frame = encodeFrame({
       type,
       flags,
       sequence: this.#sequence.next(),
       payload,
     });
-    fs.writeSync(this.#descriptor, frame);
+    this.#write(this.#descriptor, frame);
     return {
       sequence: frame.readUInt16LE(5),
       frame,
@@ -133,7 +143,7 @@ export class SerialClient {
       leaseId,
       lifetimeMs,
     });
-    this.send(MessageType.SET_VELOCITY_AND_YAW, payload);
+    return this.send(MessageType.SET_VELOCITY_AND_YAW, payload);
   }
 
   directMotor(left, right,
@@ -143,14 +153,44 @@ export class SerialClient {
   }
 
   mode(value) {
-    this.send(MessageType.SET_OPERATING_MODE, Buffer.from([value]));
+    return this.send(MessageType.SET_OPERATING_MODE, Buffer.from([value]));
+  }
+
+  initializeDrive() {
+    const modeSequence = this.mode(DRIVE_MODE);
+    const zeroSequence = this.movement(0, 0);
+    const armSequence = this.send(MessageType.ARM);
+    return { modeSequence, zeroSequence, armSequence };
+  }
+
+  requestTelemetry(type) {
+    return this.send(type);
   }
 
   readStream() {
+    if (this.#closed) throw new Error("serial client is closed");
     return new PollingSerialStream(this.#descriptor);
   }
 
+  safeClose() {
+    if (this.#closed) return;
+    for (const operation of [
+      () => this.movement(0, 0),
+      () => this.send(MessageType.STOP),
+      () => this.send(MessageType.DISARM),
+    ]) {
+      try {
+        operation();
+      } catch {
+        // Shutdown is best effort, every operation is attempted independently.
+      }
+    }
+    this.close();
+  }
+
   close() {
-    fs.closeSync(this.#descriptor);
+    if (this.#closed) return;
+    this.#closed = true;
+    this.#close(this.#descriptor);
   }
 }

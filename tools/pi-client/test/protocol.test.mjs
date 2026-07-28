@@ -116,7 +116,7 @@ test("direct motor encoder enforces the transport-test command ceiling", () => {
   assert.equal(payload.readUInt16LE(8), 400);
   assert.throws(
     () => encodeDirectMotor({
-      left: 51,
+      left: 101,
       right: 0,
       leaseId: 1,
       lifetimeMs: 500,
@@ -425,8 +425,9 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
   assert.throws(() => normalizeStagePlan({
     actions: [
       { atMs: 1000, command: "mode", value: 3 },
+      { atMs: 1250, command: "direct", left: 0, right: 0 },
       { atMs: 1500, command: "arm" },
-      { atMs: 2000, command: "direct", left: 51, right: 0 },
+      { atMs: 2000, command: "direct", left: 101, right: 0 },
       { atMs: 3000, command: "direct", left: 0, right: 0 },
       { atMs: 3500, command: "stop" },
       { atMs: 4000, command: "disarm" },

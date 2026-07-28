@@ -96,8 +96,8 @@ Only one source may own movement. Priority is:
 
 The direct-motor transport-test payload has the same ten-byte lease layout,
 with signed `left` and `right` command units in the first two fields. Both
-values are independently restricted to `-50..50`, which reaches only the
-existing profile's minimum non-deadband command. It is honored only in mode 3,
+values are independently restricted to `-100..100`, matching the firmware's
+bounded transport-test ceiling. It is honored only in mode 3,
 still requires every normal arming and feedback gate, expires to zero, and is
 clamped again immediately before the motor sink. It is not a general-purpose
 drive command.

@@ -115,6 +115,28 @@ size_t SerialMessageCodec::encodeMotor(const ProtocolMotorTelemetry &value,
   return kLength;
 }
 
+size_t SerialMessageCodec::encodeDrive(const ProtocolDriveTelemetry &value,
+                                       uint8_t *payload, size_t capacity) {
+  constexpr size_t kLength = 24u;
+  if (payload == nullptr || capacity < kLength) {
+    return 0u;
+  }
+  writeI16(&payload[0], value.requested_linear_milli);
+  writeI16(&payload[2], value.requested_yaw_milli);
+  writeI16(&payload[4], value.mixed_left);
+  writeI16(&payload[6], value.mixed_right);
+  writeI16(&payload[8], value.commanded_left);
+  writeI16(&payload[10], value.commanded_right);
+  writeI16(&payload[12], value.applied_left);
+  writeI16(&payload[14], value.applied_right);
+  writeU32(&payload[16], value.safety_faults);
+  payload[20] = value.active_source;
+  payload[21] = value.operating_mode;
+  payload[22] = value.arm_state;
+  payload[23] = value.flags;
+  return kLength;
+}
+
 size_t SerialMessageCodec::encodeOdometry(const ProtocolOdometry &value,
                                           uint8_t *payload, size_t capacity) {
   constexpr size_t kLength = 20u;

@@ -53,7 +53,8 @@ mount -o ro "$root_partition" "$root_mount"
 
 marker="$root_mount/etc/trashcan-robot-image-validated"
 build_info="$root_mount/etc/trashcan-robot-build-info"
-app=/opt/trashcan-robot/donkeycar
+repository=/opt/trashcan-robot
+app="$repository/donkeycar"
 mounted_app="$root_mount$app"
 service="$root_mount/etc/systemd/system/trashcan-donkeycar.service"
 enabled_link="$root_mount/etc/systemd/system/multi-user.target.wants/trashcan-donkeycar.service"
@@ -65,6 +66,11 @@ enabled_link="$root_mount/etc/systemd/system/multi-user.target.wants/trashcan-do
 for fact in \
   'architecture=arm64' \
   'release=bookworm' \
+  'nodejs=installed' \
+  'nodejs_minimum_major=18' \
+  'nodejs_smoke=passed' \
+  'npm=installed' \
+  'node_protocol_tests=passed' \
   'robot_user=trashbot' \
   'robot_group=trashbot' \
   'robot_working_directory=/opt/trashcan-robot/donkeycar' \
@@ -109,12 +115,36 @@ trashbot_gid="$(awk -F: '$1 == "trashbot" { print $3 }' "$root_mount/etc/group")
   echo "Exported image is missing the trashbot user or group" >&2
   exit 1
 }
-bad_owner="$(find "$root_mount/opt/trashcan-robot" \( ! -uid "$trashbot_uid" -o ! -gid "$trashbot_gid" \) -print -quit)"
+bad_owner="$(find "$root_mount$repository" \( ! -uid "$trashbot_uid" -o ! -gid "$trashbot_gid" \) -print -quit)"
 if [[ -n "$bad_owner" ]]; then
   echo "Exported repository ownership is incorrect at $bad_owner" >&2
   stat -c '%u:%g %n' "$bad_owner" >&2 || true
   exit 1
 fi
+
+node_version="$(chroot "$root_mount" /usr/bin/node --version)"
+node_major="${node_version#v}"
+node_major="${node_major%%.*}"
+if ! [[ "$node_major" =~ ^[0-9]+$ ]] || (( node_major < 18 )); then
+  echo "Exported image requires Node.js 18 or newer, got $node_version" >&2
+  exit 1
+fi
+npm_version="$(chroot "$root_mount" /usr/bin/npm --version)"
+chroot "$root_mount" /usr/bin/node --input-type=module - <<'JS'
+import assert from 'node:assert/strict';
+import {
+  MessageType,
+  crc16,
+  encodeFrame,
+} from 'file:///opt/trashcan-robot/tools/pi-client/protocol.mjs';
+
+assert.equal(crc16(Buffer.from('123456789')), 0x29b1);
+const frame = encodeFrame({ type: MessageType.DISARM, sequence: 7 });
+assert.equal(frame[0], 0xa5);
+assert.equal(frame[1], 0x5a);
+console.log('Exported image Node.js smoke test passed');
+JS
+printf 'Exported image Node.js validated: node %s, npm %s\n' "$node_version" "$npm_version"
 
 chroot "$root_mount" /usr/bin/env \
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$app" \

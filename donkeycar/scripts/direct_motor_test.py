@@ -30,6 +30,7 @@ from trashcan_robot.protocol import (
 CAPABILITIES = 0x02
 SET_DIRECT_MOTOR = 0x24
 DIRECT_MODE = 3
+MAX_DIRECT_MOTOR_COMMAND = 250
 
 
 def encode_direct(
@@ -38,7 +39,7 @@ def encode_direct(
     lease_id: int,
     lifetime_ms: int,
 ) -> bytes:
-    if max(abs(left), abs(right)) > 100:
+    if max(abs(left), abs(right)) > MAX_DIRECT_MOTOR_COMMAND:
         raise ValueError("direct motor command exceeds firmware limit")
     return struct.pack(
         "<hhIH",

@@ -4,6 +4,7 @@ import time
 from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
+from types import MethodType
 from typing import Any
 
 from .config import AppConfig
@@ -54,7 +55,12 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     vehicle.add(camera, outputs=["cam/image_array"], threaded=True)
     vehicle.add(FrequencyMeter(), outputs=["camera/fps"])
 
-    controller = LocalWebController(port=config.raw["controller"]["web_port"])
+    controller_cfg = config.raw["controller"]
+    controller = create_web_controller(
+        LocalWebController,
+        controller_cfg["web_host"],
+        controller_cfg["web_port"],
+    )
     vehicle.add(
         controller,
         inputs=["cam/image_array", "tub/num_records", "user/mode", "recording"],
@@ -132,6 +138,28 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     dashboard.start()
     vehicle.add(CameraPublisher(dashboard), inputs=["cam/image_array"])
     return vehicle
+
+
+def create_web_controller(controller_type: Any, host: str, port: int) -> Any:
+    """Create Donkeycar's controller with an explicit Tornado bind address."""
+    if host != "0.0.0.0":
+        raise ValueError("manual driving controller must bind to 0.0.0.0")
+    controller = controller_type(port=port)
+
+    def update(bound_controller: Any) -> None:
+        import asyncio
+
+        from tornado.ioloop import IOLoop
+
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        bound_controller.listen(port, address=host)
+        bound_controller.loop = IOLoop.instance()
+        bound_controller.loop.start()
+
+    controller.update = MethodType(update, controller)
+    controller.bind_host = host
+    controller.bind_port = port
+    return controller
 
 
 def create_tub_writer(

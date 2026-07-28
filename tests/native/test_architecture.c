@@ -63,6 +63,62 @@ static void test_zero_ready_then_sequence_acknowledged_motion(void) {
   GS_EXPECT_TRUE((combined.status_flags & GS_FEEDBACK_PEER_HEALTHY) != 0u);
 }
 
+static void test_disabled_zero_recovers_to_motion_ready_ack(void) {
+  gs_master_coordinator master;
+  gs_slave_coordinator slave;
+  uint8_t esp_frame[GS_ESP_COMMAND_SIZE];
+  uint8_t slave_frame[GS_SLAVE_COMMAND_SIZE];
+  uint8_t master_feedback_frame[GS_MASTER_FEEDBACK_SIZE];
+  gs_master_feedback feedback;
+
+  gs_master_init(&master, 0);
+  gs_slave_init(&slave, 0);
+  gs_master_set_runtime_status(&master, true, true);
+  gs_master_set_motor_status(&master, 2u, 0u, false);
+  gs_slave_set_motor_status(&slave, 2u, 0u, false, true);
+
+  const gs_esp_command disabled = {
+      .master_flags = GS_COMMAND_DIRECT_LR | GS_COMMAND_DISABLE,
+      .slave_flags = GS_COMMAND_DISABLE,
+      .sequence = 1u,
+  };
+  GS_EXPECT_TRUE(gs_encode_esp_command(esp_frame, &disabled));
+  GS_EXPECT_TRUE(gs_master_accept_esp_frame(&master, esp_frame, 1u));
+  GS_EXPECT_EQ(GS_CONTROLLER_DISABLED, master.state);
+  GS_EXPECT_TRUE(gs_master_make_slave_frame(&master, slave_frame, 2u));
+  GS_EXPECT_TRUE(gs_slave_accept_master_frame(&slave, slave_frame, 2u));
+  GS_EXPECT_EQ(GS_CONTROLLER_DISABLED, slave.state);
+  exchange_slave_feedback(&master, &slave, 3u);
+  GS_EXPECT_FALSE(gs_master_peer_healthy(&master, 3u));
+  GS_EXPECT_TRUE(
+      gs_master_make_feedback(&master, master_feedback_frame, 3u));
+  GS_EXPECT_TRUE(gs_decode_master_feedback(&feedback, master_feedback_frame));
+  GS_EXPECT_TRUE(gs_master_feedback_exact_ack(&feedback, 1u, true));
+  GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
+  GS_EXPECT_FALSE(gs_master_feedback_motion_ready(&feedback, 1u, true));
+
+  const gs_esp_command ready = {
+      .master_flags = GS_COMMAND_DIRECT_LR,
+      .sequence = 2u,
+  };
+  GS_EXPECT_TRUE(gs_encode_esp_command(esp_frame, &ready));
+  GS_EXPECT_TRUE(gs_master_accept_esp_frame(&master, esp_frame, 4u));
+  GS_EXPECT_EQ(GS_CONTROLLER_READY, master.state);
+  GS_EXPECT_TRUE(gs_master_make_slave_frame(&master, slave_frame, 5u));
+  GS_EXPECT_TRUE(gs_slave_accept_master_frame(&slave, slave_frame, 5u));
+  GS_EXPECT_EQ(GS_CONTROLLER_READY, slave.state);
+  exchange_slave_feedback(&master, &slave, 6u);
+  GS_EXPECT_TRUE(gs_master_peer_healthy(&master, 6u));
+  GS_EXPECT_TRUE(
+      gs_master_make_feedback(&master, master_feedback_frame, 7u));
+  GS_EXPECT_TRUE(gs_decode_master_feedback(&feedback, master_feedback_frame));
+  GS_EXPECT_TRUE(gs_master_feedback_exact_ack(&feedback, 2u, true));
+  GS_EXPECT_TRUE(gs_master_feedback_runtime_healthy(&feedback));
+  GS_EXPECT_TRUE(gs_master_feedback_motion_ready(&feedback, 2u, true));
+  GS_EXPECT_EQ(0, feedback.left_applied);
+  GS_EXPECT_EQ(0, feedback.right_applied);
+}
+
 static void test_motion_rejected_until_zero_ready_ack(void) {
   gs_master_coordinator master;
   uint8_t frame[GS_ESP_COMMAND_SIZE];
@@ -264,6 +320,7 @@ static void test_transport_overflow_sources_are_reported(void) {
 
 void gs_test_architecture(void) {
   test_zero_ready_then_sequence_acknowledged_motion();
+  test_disabled_zero_recovers_to_motion_ready_ack();
   test_motion_rejected_until_zero_ready_ack();
   test_slave_feedback_loss_and_fault_stop_master();
   test_unacknowledged_forward_stops_despite_fresh_esp_duplicates();

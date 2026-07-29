@@ -30,12 +30,12 @@ Compiling .pio/build/esp32_drive_coordinator/src/firmware/gd32/common/protocol/g
 Compiling .pio/build/esp32_drive_coordinator/src/firmware/gd32/common/protocol/gs_protocol.c.o
 Building .pio/build/esp32_drive_coordinator/bootloader.bin
 Generating partitions .pio/build/esp32_drive_coordinator/partitions.bin
-Compiling .pio/build/esp32_drive_coordinator/lib395/Wire/Wire.cpp.o
-Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/Esp.cpp.o
 esptool.py v4.11.0
 Creating esp32 image...
 Merged 1 ELF section
 Successfully created esp32 image.
+Compiling .pio/build/esp32_drive_coordinator/libfa8/Wire/Wire.cpp.o
+Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/Esp.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/FirmwareMSC.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/FunctionalInterrupt.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/HWCDC.cpp.o
@@ -44,17 +44,17 @@ Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/IPAddress.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/IPv6Address.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/MD5Builder.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/Print.cpp.o
+Archiving .pio/build/esp32_drive_coordinator/libfa8/libWire.a
+Indexing .pio/build/esp32_drive_coordinator/libfa8/libWire.a
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/Stream.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/StreamString.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/Tone.cpp.o
-Archiving .pio/build/esp32_drive_coordinator/lib395/libWire.a
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/USB.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/USBCDC.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/USBMSC.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/WMath.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/WString.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/base64.cpp.o
-Indexing .pio/build/esp32_drive_coordinator/lib395/libWire.a
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/cbuf.cpp.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/esp32-hal-adc.c.o
 Compiling .pio/build/esp32_drive_coordinator/FrameworkArduino/esp32-hal-bt.c.o
@@ -90,11 +90,11 @@ Retrieving maximum program size .pio/build/esp32_drive_coordinator/firmware.elf
 Checking size .pio/build/esp32_drive_coordinator/firmware.elf
 Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
 RAM:   [=         ]   7.2% (used 23564 bytes from 327680 bytes)
-Flash: [==        ]  23.6% (used 309729 bytes from 1310720 bytes)
+Flash: [==        ]  23.7% (used 310025 bytes from 1310720 bytes)
 Building .pio/build/esp32_drive_coordinator/firmware.bin
 esptool.py v4.11.0
 Creating esp32 image...
 Merged 2 ELF sections
 Successfully created esp32 image.
 copy_esp32_boot_app0([".pio/build/esp32_drive_coordinator/firmware.bin"], [".pio/build/esp32_drive_coordinator/firmware.elf"])
-========================= [SUCCESS] Took 9.25 seconds =========================
+========================= [SUCCESS] Took 8.57 seconds =========================

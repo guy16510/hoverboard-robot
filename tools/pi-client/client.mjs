@@ -28,7 +28,9 @@ export class Sequence {
 
 export function configureSerialPort(port, baud = 115200) {
   const selector = process.platform === "darwin" ? "-f" : "-F";
-  const result = spawnSync("stty", [selector, port, String(baud), "raw", "-echo"],
+  const result = spawnSync(
+    "stty",
+    [selector, port, String(baud), "raw", "-echo", "-hupcl"],
     { encoding: "utf8" });
   if (result.status !== 0) {
     throw new Error(`stty failed: ${result.stderr.trim()}`);

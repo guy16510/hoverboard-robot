@@ -408,7 +408,7 @@ async function capture(options) {
     for (const action of options.commandPlan?.actions ?? []) {
       actionTimers.push(setTimeout(() => executeAction(action), action.atMs));
     }
-  }, 1000));
+  }, 10));
 
   if (process.stdin.isTTY) {
     process.stdout.write(
@@ -431,7 +431,7 @@ async function capture(options) {
   process.once("SIGTERM", () => finish("terminated", 1));
   durationTimer = setTimeout(
     () => finish("duration-complete"),
-    options.durationSeconds * 1000 + 1000,
+    options.durationSeconds * 1000 + 10,
   );
 }
 

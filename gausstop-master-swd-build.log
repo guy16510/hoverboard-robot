@@ -25,6 +25,7 @@ Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/boards/gausstop_dphc_
 Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/common/control/gs_wheel_mix.o
 Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/common/coordination/gs_master.o
 Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/common/motor/gs_commutation.o
+Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/common/motor/gs_hall_cycle.o
 Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/common/motor/gs_hall_qualifier.o
 Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/common/motor/gs_motor_control.o
 Compiling .pio/build/gausstop_master_swd/src/firmware/gd32/common/motor/gs_motor_profile.o
@@ -39,20 +40,20 @@ Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_can.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_cec.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_cmp.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_crc.o
+Archiving .pio/build/gausstop_master_swd/libFrameworkCMSISVariant.a
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_dac.o
+Indexing .pio/build/gausstop_master_swd/libFrameworkCMSISVariant.a
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_dbg.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_dma.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_exti.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_fmc.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_fwdgt.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_gpio.o
-Archiving .pio/build/gausstop_master_swd/libFrameworkCMSISVariant.a
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_i2c.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_ivref.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_misc.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_opa.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_pmu.o
-Indexing .pio/build/gausstop_master_swd/libFrameworkCMSISVariant.a
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_rcu.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_rtc.o
 Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_slcd.o
@@ -65,16 +66,16 @@ Compiling .pio/build/gausstop_master_swd/FrameworkSPL/gd32f1x0_wwdgt.o
 Archiving .pio/build/gausstop_master_swd/libFrameworkSPL.a
 Indexing .pio/build/gausstop_master_swd/libFrameworkSPL.a
 Linking .pio/build/gausstop_master_swd/firmware.elf
-/Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/bin/ld: warning: .pio/build/gausstop_master_swd/firmware.elf has a LOAD segment with RWX permissions
+/Users/admin/Desktop/dev/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/bin/ld: warning: .pio/build/gausstop_master_swd/firmware.elf has a LOAD segment with RWX permissions
 Building .pio/build/gausstop_master_swd/firmware.lst
 Checking size .pio/build/gausstop_master_swd/firmware.elf
 Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
 RAM:   [==        ]  19.0% (used 1560 bytes from 8192 bytes)
-Flash: [==        ]  23.3% (used 15268 bytes from 65536 bytes)
+Flash: [==        ]  23.6% (used 15468 bytes from 65536 bytes)
 Building .pio/build/gausstop_master_swd/firmware.bin
-========================= [SUCCESS] Took 5.50 seconds =========================
+========================= [SUCCESS] Took 1.79 seconds =========================
 
 Environment          Status    Duration
 -------------------  --------  ------------
-gausstop_master_swd  SUCCESS   00:00:05.498
-========================= 1 succeeded in 00:00:05.498 =========================
+gausstop_master_swd  SUCCESS   00:00:01.794
+========================= 1 succeeded in 00:00:01.794 =========================

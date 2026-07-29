@@ -1,5 +1,5 @@
 repository=guy16510/hoverboard-robot
-commit=8c1654719045d0f1f35170f5951feacba1e94f2e
+commit=07b969fa8a7bba8c08aabdd72b3b339da8290fd3
 protocol_version=4
 command_marker=0x42
 slave_feedback_marker=0x43

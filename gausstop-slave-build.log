@@ -23,6 +23,7 @@ Compiling .pio/build/gausstop_slave/src/firmware/gd32/boards/gausstop_dphc_v33/g
 Compiling .pio/build/gausstop_slave/src/firmware/gd32/common/control/gs_wheel_mix.o
 Compiling .pio/build/gausstop_slave/src/firmware/gd32/common/coordination/gs_slave.o
 Compiling .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_commutation.o
+Compiling .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_hall_cycle.o
 Compiling .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_hall_qualifier.o
 Compiling .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_control.o
 Compiling .pio/build/gausstop_slave/src/firmware/gd32/common/motor/gs_motor_profile.o
@@ -36,15 +37,15 @@ Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_adc.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_can.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_cec.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_cmp.o
+Archiving .pio/build/gausstop_slave/libFrameworkCMSISVariant.a
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_crc.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_dac.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_dbg.o
-Archiving .pio/build/gausstop_slave/libFrameworkCMSISVariant.a
+Indexing .pio/build/gausstop_slave/libFrameworkCMSISVariant.a
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_dma.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_exti.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_fmc.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_fwdgt.o
-Indexing .pio/build/gausstop_slave/libFrameworkCMSISVariant.a
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_gpio.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_i2c.o
 Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_ivref.o
@@ -63,16 +64,16 @@ Compiling .pio/build/gausstop_slave/FrameworkSPL/gd32f1x0_wwdgt.o
 Archiving .pio/build/gausstop_slave/libFrameworkSPL.a
 Indexing .pio/build/gausstop_slave/libFrameworkSPL.a
 Linking .pio/build/gausstop_slave/firmware.elf
-/Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/bin/ld: warning: .pio/build/gausstop_slave/firmware.elf has a LOAD segment with RWX permissions
+/Users/admin/Desktop/dev/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/bin/ld: warning: .pio/build/gausstop_slave/firmware.elf has a LOAD segment with RWX permissions
 Building .pio/build/gausstop_slave/firmware.lst
 Checking size .pio/build/gausstop_slave/firmware.elf
 Advanced Memory Usage is available via "PlatformIO Home > Project Inspect"
 RAM:   [=         ]  13.1% (used 1072 bytes from 8192 bytes)
-Flash: [==        ]  18.4% (used 12048 bytes from 65536 bytes)
+Flash: [==        ]  18.7% (used 12264 bytes from 65536 bytes)
 Building .pio/build/gausstop_slave/firmware.bin
-========================= [SUCCESS] Took 5.31 seconds =========================
+========================= [SUCCESS] Took 2.02 seconds =========================
 
 Environment     Status    Duration
 --------------  --------  ------------
-gausstop_slave  SUCCESS   00:00:05.305
-========================= 1 succeeded in 00:00:05.305 =========================
+gausstop_slave  SUCCESS   00:00:02.015
+========================= 1 succeeded in 00:00:02.015 =========================

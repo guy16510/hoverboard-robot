@@ -3,6 +3,18 @@ camera:
   width: 640
   height: 480
   fps: 20
+backup_camera:
+  enabled: true
+  device: /dev/video0
+  width: 640
+  height: 480
+  fps: 15
+  reconnect_seconds: 2.0
+  family: 36h11
+  horizontal_fov_degrees: 70.0
+  # Set this to the measured black-square width for metric range estimates.
+  # ID, bearing, position, rotation, and area work without calibration.
+  tag_size_m: 0.0
 controller:
   web_host: 0.0.0.0
   web_port: 8887

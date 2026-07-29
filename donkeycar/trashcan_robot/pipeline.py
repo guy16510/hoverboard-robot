@@ -2,11 +2,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
 from types import MethodType
 from typing import Any
 
+from .apriltag_camera import AprilTagCamera
 from .config import AppConfig
 from .dashboard import DashboardServer
 from .esp32_drive import ESP32Drive
@@ -61,6 +63,16 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     )
     vehicle.add(camera, outputs=["cam/image_array"], threaded=True)
     vehicle.add(FrequencyMeter(), outputs=["camera/fps"])
+
+    backup_cfg = config.raw.get("backup_camera", {})
+    backup_enabled = bool(backup_cfg.get("enabled", False))
+    if backup_enabled:
+        backup_camera = AprilTagCamera(backup_cfg)
+        vehicle.add(
+            backup_camera,
+            outputs=["backup/image_array", "backup/status"],
+            threaded=True,
+        )
 
     controller_cfg = config.raw["controller"]
     controller = create_web_controller(
@@ -138,12 +150,39 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         StateUpdater(state, model_cfg["name"]),
         inputs=STATE_UPDATE_INPUTS,
     )
+    if backup_enabled:
+        vehicle.add(
+            AprilTagStateUpdater(state),
+            inputs=["backup/status"],
+        )
+    else:
+        state.update(
+            backup_camera={
+                "connected": False,
+                "device": backup_cfg.get("device"),
+                "fps": 0.0,
+                "family": backup_cfg.get("family"),
+                "error": "backup camera disabled",
+                "last_frame_age_ms": None,
+            },
+            apriltags=[],
+        )
     vehicle.add(logger, inputs=["camera/fps", "inference/rate"], outputs=["log/path"])
 
     dashboard_cfg = config.raw["dashboard"]
-    dashboard = DashboardServer(state, dashboard_cfg["host"], dashboard_cfg["port"])
+    dashboard = DashboardServer(
+        state,
+        dashboard_cfg["host"],
+        dashboard_cfg["port"],
+        manual_port=controller_cfg["web_port"],
+    )
     dashboard.start()
     vehicle.add(CameraPublisher(dashboard), inputs=["cam/image_array"])
+    if backup_enabled:
+        vehicle.add(
+            CameraPublisher(dashboard, backup=True),
+            inputs=["backup/image_array"],
+        )
     return vehicle
 
 
@@ -291,9 +330,25 @@ class StateUpdater:
         )
 
 
+class AprilTagStateUpdater:
+    def __init__(self, state: RobotState) -> None:
+        self._state = state
+
+    def run(self, status: dict[str, Any] | None) -> None:
+        if not status:
+            return
+        snapshot = deepcopy(status)
+        detections = list(snapshot.pop("detections", []))
+        self._state.update(
+            backup_camera=snapshot,
+            apriltags=detections,
+        )
+
+
 class CameraPublisher:
-    def __init__(self, dashboard: DashboardServer) -> None:
+    def __init__(self, dashboard: DashboardServer, backup: bool = False) -> None:
         self._dashboard = dashboard
+        self._backup = backup
 
     def run(self, image: Any) -> None:
         if image is None:
@@ -305,6 +360,9 @@ class CameraPublisher:
 
             buffer = BytesIO()
             Image.fromarray(image).save(buffer, format="JPEG", quality=70)
-            self._dashboard.update_camera(buffer.getvalue())
+            if self._backup:
+                self._dashboard.update_backup_camera(buffer.getvalue())
+            else:
+                self._dashboard.update_camera(buffer.getvalue())
         except Exception:
             return

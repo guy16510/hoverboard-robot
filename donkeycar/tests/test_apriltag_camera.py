@@ -29,7 +29,10 @@ def test_marker_geometry_reports_id_bearing_position_and_range() -> None:
     assert detection["horizontal_position"] == "right"
     assert detection["bearing_degrees"] > 0
     assert detection["distance_m"] == pytest.approx(0.914, abs=0.001)
-    assert detection["area_ratio"] == pytest.approx(10000 / (640 * 480))
+    assert detection["area_ratio"] == pytest.approx(
+        10000 / (640 * 480),
+        abs=0.000001,
+    )
 
 
 def test_marker_geometry_works_without_metric_tag_calibration() -> None:

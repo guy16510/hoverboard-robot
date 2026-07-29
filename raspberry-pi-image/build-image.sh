@@ -7,6 +7,15 @@ WORK_DIR="${WORK_DIR:-$IMAGE_DIR/.work}"
 PI_GEN_DIR="$WORK_DIR/pi-gen"
 PI_GEN_BRANCH="${PI_GEN_BRANCH:-bookworm-arm64}"
 PI_GEN_COMMIT="${PI_GEN_COMMIT:-d7a31c6aa09f4b867902c51da2b45807c0a1709e}"
+BASE_CONFIG="$IMAGE_DIR/config"
+GENERATED_CONFIG="$WORK_DIR/pi-gen-config"
+WIFI_ENV_FILE="${TRASHCAN_WIFI_ENV_FILE:-$IMAGE_DIR/wifi.env}"
+wifi_provisioned=no
+
+cleanup() {
+  rm -f "$GENERATED_CONFIG"
+}
+trap cleanup EXIT
 
 if [[ "$(uname -m)" != "aarch64" ]]; then
   echo "This production image build must run on an ARM64 Debian/Ubuntu host." >&2
@@ -18,6 +27,29 @@ for tool in git rsync sudo sha256sum xz; do
 done
 
 mkdir -p "$WORK_DIR"
+cp "$BASE_CONFIG" "$GENERATED_CONFIG"
+chmod 0600 "$GENERATED_CONFIG"
+
+if [[ -f "$WIFI_ENV_FILE" ]]; then
+  # shellcheck disable=SC1090
+  source "$WIFI_ENV_FILE"
+fi
+wifi_ssid="${TRASHCAN_WIFI_SSID:-}"
+wifi_password="${TRASHCAN_WIFI_PASSWORD:-}"
+if [[ -n "$wifi_ssid" || -n "$wifi_password" ]]; then
+  if [[ -z "$wifi_ssid" || -z "$wifi_password" ]]; then
+    echo "TRASHCAN_WIFI_SSID and TRASHCAN_WIFI_PASSWORD must be supplied together" >&2
+    exit 1
+  fi
+  {
+    printf '\n# Injected from a local ignored file or CI secrets.\n'
+    printf 'WPA_ESSID=%q\n' "$wifi_ssid"
+    printf 'WPA_PASSWORD=%q\n' "$wifi_password"
+    printf 'WPA_COUNTRY=%q\n' 'US'
+  } >> "$GENERATED_CONFIG"
+  wifi_provisioned=yes
+fi
+
 if [[ ! -d "$PI_GEN_DIR/.git" ]]; then
   git init "$PI_GEN_DIR"
   git -C "$PI_GEN_DIR" remote add origin https://github.com/RPi-Distro/pi-gen.git
@@ -56,6 +88,7 @@ grep -Fq 'http://deb.debian.org/debian/' "$PI_GEN_DIR/stage0/prerun.sh" || {
   exit 1
 }
 printf 'Using pi-gen %s from %s\n' "$resolved_pi_gen_commit" "$PI_GEN_BRANCH"
+printf 'Wi-Fi provisioning: %s\n' "$wifi_provisioned"
 
 # Never reuse a root filesystem, validation marker, or exported image from an
 # earlier build. A failed customization must have nothing reusable to export.
@@ -72,13 +105,14 @@ rsync -a --delete \
   --exclude 'data/' \
   --exclude 'raspberry-pi-image/.work/' \
   --exclude 'raspberry-pi-image/dist/' \
+  --exclude 'raspberry-pi-image/wifi.env' \
   "$ROOT/" "$PI_GEN_DIR/stage-trashcan/00-install/files/repository/"
 
 rm -rf "$IMAGE_DIR/dist"
 mkdir -p "$IMAGE_DIR/dist"
 (
   cd "$PI_GEN_DIR"
-  sudo bash ./build.sh -c "$IMAGE_DIR/config"
+  sudo bash ./build.sh -c "$GENERATED_CONFIG"
 )
 
 # Independently revalidate the completed custom-stage root filesystem. pi-gen
@@ -86,7 +120,7 @@ mkdir -p "$IMAGE_DIR/dist"
 # inside that function and a failed chroot command can otherwise be followed by
 # export. Use the deterministic pi-gen work path, not a recursive find through
 # root-owned directories.
-image_name="$(bash -c 'source "$1"; printf "%s" "$IMG_NAME"' _ "$IMAGE_DIR/config")"
+image_name="$(bash -c 'source "$1"; printf "%s" "$IMG_NAME"' _ "$BASE_CONFIG")"
 stage_root="$PI_GEN_DIR/work/$image_name/stage-trashcan/rootfs"
 [[ -d "$stage_root" ]] || {
   echo "pi-gen completed without the expected stage rootfs: $stage_root" >&2
@@ -113,6 +147,7 @@ architecture=arm64
 first_user=pi
 first_boot_user_rename=disabled
 ssh=enabled
+wifi_provisioned=$wifi_provisioned
 nodejs=installed
 nodejs_minimum_major=18
 npm=installed

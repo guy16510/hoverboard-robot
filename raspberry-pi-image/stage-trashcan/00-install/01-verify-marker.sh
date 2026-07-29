@@ -23,6 +23,11 @@ for fact in \
   'release=bookworm' \
   'first_boot_userconfig=disabled' \
   'ssh=enabled' \
+  'nodejs=installed' \
+  'nodejs_minimum_major=18' \
+  'nodejs_smoke=passed' \
+  'npm=installed' \
+  'node_protocol_tests=passed' \
   'robot_user=trashbot' \
   'robot_group=trashbot' \
   'robot_working_directory=/opt/trashcan-robot/donkeycar' \
@@ -39,6 +44,14 @@ for fact in \
   }
 done
 
+[[ -e "${ROOTFS_DIR}/usr/bin/node" ]] || {
+  echo "Validated image is missing /usr/bin/node" >&2
+  exit 1
+}
+[[ -e "${ROOTFS_DIR}/usr/bin/npm" ]] || {
+  echo "Validated image is missing /usr/bin/npm" >&2
+  exit 1
+}
 [[ -x "$app/.venv/bin/python" ]] || {
   echo "Validated image is missing the Donkeycar virtual environment" >&2
   exit 1

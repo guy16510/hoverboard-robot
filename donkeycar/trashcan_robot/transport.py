@@ -5,21 +5,32 @@ import random
 import threading
 import time
 from dataclasses import dataclass, field
-from typing import Any
+from typing import Any, Callable
 
-import serial
+try:
+    import serial as pyserial
+except ImportError:  # Tests can inject a serial factory without pyserial installed.
+    pyserial = None
 
 from .config import SerialConfig
 from .protocol import (
+    ACK,
     ARM,
+    CAPABILITIES,
+    CLEAR_FAULT,
     DISARM,
     DRIVE_MODE,
+    ERROR,
     HELLO,
+    MAX_PAYLOAD,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
+    STATUS,
     STOP,
+    VERSION,
     Frame,
     FrameDecoder,
+    decode_message,
     encode_frame,
     encode_motion,
 )
@@ -33,6 +44,9 @@ class MotorTransport(abc.ABC):
     def disconnect(self) -> None: ...
 
     @abc.abstractmethod
+    def shutdown(self) -> None: ...
+
+    @abc.abstractmethod
     def send_command(self, linear_velocity: float, angular_velocity: float) -> float: ...
 
     @abc.abstractmethod
@@ -43,81 +57,405 @@ class MotorTransport(abc.ABC):
 
 
 class SerialMotorTransport(MotorTransport):
-    _ARM_RETRY_COUNT = 20
-    _ARM_RETRY_INTERVAL_SECONDS = 0.1
+    _STARTUP_RETRY_COUNT = 80
+    _STARTUP_RETRY_INTERVAL_SECONDS = 0.05
+    _PREARM_HEALTH_FLAGS = 0x6D
+    _POSTARM_HEALTH_FLAGS = 0x7D
+    _RENEWAL_FRESHNESS_FRACTION = 0.5
 
-    def __init__(self, config: SerialConfig) -> None:
+    def __init__(
+        self,
+        config: SerialConfig,
+        *,
+        serial_factory: Callable[..., Any] | None = None,
+        clock: Callable[[], float] = time.monotonic,
+        sleeper: Callable[[float], None] = time.sleep,
+        lease_id_factory: Callable[[], int] = lambda: random.getrandbits(32),
+        renew_commands: bool = False,
+    ) -> None:
         self._config = config
-        self._serial: serial.Serial | None = None
+        if serial_factory is None:
+            if pyserial is None:
+                raise RuntimeError("pyserial is required unless serial_factory is injected")
+            serial_factory = pyserial.Serial
+        self._serial_factory = serial_factory
+        self._clock = clock
+        self._sleep = sleeper
+        self._lease_id_factory = lease_id_factory
+        self._serial: Any | None = None
         self._decoder = FrameDecoder()
         self._sequence = 0
-        self._lease_id = random.getrandbits(32)
-        self._lock = threading.Lock()
+        self._lease_id = 0
+        self._lock = threading.RLock()
+        self._pending_telemetry: list[Frame] = []
+        self._write_history: list[int] = []
+        self._session_valid = False
+        self._renew_commands = renew_commands
+        self._renew_stop = threading.Event()
+        self._renew_thread: threading.Thread | None = None
+        self._latest_motion: tuple[float, float] | None = None
+        self._latest_motion_at = float("-inf")
+        self._last_motion_write_at = float("-inf")
+
+    @property
+    def write_history(self) -> tuple[int, ...]:
+        return tuple(self._write_history)
 
     def connect(self) -> None:
         with self._lock:
             if self.is_connected():
                 return
-            self._serial = serial.Serial(
+        self._stop_command_renewer()
+        start_renewer = False
+        with self._lock:
+            if self.is_connected():
+                return
+            endpoint = self._serial_factory(
                 self._config.port,
                 self._config.baud,
                 timeout=self._config.timeout_seconds,
                 write_timeout=self._config.timeout_seconds,
             )
-            self._serial.reset_input_buffer()
-            self._write(HELLO, b"")
-            self._write(SET_OPERATING_MODE, bytes((DRIVE_MODE,)))
+            self._serial = endpoint
+            self._decoder = FrameDecoder()
+            self._sequence = 0
+            self._lease_id = self._lease_id_factory() & 0xFFFFFFFF
+            self._pending_telemetry.clear()
+            self._write_history.clear()
+            self._session_valid = False
+            try:
+                self._serial.reset_input_buffer()
+                hello_sequence = self._write(HELLO, b"")
+                capabilities = self._wait_for_message(hello_sequence, CAPABILITIES)
+                if capabilities is None or not self._capabilities_compatible(capabilities):
+                    raise ConnectionError("ESP32 firmware capabilities are incompatible")
 
-            # The ESP32 cannot arm until it has fresh motor feedback and an exact
-            # acknowledged zero command. Those gates may become healthy after the
-            # serial port opens, so retry the idempotent arm request during startup.
-            for _ in range(self._ARM_RETRY_COUNT):
-                zero_demand = encode_motion(
-                    0.0,
-                    0.0,
-                    self._lease_id,
-                    self._config.lease_ms,
+                mode_sequence = self._write(
+                    SET_OPERATING_MODE, bytes((DRIVE_MODE,))
                 )
-                self._write(SET_VELOCITY_YAW, zero_demand)
-                self._write(ARM, b"")
-                time.sleep(self._ARM_RETRY_INTERVAL_SECONDS)
+                if not self._wait_for_ack(mode_sequence, SET_OPERATING_MODE):
+                    raise ConnectionError("ESP32 rejected drive operating mode")
+                zero_sequence = self._write(
+                    SET_VELOCITY_YAW, self._zero_payload()
+                )
+                if not self._wait_for_ack(zero_sequence, SET_VELOCITY_YAW):
+                    raise ConnectionError("ESP32 rejected initial zero demand")
+                clear_sequence = self._write(CLEAR_FAULT, b"")
+                if not self._wait_for_ack(clear_sequence, CLEAR_FAULT):
+                    raise ConnectionError("ESP32 rejected controller fault clear")
+
+                ready = False
+                for _ in range(self._STARTUP_RETRY_COUNT):
+                    zero_sequence = self._write(
+                        SET_VELOCITY_YAW, self._zero_payload()
+                    )
+                    if not self._wait_for_ack(
+                        zero_sequence, SET_VELOCITY_YAW
+                    ):
+                        self._sleep(self._STARTUP_RETRY_INTERVAL_SECONDS)
+                        continue
+                    status_sequence = self._write(STATUS, b"")
+                    status = self._wait_for_status(status_sequence)
+                    if status is not None and self._prearm_ready(status):
+                        ready = True
+                        break
+                    self._sleep(self._STARTUP_RETRY_INTERVAL_SECONDS)
+                if not ready:
+                    raise ConnectionError(
+                        "ESP32 did not acknowledge an exact healthy zero session"
+                    )
+
+                zero_sequence = self._write(
+                    SET_VELOCITY_YAW, self._zero_payload()
+                )
+                if not self._wait_for_ack(zero_sequence, SET_VELOCITY_YAW):
+                    raise ConnectionError("ESP32 rejected final zero demand")
+                arm_sequence = self._write(ARM, b"")
+                if not self._wait_for_ack(arm_sequence, ARM):
+                    raise ConnectionError(
+                        "ESP32 rejected ARM after healthy zero acknowledgment"
+                    )
+
+                armed = False
+                for _ in range(self._STARTUP_RETRY_COUNT):
+                    zero_sequence = self._write(
+                        SET_VELOCITY_YAW, self._zero_payload()
+                    )
+                    if not self._wait_for_ack(
+                        zero_sequence, SET_VELOCITY_YAW
+                    ):
+                        self._sleep(self._STARTUP_RETRY_INTERVAL_SECONDS)
+                        continue
+                    status_sequence = self._write(STATUS, b"")
+                    status = self._wait_for_status(status_sequence)
+                    if status is not None and self._postarm_ready(status):
+                        armed = True
+                        break
+                    self._sleep(self._STARTUP_RETRY_INTERVAL_SECONDS)
+                if not armed:
+                    raise ConnectionError(
+                        "ESP32 acknowledged ARM but did not remain safely armed at zero"
+                    )
+
+                self._session_valid = True
+                now = self._clock()
+                self._latest_motion = (0.0, 0.0)
+                self._latest_motion_at = now
+                self._last_motion_write_at = now
+                start_renewer = self._renew_commands
+            except Exception:
+                self._send_safe_shutdown_sequence(wait_for_ack=False)
+                self._close_endpoint()
+                raise
+        if start_renewer:
+            self._start_command_renewer()
 
     def disconnect(self) -> None:
+        self.shutdown()
+
+    def shutdown(self) -> None:
+        self._stop_command_renewer()
         with self._lock:
-            if self._serial is not None:
-                try:
-                    self._write(STOP, b"")
-                    self._write(DISARM, b"")
-                except Exception:
-                    pass
-                self._serial.close()
-            self._serial = None
+            if self._serial is None:
+                return
+            self._send_safe_shutdown_sequence(wait_for_ack=True)
+            self._close_endpoint()
 
     def send_command(self, linear_velocity: float, angular_velocity: float) -> float:
-        started = time.monotonic_ns()
+        started = self._clock()
         with self._lock:
             if not self.is_connected():
                 raise ConnectionError("ESP32 serial transport is disconnected")
-            payload = encode_motion(linear_velocity, angular_velocity, self._lease_id, self._config.lease_ms)
+            payload = encode_motion(
+                linear_velocity,
+                angular_velocity,
+                self._lease_id,
+                self._config.lease_ms,
+            )
             self._write(SET_VELOCITY_YAW, payload)
-        return (time.monotonic_ns() - started) / 1_000_000.0
+            now = self._clock()
+            self._latest_motion = (linear_velocity, angular_velocity)
+            self._latest_motion_at = now
+            self._last_motion_write_at = now
+        return (self._clock() - started) * 1000.0
 
     def read_telemetry(self) -> list[Frame]:
         with self._lock:
+            frames = list(self._pending_telemetry)
+            self._pending_telemetry.clear()
             if not self.is_connected() or self._serial is None:
-                return []
-            waiting = self._serial.in_waiting
-            data = self._serial.read(waiting or 1)
-        return self._decoder.feed(data)
+                return frames
+            try:
+                received = self._read_available_frames()
+            except ConnectionError:
+                self._send_safe_shutdown_sequence(wait_for_ack=False)
+                self._close_endpoint()
+                return frames
+            frames.extend(received)
+            decoded = [decode_message(frame) for frame in received]
+            unsafe = any(frame.message_type == ERROR for frame in received) or any(
+                (
+                    message.get("name") == "status"
+                    and int(message.get("faults", 0)) != 0
+                )
+                or (
+                    message.get("name") == "drive"
+                    and int(message.get("safety_faults", 0)) != 0
+                )
+                for message in decoded
+            )
+            if unsafe:
+                self._send_safe_shutdown_sequence(wait_for_ack=False)
+                self._close_endpoint()
+            return frames
 
     def is_connected(self) -> bool:
-        return self._serial is not None and self._serial.is_open
+        return (
+            self._session_valid
+            and self._serial is not None
+            and bool(getattr(self._serial, "is_open", False))
+        )
 
-    def _write(self, message_type: int, payload: bytes) -> None:
-        assert self._serial is not None
-        self._serial.write(encode_frame(message_type, self._sequence, payload))
+    def _zero_payload(self) -> bytes:
+        return encode_motion(0.0, 0.0, self._lease_id, self._config.lease_ms)
+
+    def _renew_command_once(self) -> bool:
+        with self._lock:
+            if not self.is_connected() or self._latest_motion is None:
+                return False
+            now = self._clock()
+            period = 1.0 / max(1, self._config.command_hz)
+            freshness = (
+                self._config.lease_ms
+                / 1000.0
+                * self._RENEWAL_FRESHNESS_FRACTION
+            )
+            if (
+                now - self._latest_motion_at > freshness
+                or now - self._last_motion_write_at < period
+            ):
+                return False
+            linear_velocity, angular_velocity = self._latest_motion
+            payload = encode_motion(
+                linear_velocity,
+                angular_velocity,
+                self._lease_id,
+                self._config.lease_ms,
+            )
+            try:
+                self._write(SET_VELOCITY_YAW, payload)
+            except Exception:
+                self._session_valid = False
+                return False
+            self._last_motion_write_at = now
+            return True
+
+    def _start_command_renewer(self) -> None:
+        if self._renew_thread is not None and self._renew_thread.is_alive():
+            return
+        self._renew_stop.clear()
+        self._renew_thread = threading.Thread(
+            target=self._command_renewal_loop,
+            name="esp32-command-renewer",
+            daemon=True,
+        )
+        self._renew_thread.start()
+
+    def _stop_command_renewer(self) -> None:
+        thread = self._renew_thread
+        if thread is None:
+            return
+        self._renew_stop.set()
+        if thread is not threading.current_thread():
+            thread.join(timeout=1.0)
+        self._renew_thread = None
+
+    def _command_renewal_loop(self) -> None:
+        interval = 0.5 / max(1, self._config.command_hz)
+        while not self._renew_stop.wait(interval):
+            self._renew_command_once()
+
+    def _write(self, message_type: int, payload: bytes) -> int:
+        if self._serial is None:
+            raise ConnectionError("ESP32 serial endpoint is not open")
+        sequence = self._sequence
+        self._serial.write(encode_frame(message_type, sequence, payload))
         self._serial.flush()
-        self._sequence = (self._sequence + 1) & 0xFFFF
+        self._write_history.append(message_type)
+        self._sequence = (sequence + 1) & 0xFFFF
+        return sequence
+
+    def _read_available_frames(self) -> list[Frame]:
+        if self._serial is None:
+            return []
+        waiting = int(getattr(self._serial, "in_waiting", 0))
+        if waiting <= 0:
+            return []
+        crc_before = self._decoder.crc_errors
+        malformed_before = self._decoder.malformed_frames
+        frames = self._decoder.feed(self._serial.read(waiting))
+        if (
+            self._decoder.crc_errors != crc_before
+            or self._decoder.malformed_frames != malformed_before
+        ):
+            raise ConnectionError("corrupted ESP32 telemetry frame")
+        return frames
+
+    def _wait_for_ack(self, sequence: int, request_type: int) -> bool:
+        deadline = self._clock() + self._config.timeout_seconds
+        while self._clock() <= deadline:
+            for frame in self._read_available_frames():
+                decoded = decode_message(frame)
+                if frame.sequence == sequence and frame.message_type == ACK:
+                    if decoded.get("request_type") == request_type and decoded.get("status") == 0:
+                        return True
+                if frame.sequence == sequence and frame.message_type == ERROR:
+                    return False
+                self._pending_telemetry.append(frame)
+            self._sleep(min(0.001, self._config.timeout_seconds))
+        return False
+
+    def _wait_for_message(
+        self, sequence: int, message_type: int
+    ) -> dict[str, Any] | None:
+        deadline = self._clock() + self._config.timeout_seconds
+        while self._clock() <= deadline:
+            for frame in self._read_available_frames():
+                decoded = decode_message(frame)
+                if frame.sequence == sequence and frame.message_type == message_type:
+                    return decoded
+                if frame.sequence == sequence and frame.message_type == ERROR:
+                    return None
+                self._pending_telemetry.append(frame)
+            self._sleep(min(0.001, self._config.timeout_seconds))
+        return None
+
+    def _wait_for_status(self, sequence: int) -> dict[str, Any] | None:
+        return self._wait_for_message(sequence, STATUS)
+
+    @staticmethod
+    def _capabilities_compatible(capabilities: dict[str, Any]) -> bool:
+        return (
+            capabilities.get("name") == "capabilities"
+            and capabilities.get("protocol_version") == VERSION
+            and capabilities.get("dry_run") is False
+            and int(capabilities.get("supported_modes", 0)) & (1 << DRIVE_MODE)
+            and int(capabilities.get("maximum_payload", 0)) >= min(MAX_PAYLOAD, 10)
+            and int(capabilities.get("control_rate_hz", 0)) > 0
+            and int(capabilities.get("motor_rate_hz", 0)) > 0
+        )
+
+    @classmethod
+    def _prearm_ready(cls, status: dict[str, Any]) -> bool:
+        health = int(status.get("health_flags", 0))
+        return (
+            status.get("state") == 2
+            and status.get("operating_mode") == DRIVE_MODE
+            and status.get("active_source") == 2
+            and health & cls._PREARM_HEALTH_FLAGS
+            == cls._PREARM_HEALTH_FLAGS
+            and status.get("faults") == 0
+        )
+
+    @classmethod
+    def _postarm_ready(cls, status: dict[str, Any]) -> bool:
+        health = int(status.get("health_flags", 0))
+        return (
+            status.get("state") == 4
+            and status.get("operating_mode") == DRIVE_MODE
+            and status.get("active_source") == 2
+            and health & cls._POSTARM_HEALTH_FLAGS
+            == cls._POSTARM_HEALTH_FLAGS
+            and status.get("faults") == 0
+        )
+
+    def _send_safe_shutdown_sequence(self, *, wait_for_ack: bool) -> None:
+        if self._serial is None:
+            return
+        for message_type, payload in (
+            (SET_VELOCITY_YAW, self._zero_payload()),
+            (STOP, b""),
+            (DISARM, b""),
+        ):
+            try:
+                sequence = self._write(message_type, payload)
+                if wait_for_ack:
+                    self._wait_for_ack(sequence, message_type)
+            except Exception:
+                pass
+
+    def _close_endpoint(self) -> None:
+        endpoint = self._serial
+        self._serial = None
+        self._session_valid = False
+        self._latest_motion = None
+        self._latest_motion_at = float("-inf")
+        self._last_motion_write_at = float("-inf")
+        if endpoint is not None:
+            try:
+                endpoint.close()
+            except Exception:
+                pass
 
 
 @dataclass
@@ -125,11 +463,19 @@ class MockMotorTransport(MotorTransport):
     connected: bool = False
     commands: list[dict[str, Any]] = field(default_factory=list)
     telemetry: list[Frame] = field(default_factory=list)
+    control_events: list[str] = field(default_factory=list)
 
     def connect(self) -> None:
         self.connected = True
+        self.control_events.extend(["HELLO", "MODE_2", "ZERO", "ARM"])
 
     def disconnect(self) -> None:
+        self.shutdown()
+
+    def shutdown(self) -> None:
+        if self.connected:
+            self.commands.append({"linear_velocity": 0.0, "angular_velocity": 0.0, "timestamp": time.time()})
+            self.control_events.extend(["ZERO", "STOP", "DISARM"])
         self.connected = False
 
     def send_command(self, linear_velocity: float, angular_velocity: float) -> float:

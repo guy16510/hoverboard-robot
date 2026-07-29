@@ -24,10 +24,10 @@ Known answers shared by GD32, ESP32, and native tests:
 
 | Frame | Bytes |
 |---|---|
-| ESP32 command, 11 | `0:30`, `1..2:sequence`, `3..4:speed`, `5..6:steer`, `7:master flags`, `8:slave flags`, `9..10:CRC` |
-| Master-to-slave, 8 | `0:30`, `1..2:sequence`, `3..4:signed electrical command`, `5:flags`, `6..7:CRC` |
-| Slave feedback, 22 | `0:31`, `1:state`, `2..3:accepted sequence`, `4..5:applied electrical command`, `6..9:signed Hall odometer`, `10..13:faults`, `14..15:command age`, `16:Hall`, `17:motor status`, `18..19:compare offset`, `20..21:CRC` |
-| Master feedback, 55 | `0..1:CE B2`, `2:protocol version`, `3:master state`, `4:slave state`, `5:status`, `6..7:accepted ESP sequence`, `8..9:forwarded SLAVE sequence`, `10..11:accepted SLAVE sequence`, `12..15:applied commands`, `16..23:odometers`, `24..31:faults`, `32..37:three link ages`, `38..39:Hall states`, `40..43:compare offsets`, `44:motor status`, `45..52:remote RX bytes, valid frames, invalid frames, and framing errors`, `53..54:CRC` |
+| ESP32 command, 11 | `0:42`, `1..2:sequence`, `3..4:speed`, `5..6:steer`, `7:master flags`, `8:slave flags`, `9..10:CRC` |
+| Master-to-slave, 8 | `0:42`, `1..2:sequence`, `3..4:signed electrical command`, `5:flags`, `6..7:CRC` |
+| Slave feedback, 28 | `0:43`, `1:state`, `2..3:accepted sequence`, `4..5:applied electrical command`, `6..9:signed Hall odometer`, `10..13:faults`, `14..15:command age`, `16:qualified Hall`, `17:motor status`, `18..19:compare offset`, `20..21:Hall glitches`, `22..23:invalid commands`, `24..25:command framing errors`, `26..27:CRC` |
+| Master feedback, 67 | `0..1:CE B3`, `2:protocol version`, `3:master state`, `4:slave state`, `5:status`, `6..7:accepted ESP sequence`, `8..9:forwarded SLAVE sequence`, `10..11:accepted SLAVE sequence`, `12..15:applied commands`, `16..23:odometers`, `24..31:faults`, `32..37:three link ages`, `38..39:qualified Hall states`, `40..43:compare offsets`, `44:motor status`, `45..52:remote RX bytes, valid frames, invalid frames, and framing errors`, `53..56:left/right Hall glitches`, `57..64:invalid/framing counters for SLAVE feedback and commands`, `65..66:CRC` |
 
 MASTER status byte bits 4 through 7 latch the source of transport overflow:
 remote RX, remote TX, MASTER–SLAVE RX, and MASTER–SLAVE TX, respectively.
@@ -37,7 +37,7 @@ left/right interpretation. Bit 0 clears eligible faults, bit 6 disables, and
 bit 7 shuts down. Bits 1--4 are reserved-zero. Direct-left/right is illegal in
 the slave byte. **Native-test validated**
 
-Parsers use 55-byte fixed storage, a 100 ms partial-frame timeout, marker search,
+Parsers use 67-byte fixed storage, a 100 ms partial-frame timeout, marker search,
 nested-marker resynchronization after a bad complete frame, and no allocation.
 Noise is ignored. A complete bad-CRC or semantically invalid frame faults an
 operational role immediately. **Native-test validated**

@@ -18,8 +18,7 @@ enum {
   ((GS_SWD_UART_BIT_TICKS_FOR(system_clock_hz) * 3u) / 2u)
 #define GS_SWD_UART_SAMPLE_TICK_FOR(system_clock_hz, data_bit_index)           \
   (GS_SWD_UART_FIRST_SAMPLE_TICKS_FOR(system_clock_hz) +                       \
-   ((uint32_t)(data_bit_index) *                                               \
-    GS_SWD_UART_BIT_TICKS_FOR(system_clock_hz)))
+   ((uint32_t)(data_bit_index) * GS_SWD_UART_BIT_TICKS_FOR(system_clock_hz)))
 #define GS_SWD_UART_STOP_SAMPLE_TICK_FOR(system_clock_hz)                      \
   GS_SWD_UART_SAMPLE_TICK_FOR(system_clock_hz, 8u)
 

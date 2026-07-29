@@ -3,10 +3,27 @@ camera:
   width: 640
   height: 480
   fps: 20
+backup_camera:
+  enabled: true
+  # "auto" prefers /dev/v4l/by-id, then tries other V4L2 capture nodes.
+  # Override with TRASHCAN_BACKUP_CAMERA_DEVICE when a specific path is required.
+  device: auto
+  width: 640
+  height: 480
+  fps: 15
+  reconnect_seconds: 2.0
+  family: 36h11
+  horizontal_fov_degrees: 70.0
+  # Set this to the measured black-square width for metric range estimates.
+  # ID, bearing, position, rotation, and image-relative errors work without it.
+  tag_size_m: 0.0
+  # Optional semantic names displayed with known tag IDs.
+  tag_roles: {}
 controller:
+  web_host: 0.0.0.0
   web_port: 8887
 serial:
-  port: /dev/cu.usbserial-0001
+  port: /dev/serial/by-id/usb-Silicon_Labs_CP2102_USB_to_UART_Bridge_Controller_0001-if00-port0
   baud: 115200
   timeout_seconds: 0.05
   reconnect_seconds: 1.0

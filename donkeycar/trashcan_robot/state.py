@@ -22,6 +22,15 @@ class RobotState:
             "telemetry": {},
             "faults": [],
             "model_name": None,
+            "backup_camera": {
+                "connected": False,
+                "device": None,
+                "fps": 0.0,
+                "family": None,
+                "error": "camera has not started",
+                "last_frame_age_ms": None,
+            },
+            "apriltags": [],
         }
 
     def update(self, **values: Any) -> None:

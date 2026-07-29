@@ -2,10 +2,13 @@ from __future__ import annotations
 
 import time
 from collections.abc import Callable
+from copy import deepcopy
 from datetime import datetime, timezone
 from pathlib import Path
+from types import MethodType
 from typing import Any
 
+from .apriltag_camera import AprilTagCamera
 from .config import AppConfig
 from .dashboard import DashboardServer
 from .esp32_drive import ESP32Drive
@@ -39,10 +42,17 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     from donkeycar.parts.controller import LocalWebController
     from donkeycar.parts.keras import KerasLinear
     from donkeycar.parts.tub_v2 import TubWriter
+    from donkeycar.parts.web_controller.web import WebSocketDriveAPI
+
+    install_safe_websocket_close_handler(WebSocketDriveAPI)
 
     vehicle = dk.Vehicle()
     state = RobotState()
-    transport = MockMotorTransport() if use_mock else SerialMotorTransport(config.serial)
+    transport = (
+        MockMotorTransport()
+        if use_mock
+        else SerialMotorTransport(config.serial, renew_commands=True)
+    )
     drive = ESP32Drive(transport, config.limits, config.serial.reconnect_seconds)
 
     camera_cfg = config.raw["camera"]
@@ -54,7 +64,22 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     vehicle.add(camera, outputs=["cam/image_array"], threaded=True)
     vehicle.add(FrequencyMeter(), outputs=["camera/fps"])
 
-    controller = LocalWebController(port=config.raw["controller"]["web_port"])
+    backup_cfg = config.raw.get("backup_camera", {})
+    backup_enabled = bool(backup_cfg.get("enabled", False))
+    if backup_enabled:
+        backup_camera = AprilTagCamera(backup_cfg)
+        vehicle.add(
+            backup_camera,
+            outputs=["backup/image_array", "backup/status"],
+            threaded=True,
+        )
+
+    controller_cfg = config.raw["controller"]
+    controller = create_web_controller(
+        LocalWebController,
+        controller_cfg["web_host"],
+        controller_cfg["web_port"],
+    )
     vehicle.add(
         controller,
         inputs=["cam/image_array", "tub/num_records", "user/mode", "recording"],
@@ -125,13 +150,79 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         StateUpdater(state, model_cfg["name"]),
         inputs=STATE_UPDATE_INPUTS,
     )
+    if backup_enabled:
+        vehicle.add(
+            AprilTagStateUpdater(state),
+            inputs=["backup/status"],
+        )
+    else:
+        state.update(
+            backup_camera={
+                "connected": False,
+                "device": backup_cfg.get("device"),
+                "fps": 0.0,
+                "family": backup_cfg.get("family"),
+                "error": "backup camera disabled",
+                "last_frame_age_ms": None,
+            },
+            apriltags=[],
+        )
     vehicle.add(logger, inputs=["camera/fps", "inference/rate"], outputs=["log/path"])
 
     dashboard_cfg = config.raw["dashboard"]
-    dashboard = DashboardServer(state, dashboard_cfg["host"], dashboard_cfg["port"])
+    dashboard = DashboardServer(
+        state,
+        dashboard_cfg["host"],
+        dashboard_cfg["port"],
+        manual_port=controller_cfg["web_port"],
+    )
     dashboard.start()
     vehicle.add(CameraPublisher(dashboard), inputs=["cam/image_array"])
+    if backup_enabled:
+        vehicle.add(
+            CameraPublisher(dashboard, backup=True),
+            inputs=["backup/image_array"],
+        )
     return vehicle
+
+
+def create_web_controller(controller_type: Any, host: str, port: int) -> Any:
+    """Create Donkeycar's controller with an explicit Tornado bind address."""
+    if host != "0.0.0.0":
+        raise ValueError("manual driving controller must bind to 0.0.0.0")
+    controller = controller_type(port=port)
+
+    def update(bound_controller: Any) -> None:
+        import asyncio
+
+        from tornado.ioloop import IOLoop
+
+        asyncio.set_event_loop(asyncio.new_event_loop())
+        bound_controller.listen(port, address=host)
+        bound_controller.loop = IOLoop.instance()
+        bound_controller.loop.start()
+
+    controller.update = MethodType(update, controller)
+    controller.bind_host = host
+    controller.bind_port = port
+    return controller
+
+
+def install_safe_websocket_close_handler(handler_type: Any) -> None:
+    """Force neutral controls before Donkeycar removes a websocket client."""
+    if getattr(handler_type, "_trashcan_safe_close_installed", False):
+        return
+    original_close = handler_type.on_close
+
+    def safe_close(handler: Any) -> Any:
+        handler.application.angle = 0.0
+        handler.application.throttle = 0.0
+        handler.application.recording = False
+        handler.application.mode = "user"
+        return original_close(handler)
+
+    handler_type.on_close = safe_close
+    handler_type._trashcan_safe_close_installed = True
 
 
 def create_tub_writer(
@@ -239,9 +330,25 @@ class StateUpdater:
         )
 
 
+class AprilTagStateUpdater:
+    def __init__(self, state: RobotState) -> None:
+        self._state = state
+
+    def run(self, status: dict[str, Any] | None) -> None:
+        if not status:
+            return
+        snapshot = deepcopy(status)
+        detections = list(snapshot.pop("detections", []))
+        self._state.update(
+            backup_camera=snapshot,
+            apriltags=detections,
+        )
+
+
 class CameraPublisher:
-    def __init__(self, dashboard: DashboardServer) -> None:
+    def __init__(self, dashboard: DashboardServer, backup: bool = False) -> None:
         self._dashboard = dashboard
+        self._backup = backup
 
     def run(self, image: Any) -> None:
         if image is None:
@@ -253,6 +360,9 @@ class CameraPublisher:
 
             buffer = BytesIO()
             Image.fromarray(image).save(buffer, format="JPEG", quality=70)
-            self._dashboard.update_camera(buffer.getvalue())
+            if self._backup:
+                self._dashboard.update_backup_camera(buffer.getvalue())
+            else:
+                self._dashboard.update_camera(buffer.getvalue())
         except Exception:
             return

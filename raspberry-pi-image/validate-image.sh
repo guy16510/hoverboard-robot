@@ -53,7 +53,8 @@ mount -o ro "$root_partition" "$root_mount"
 
 marker="$root_mount/etc/trashcan-robot-image-validated"
 build_info="$root_mount/etc/trashcan-robot-build-info"
-app=/opt/trashcan-robot/donkeycar
+repository=/opt/trashcan-robot
+app="$repository/donkeycar"
 mounted_app="$root_mount$app"
 service="$root_mount/etc/systemd/system/trashcan-donkeycar.service"
 enabled_link="$root_mount/etc/systemd/system/multi-user.target.wants/trashcan-donkeycar.service"
@@ -65,12 +66,19 @@ enabled_link="$root_mount/etc/systemd/system/multi-user.target.wants/trashcan-do
 for fact in \
   'architecture=arm64' \
   'release=bookworm' \
+  'nodejs=installed' \
+  'nodejs_minimum_major=18' \
+  'nodejs_smoke=passed' \
+  'npm=installed' \
+  'node_protocol_tests=passed' \
   'robot_user=trashbot' \
   'robot_group=trashbot' \
   'robot_working_directory=/opt/trashcan-robot/donkeycar' \
   'robot_service=enabled' \
   'robot_service_contract=validated' \
   'python_smoke=passed' \
+  'opencv_apriltag=passed' \
+  'backup_camera_config=validated' \
   'application_tests=passed' \
   'systemd_verify=passed' \
   'dependency_check=passed' \
@@ -109,16 +117,41 @@ trashbot_gid="$(awk -F: '$1 == "trashbot" { print $3 }' "$root_mount/etc/group")
   echo "Exported image is missing the trashbot user or group" >&2
   exit 1
 }
-bad_owner="$(find "$root_mount/opt/trashcan-robot" \( ! -uid "$trashbot_uid" -o ! -gid "$trashbot_gid" \) -print -quit)"
+bad_owner="$(find "$root_mount$repository" \( ! -uid "$trashbot_uid" -o ! -gid "$trashbot_gid" \) -print -quit)"
 if [[ -n "$bad_owner" ]]; then
   echo "Exported repository ownership is incorrect at $bad_owner" >&2
   stat -c '%u:%g %n' "$bad_owner" >&2 || true
   exit 1
 fi
 
+node_version="$(chroot "$root_mount" /usr/bin/node --version)"
+node_major="${node_version#v}"
+node_major="${node_major%%.*}"
+if ! [[ "$node_major" =~ ^[0-9]+$ ]] || (( node_major < 18 )); then
+  echo "Exported image requires Node.js 18 or newer, got $node_version" >&2
+  exit 1
+fi
+npm_version="$(chroot "$root_mount" /usr/bin/npm --version)"
+chroot "$root_mount" /usr/bin/node --input-type=module - <<'JS'
+import assert from 'node:assert/strict';
+import {
+  MessageType,
+  crc16,
+  encodeFrame,
+} from 'file:///opt/trashcan-robot/tools/pi-client/protocol.mjs';
+
+assert.equal(crc16(Buffer.from('123456789')), 0x29b1);
+const frame = encodeFrame({ type: MessageType.DISARM, sequence: 7 });
+assert.equal(frame[0], 0xa5);
+assert.equal(frame[1], 0x5a);
+console.log('Exported image Node.js smoke test passed');
+JS
+printf 'Exported image Node.js validated: node %s, npm %s\n' "$node_version" "$npm_version"
+
 chroot "$root_mount" /usr/bin/env \
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$app" \
   "$app/.venv/bin/python" - <<'PY'
+import cv2
 import flask
 import psutil
 import serial
@@ -130,8 +163,15 @@ from donkeycar.parts.tub_v2 import TubWriter
 from trashcan_robot.config import load_config
 from trashcan_robot.pipeline import create_tub_writer
 from trashcan_robot.protocol import crc16_ccitt_false
+
+if not hasattr(cv2, 'aruco'):
+    raise SystemExit('Exported image is missing cv2.aruco')
+if not hasattr(cv2.aruco, 'DICT_APRILTAG_36h11'):
+    raise SystemExit('Exported image is missing AprilTag 36h11 support')
 cfg = load_config('/opt/trashcan-robot/donkeycar/config/robot.yaml')
 assert cfg.serial.baud == 115200
+assert cfg.raw['backup_camera']['enabled'] is True
+assert cfg.raw['backup_camera']['family'] == '36h11'
 assert crc16_ccitt_false(b'123456789') == 0x29B1
 assert 'base_path' in signature(TubWriter).parameters
 
@@ -146,6 +186,7 @@ writer = create_tub_writer(
     ['image_array'],
 )
 assert writer.base_path == '/tmp/tub-contract'
+print('Exported image OpenCV AprilTag smoke test passed')
 print('Exported image Python smoke test passed')
 PY
 chroot "$root_mount" /usr/bin/env PYTHONDONTWRITEBYTECODE=1 \

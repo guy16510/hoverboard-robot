@@ -10,6 +10,10 @@ void gs_test_architecture(void);
 void gs_test_simulation(void);
 void gs_test_swd_timing(void);
 void gs_test_resync(void);
+void gs_test_startup_zero_preemption(void);
+void gs_test_motor_simulation(void);
+void gs_test_hall_qualifier(void);
+void gs_test_hall_cycle_orientation(void);
 
 int main(void) {
   gs_test_protocol();
@@ -18,6 +22,10 @@ int main(void) {
   gs_test_simulation();
   gs_test_swd_timing();
   gs_test_resync();
+  gs_test_startup_zero_preemption();
+  gs_test_motor_simulation();
+  gs_test_hall_qualifier();
+  gs_test_hall_cycle_orientation();
   if (gs_tests_failed != 0) {
     fprintf(stderr, "%u/%u assertions failed\n", gs_tests_failed, gs_tests_run);
     return 1;

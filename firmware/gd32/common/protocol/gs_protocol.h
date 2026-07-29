@@ -7,15 +7,20 @@
 #include <stdint.h>
 
 enum {
-  GS_PROTOCOL_VERSION = 2,
-  GS_COMMAND_MARKER = 0x30,
-  GS_SLAVE_FEEDBACK_MARKER = 0x31,
+  /*
+   * Wire epoch 4 deliberately changes every southbound frame discriminator.
+   * ESP32, MASTER, and SLAVE images from another epoch cannot exchange valid
+   * commands or feedback, so a partial or mistaken flash fails closed.
+   */
+  GS_PROTOCOL_VERSION = 4,
+  GS_COMMAND_MARKER = 0x42,
+  GS_SLAVE_FEEDBACK_MARKER = 0x43,
   GS_FEEDBACK_MARKER_0 = 0xCE,
-  GS_FEEDBACK_MARKER_1 = 0xB2,
+  GS_FEEDBACK_MARKER_1 = 0xB3,
   GS_ESP_COMMAND_SIZE = 11,
   GS_SLAVE_COMMAND_SIZE = 8,
-  GS_SLAVE_FEEDBACK_SIZE = 22,
-  GS_MASTER_FEEDBACK_SIZE = 55,
+  GS_SLAVE_FEEDBACK_SIZE = 28,
+  GS_MASTER_FEEDBACK_SIZE = 67,
   GS_MAX_FRAME_SIZE = GS_MASTER_FEEDBACK_SIZE,
   GS_PARTIAL_FRAME_TIMEOUT_MS = 100,
   GS_COMMAND_LIMIT = 1000,
@@ -90,6 +95,9 @@ typedef struct {
   uint8_t hall;
   uint8_t status_flags;
   uint16_t compare_offset;
+  uint16_t hall_glitch_count;
+  uint16_t command_invalid_frames;
+  uint16_t command_framing_errors;
 } gs_slave_feedback;
 
 typedef struct {
@@ -118,6 +126,12 @@ typedef struct {
   uint16_t remote_valid_frames;
   uint16_t remote_invalid_frames;
   uint16_t remote_framing_errors;
+  uint16_t left_hall_glitch_count;
+  uint16_t right_hall_glitch_count;
+  uint16_t slave_feedback_invalid_frames;
+  uint16_t slave_feedback_framing_errors;
+  uint16_t slave_command_invalid_frames;
+  uint16_t slave_command_framing_errors;
 } gs_master_feedback;
 
 uint16_t gs_crc16(const uint8_t *data, size_t length);

@@ -122,8 +122,8 @@ bool SerialCommandSource::acceptFrame(const SerialFrame &frame,
   }
   if (frame.type == SerialMessageType::kSetDirectMotor) {
     DirectMotorCommand direct{};
-    if (!DirectMotorCommandCodec::decode(
-            frame.payload.data(), frame.payload_length, direct)) {
+    if (!DirectMotorCommandCodec::decode(frame.payload.data(),
+                                         frame.payload_length, direct)) {
       last_error_code_ = static_cast<uint8_t>(SerialErrorCode::kMalformed);
       return false;
     }
@@ -137,8 +137,7 @@ bool SerialCommandSource::acceptFrame(const SerialFrame &frame,
     }
     if (active_lease_id_ != 0u && now_us <= active_lease_expires_us_ &&
         direct.lease_id != active_lease_id_) {
-      last_error_code_ =
-          static_cast<uint8_t>(SerialErrorCode::kLeaseConflict);
+      last_error_code_ = static_cast<uint8_t>(SerialErrorCode::kLeaseConflict);
       return false;
     }
     latest_ = {};
@@ -164,6 +163,9 @@ bool SerialCommandSource::acceptFrame(const SerialFrame &frame,
   case SerialMessageType::kMotorTelemetry:
   case SerialMessageType::kOdometry:
   case SerialMessageType::kActiveFaults:
+  case SerialMessageType::kDriveTelemetry:
+  case SerialMessageType::kControllerTelemetry:
+  case SerialMessageType::kResilienceTelemetry:
     if (frame.payload_length == 0u) {
       return true;
     }

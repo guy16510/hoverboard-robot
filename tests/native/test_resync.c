@@ -19,8 +19,8 @@ static void encode_esp(uint8_t frame[GS_ESP_COMMAND_SIZE], uint16_t sequence,
   GS_EXPECT_TRUE(gs_encode_esp_command(frame, &command));
 }
 
-static void encode_slave(uint8_t frame[GS_SLAVE_COMMAND_SIZE], uint16_t sequence,
-                         int16_t electrical, uint8_t flags) {
+static void encode_slave(uint8_t frame[GS_SLAVE_COMMAND_SIZE],
+                         uint16_t sequence, int16_t electrical, uint8_t flags) {
   const gs_slave_command command = {
       .electrical_command = electrical,
       .flags = flags,
@@ -45,16 +45,16 @@ static void test_master_accepts_safe_restart_after_timeout(void) {
   GS_EXPECT_FALSE(gs_master_accept_esp_frame(&master, frame, 100u));
   GS_EXPECT_EQ(GS_CONTROLLER_ACTIVE, master.state);
 
-  GS_EXPECT_TRUE(gs_master_accept_esp_frame(
-      &master, frame, 10u + GS_ESP_TIMEOUT_MS + 1u));
+  GS_EXPECT_TRUE(
+      gs_master_accept_esp_frame(&master, frame, 10u + GS_ESP_TIMEOUT_MS + 1u));
   GS_EXPECT_EQ(GS_CONTROLLER_DISABLED, master.state);
   GS_EXPECT_EQ(0, master.requested.left);
   GS_EXPECT_EQ(0, master.requested.right);
   GS_EXPECT_EQ(1u, master.last_esp_sequence);
 
   encode_esp(frame, 2u, 0, 0, GS_COMMAND_DIRECT_LR, 0u);
-  GS_EXPECT_TRUE(gs_master_accept_esp_frame(
-      &master, frame, 10u + GS_ESP_TIMEOUT_MS + 2u));
+  GS_EXPECT_TRUE(
+      gs_master_accept_esp_frame(&master, frame, 10u + GS_ESP_TIMEOUT_MS + 2u));
   GS_EXPECT_EQ(GS_CONTROLLER_READY, master.state);
 }
 
@@ -84,15 +84,15 @@ static void test_slave_accepts_safe_restart_after_timeout(void) {
   GS_EXPECT_FALSE(gs_slave_accept_master_frame(&slave, frame, 50u));
   GS_EXPECT_EQ(GS_CONTROLLER_ACTIVE, slave.state);
 
-  GS_EXPECT_TRUE(gs_slave_accept_master_frame(
-      &slave, frame, 10u + GS_SLAVE_TIMEOUT_MS + 1u));
+  GS_EXPECT_TRUE(gs_slave_accept_master_frame(&slave, frame,
+                                              10u + GS_SLAVE_TIMEOUT_MS + 1u));
   GS_EXPECT_EQ(GS_CONTROLLER_DISABLED, slave.state);
   GS_EXPECT_EQ(0, slave.demanded_electrical);
   GS_EXPECT_EQ(1u, slave.last_master_sequence);
 
   encode_slave(frame, 2u, 0, 0u);
-  GS_EXPECT_TRUE(gs_slave_accept_master_frame(
-      &slave, frame, 10u + GS_SLAVE_TIMEOUT_MS + 2u));
+  GS_EXPECT_TRUE(gs_slave_accept_master_frame(&slave, frame,
+                                              10u + GS_SLAVE_TIMEOUT_MS + 2u));
   GS_EXPECT_EQ(GS_CONTROLLER_READY, slave.state);
 }
 
@@ -107,15 +107,15 @@ static void test_stale_motion_is_never_a_resync(void) {
   encode_esp(esp_frame, 400u, 0, 0, GS_COMMAND_DISABLE, GS_COMMAND_DISABLE);
   GS_EXPECT_TRUE(gs_master_accept_esp_frame(&master, esp_frame, 1u));
   encode_esp(esp_frame, 1u, 100, 100, GS_COMMAND_DIRECT_LR, 0u);
-  GS_EXPECT_FALSE(gs_master_accept_esp_frame(
-      &master, esp_frame, GS_ESP_TIMEOUT_MS + 2u));
+  GS_EXPECT_FALSE(
+      gs_master_accept_esp_frame(&master, esp_frame, GS_ESP_TIMEOUT_MS + 2u));
   GS_EXPECT_EQ(GS_CONTROLLER_DISABLED, master.state);
 
   encode_slave(slave_frame, 400u, 0, GS_COMMAND_DISABLE);
   GS_EXPECT_TRUE(gs_slave_accept_master_frame(&slave, slave_frame, 1u));
   encode_slave(slave_frame, 1u, 100, 0u);
-  GS_EXPECT_FALSE(gs_slave_accept_master_frame(
-      &slave, slave_frame, GS_SLAVE_TIMEOUT_MS + 2u));
+  GS_EXPECT_FALSE(gs_slave_accept_master_frame(&slave, slave_frame,
+                                               GS_SLAVE_TIMEOUT_MS + 2u));
   GS_EXPECT_EQ(GS_CONTROLLER_DISABLED, slave.state);
 }
 

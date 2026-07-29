@@ -85,7 +85,7 @@ export function normalizeStagePlan(value, {
     (action.left !== 0 || action.right !== 0));
   if (stage === "motor-transport") {
     const modeIndex = actions.findIndex(action =>
-      action.command === "mode" && action.value === 3);
+      action.command === "mode" && action.value === 2);
     const zeroIndex = actions.findIndex(action =>
       action.command === "direct" &&
       action.left === 0 && action.right === 0);
@@ -95,13 +95,13 @@ export function normalizeStagePlan(value, {
     const firstNonzero = actions.findIndex(action =>
       action.command === "direct" &&
       (action.left !== 0 || action.right !== 0));
-    if (modeIndex < 0) fail("motor-transport requires mode 3");
+    if (modeIndex < 0) fail("motor-transport requires mode 2");
     if (!nonzeroDirect) fail("motor-transport requires a nonzero direct action");
     if (zeroIndex < 0 || zeroIndex > armIndex) {
       fail("motor-transport must command zero before arming");
     }
     if (armIndex < 0 || modeIndex > armIndex || armIndex > firstNonzero) {
-      fail("motor-transport must select mode 3 and arm before nonzero");
+      fail("motor-transport must select mode 2 and arm before nonzero");
     }
     if (offsetIndex >= armIndex) {
       fail("motor-transport upright offset must be set before arming");

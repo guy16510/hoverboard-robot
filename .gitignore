@@ -4,6 +4,11 @@
 .platformio/
 .toolchains/
 
+# Python-generated files
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 # Generated firmware is published as immutable CI artifacts, never committed.
 dist/
 artifacts/
@@ -15,6 +20,11 @@ hardware_readbacks/
 
 # Host-side structured drive logs
 logs/
+
+# Local Raspberry Pi image secrets and work products
+raspberry-pi-image/wifi.env
+raspberry-pi-image/.work/
+raspberry-pi-image/dist/
 
 # macOS metadata
 .DS_Store

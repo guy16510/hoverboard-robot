@@ -15,8 +15,7 @@ static void feed_pulse_frame(const uint8_t expected[GS_SWD_PULSE_FRAME_BYTES],
                              uint8_t actual[GS_SWD_PULSE_FRAME_BYTES]) {
   gs_swd_pulse_decoder decoder;
   gs_swd_pulse_decoder_init(&decoder);
-  const uint16_t sync_width =
-      (uint16_t)(unit_us * GS_SWD_PULSE_SYNC_UNITS);
+  const uint16_t sync_width = (uint16_t)(unit_us * GS_SWD_PULSE_SYNC_UNITS);
   GS_EXPECT_EQ(GS_SWD_PULSE_SYNC,
                gs_swd_pulse_decoder_feed(&decoder, sync_width, actual));
   GS_EXPECT_EQ(unit_us, decoder.unit_us);
@@ -70,17 +69,15 @@ static void test_pulse_decoder(void) {
   uint8_t actual[GS_SWD_PULSE_FRAME_BYTES] = {0};
   gs_swd_pulse_decoder decoder;
   gs_swd_pulse_decoder_init(&decoder);
-  GS_EXPECT_EQ(
-      GS_SWD_PULSE_SYNC,
-      gs_swd_pulse_decoder_feed(
-          &decoder,
-          GS_SWD_PULSE_MIN_UNIT_US * GS_SWD_PULSE_SYNC_UNITS, actual));
+  GS_EXPECT_EQ(GS_SWD_PULSE_SYNC,
+               gs_swd_pulse_decoder_feed(
+                   &decoder, GS_SWD_PULSE_MIN_UNIT_US * GS_SWD_PULSE_SYNC_UNITS,
+                   actual));
   GS_EXPECT_EQ(GS_SWD_PULSE_MIN_UNIT_US, decoder.unit_us);
-  GS_EXPECT_EQ(
-      GS_SWD_PULSE_SYNC,
-      gs_swd_pulse_decoder_feed(
-          &decoder,
-          GS_SWD_PULSE_MAX_UNIT_US * GS_SWD_PULSE_SYNC_UNITS, actual));
+  GS_EXPECT_EQ(GS_SWD_PULSE_SYNC,
+               gs_swd_pulse_decoder_feed(
+                   &decoder, GS_SWD_PULSE_MAX_UNIT_US * GS_SWD_PULSE_SYNC_UNITS,
+                   actual));
   GS_EXPECT_EQ(GS_SWD_PULSE_MAX_UNIT_US, decoder.unit_us);
 
   GS_EXPECT_EQ(GS_SWD_PULSE_ERROR,
@@ -90,15 +87,13 @@ static void test_pulse_decoder(void) {
   GS_EXPECT_EQ(0u, gs_swd_pulse_symbol_width_us(4u));
 
   gs_swd_pulse_decoder_init(&decoder);
-  GS_EXPECT_EQ(GS_SWD_PULSE_SYNC,
-               gs_swd_pulse_decoder_feed(&decoder, GS_SWD_PULSE_SYNC_US,
-                                         actual));
+  GS_EXPECT_EQ(GS_SWD_PULSE_SYNC, gs_swd_pulse_decoder_feed(
+                                      &decoder, GS_SWD_PULSE_SYNC_US, actual));
   GS_EXPECT_EQ(GS_SWD_PULSE_NONE,
                gs_swd_pulse_decoder_feed(
                    &decoder, gs_swd_pulse_symbol_width_us(3u), actual));
-  GS_EXPECT_EQ(GS_SWD_PULSE_SYNC,
-               gs_swd_pulse_decoder_feed(&decoder, GS_SWD_PULSE_SYNC_US,
-                                         actual));
+  GS_EXPECT_EQ(GS_SWD_PULSE_SYNC, gs_swd_pulse_decoder_feed(
+                                      &decoder, GS_SWD_PULSE_SYNC_US, actual));
   GS_EXPECT_EQ(0u, decoder.symbol_index);
   GS_EXPECT_TRUE(decoder.active);
 }

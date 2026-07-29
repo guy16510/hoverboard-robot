@@ -5,6 +5,7 @@
 #include "gausstop_board.h"
 #include "gd32f1x0.h"
 #include "gs_frame_parser.h"
+#include "gs_hall_qualifier.h"
 #include "gs_master.h"
 #include "gs_motor_control.h"
 #include "gs_safety.h"
@@ -22,6 +23,7 @@ static gs_motor_controller motor;
 static gs_safety_supervisor safety;
 static gs_frame_parser esp_parser;
 static gs_frame_parser slave_parser;
+static gs_hall_qualifier hall_qualifier;
 static bool feedback_pending;
 static uint16_t feedback_sequence;
 static uint32_t feedback_due_ms;
@@ -101,6 +103,8 @@ static void service_transport_health(void) {
   gs_board_uart_get_stats(GS_UART_LINK, &link);
   gs_master_set_remote_diagnostics(&master, remote.rx_bytes,
                                    remote.framing_errors);
+  gs_master_set_link_diagnostics(&master, link.framing_errors +
+                                              slave_parser.framing_errors);
   uint8_t overflow_sources = 0u;
   if (remote.rx_overflows != remote_rx_overflows) {
     overflow_sources |= GS_FEEDBACK_TRANSPORT_REMOTE_RX_OVERFLOW;
@@ -118,9 +122,8 @@ static void service_transport_health(void) {
   remote_tx_overflows = remote.tx_overflows;
   link_rx_overflows = link.rx_overflows;
   link_tx_overflows = link.tx_overflows;
-  if (overflow_sources != 0u &&
-      (master.state == GS_CONTROLLER_READY ||
-       master.state == GS_CONTROLLER_ACTIVE)) {
+  if (overflow_sources != 0u && (master.state == GS_CONTROLLER_READY ||
+                                 master.state == GS_CONTROLLER_ACTIVE)) {
     gs_master_note_transport_overflow(&master, overflow_sources);
     force_master_fault(GS_FAULT_TRANSPORT_OVERFLOW);
   }
@@ -182,19 +185,23 @@ static void service_motor(void) {
     observed_hall_overflows = hall_overflows;
     force_master_fault(GS_FAULT_HALL_CAPTURE_OVERFLOW);
   }
-  const uint8_t hall = gs_board_read_hall();
+  const uint8_t raw_hall = gs_board_read_hall();
+  const uint8_t qualified_hall = gs_hall_qualifier_value(&hall_qualifier);
   const bool pa4_raw_high = gs_board_shutdown_raw_high();
   gs_master_set_runtime_status(&master, pa4_raw_high, pa4_bypass_compiled());
   gs_safety_set_enabled(&safety, master.state == GS_CONTROLLER_READY ||
                                      master.state == GS_CONTROLLER_ACTIVE);
   gs_safety_note_demand(&safety, gs_motor_bridge_active(&motor), now_ms);
-  const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
-                                   adc_value, hall != 0u && hall != 7u};
+  const gs_safety_sample sample = {
+      gs_board_shutdown_clear(), adc_valid, adc_value,
+      qualified_hall >= 1u && qualified_hall <= 6u};
   if (gs_master_fault_clear_requested(&master) && master.requested.left == 0 &&
       master.requested.right == 0 && master.demanded.left == 0 &&
       master.demanded.right == 0 && master.applied.left == 0 &&
       master.applied.right == 0 && motor.requested_command == 0 &&
-      motor.applied_command == 0 && gs_safety_clear(&safety, &sample, now_ms)) {
+      motor.applied_command == 0 &&
+      gs_hall_qualifier_clear_safe(&hall_qualifier, raw_hall) &&
+      gs_safety_clear(&safety, &sample, now_ms)) {
     gs_motor_clear_fault(&motor, now_ms);
     gs_master_finish_fault_clear(&master, true);
     master.transport_status_flags = 0u;
@@ -210,18 +217,35 @@ static void service_motor(void) {
   const bool permitted =
       safety.enabled && safety.adc_ready && safety.faults.bits == 0u;
   bool processed_event = false;
+  gs_qualified_hall_event qualified_event = {0};
   if (event_available) {
-    processed_event = true;
-    apply_motor_step(first_event.hall, true, first_event.interval_us, permitted,
-                     now_ms);
+    if (gs_hall_qualifier_update(&hall_qualifier, first_event.hall,
+                                 first_event.timestamp_us, &qualified_event)) {
+      processed_event = true;
+      apply_motor_step(qualified_event.hall, true, qualified_event.interval_us,
+                       permitted, now_ms);
+    }
   }
   gs_board_hall_event event;
   while (gs_board_hall_event_read(&event)) {
-    processed_event = true;
-    apply_motor_step(event.hall, true, event.interval_us, permitted, now_ms);
+    if (gs_hall_qualifier_update(&hall_qualifier, event.hall,
+                                 event.timestamp_us, &qualified_event)) {
+      processed_event = true;
+      apply_motor_step(qualified_event.hall, true, qualified_event.interval_us,
+                       permitted, now_ms);
+    }
   }
+  if (gs_hall_qualifier_update(&hall_qualifier, raw_hall, gs_board_micros(),
+                               &qualified_event)) {
+    processed_event = true;
+    apply_motor_step(qualified_event.hall, true, qualified_event.interval_us,
+                     permitted, now_ms);
+  }
+  gs_master_set_hall_glitch_count(&master,
+                                  gs_hall_qualifier_glitches(&hall_qualifier));
   if (!processed_event) {
-    apply_motor_step(hall, false, 0u, permitted, now_ms);
+    apply_motor_step(gs_hall_qualifier_value(&hall_qualifier), false, 0u,
+                     permitted, now_ms);
   }
 }
 
@@ -229,6 +253,8 @@ int main(void) {
   const bool watchdog_reset = gs_board_watchdog_was_reset();
   rcu_all_reset_flag_clear();
   gs_board_operational_init();
+  gs_hall_qualifier_init(&hall_qualifier, gs_board_read_hall(),
+                         gs_board_micros());
   gs_master_init(&master, gs_board_millis());
   gs_motor_init(&motor, gs_board_bridge_port(), gs_board_millis());
   gs_safety_init(&safety, GS_SAFETY_MASTER, watchdog_reset, gs_board_millis());

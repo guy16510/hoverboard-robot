@@ -1,5 +1,7 @@
 from pathlib import Path
+from types import ModuleType, SimpleNamespace
 from typing import Any
+import sys
 
 import pytest
 
@@ -11,6 +13,8 @@ from trashcan_robot.pipeline import (
     PilotCondition,
     StateUpdater,
     create_tub_writer,
+    create_web_controller,
+    install_safe_websocket_close_handler,
 )
 from trashcan_robot.state import RobotState
 
@@ -43,6 +47,46 @@ def test_tub_writer_uses_donkeycar_53_base_path_keyword() -> None:
         "inputs": inputs,
         "types": types,
     }
+
+
+def test_web_controller_binds_explicitly_to_all_interfaces(monkeypatch) -> None:
+    calls: list[tuple[int, str]] = []
+    loop_started = []
+
+    class FakeLoop:
+        @staticmethod
+        def instance():
+            return FakeLoop()
+
+        def start(self) -> None:
+            loop_started.append(True)
+
+    tornado = ModuleType("tornado")
+    ioloop = ModuleType("tornado.ioloop")
+    ioloop.IOLoop = FakeLoop
+    monkeypatch.setitem(sys.modules, "tornado", tornado)
+    monkeypatch.setitem(sys.modules, "tornado.ioloop", ioloop)
+
+    class FakeController:
+        def __init__(self, port: int) -> None:
+            self.port = port
+            self.loop = None
+
+        def listen(self, port: int, *, address: str) -> None:
+            calls.append((port, address))
+
+    controller = create_web_controller(FakeController, "0.0.0.0", 8887)
+    controller.update()
+
+    assert calls == [(8887, "0.0.0.0")]
+    assert loop_started == [True]
+    assert controller.bind_host == "0.0.0.0"
+    assert controller.bind_port == 8887
+
+
+def test_web_controller_rejects_loopback_only_binding() -> None:
+    with pytest.raises(ValueError):
+        create_web_controller(lambda port: object(), "127.0.0.1", 8887)
 
 
 def test_frequency_meter_reports_completed_one_second_window() -> None:
@@ -86,6 +130,32 @@ def test_pipeline_keeps_drive_outputs_separate_from_state_telemetry() -> None:
         "drive/fault",
     ]
     assert STATE_UPDATE_INPUTS[-2:] == ["camera/fps", "inference/rate"]
+
+
+def test_websocket_disconnect_forces_neutral_before_client_removal() -> None:
+    events: list[tuple[float, float]] = []
+
+    class Handler:
+        def on_close(self) -> None:
+            events.append((self.application.angle, self.application.throttle))
+
+    install_safe_websocket_close_handler(Handler)
+    install_safe_websocket_close_handler(Handler)
+    handler = Handler()
+    handler.application = SimpleNamespace(
+        angle=0.8,
+        throttle=-0.6,
+        recording=True,
+        mode="local",
+    )
+
+    handler.on_close()
+
+    assert events == [(0.0, 0.0)]
+    assert handler.application.angle == 0.0
+    assert handler.application.throttle == 0.0
+    assert handler.application.recording is False
+    assert handler.application.mode == "user"
 
 
 def test_autonomous_is_blocked_when_esp32_disconnects() -> None:

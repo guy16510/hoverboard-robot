@@ -256,9 +256,8 @@ gs_esp_command desired_command() {
 }
 
 bool init_command_transport() {
-  rmt_config_t config =
-      RMT_DEFAULT_CONFIG_TX(static_cast<gpio_num_t>(kControllerTx),
-                            kCommandRmtChannel);
+  rmt_config_t config = RMT_DEFAULT_CONFIG_TX(
+      static_cast<gpio_num_t>(kControllerTx), kCommandRmtChannel);
   config.clk_div = kCommandRmtClockDivider;
   config.tx_config.loop_en = false;
   config.tx_config.carrier_en = false;
@@ -281,10 +280,8 @@ bool transmit_command_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
   for (size_t byte = 0u; byte < GS_SWD_PULSE_FRAME_BYTES; ++byte) {
     for (uint8_t symbol_index = 0u;
          symbol_index < GS_SWD_PULSE_SYMBOLS_PER_BYTE; ++symbol_index) {
-      const uint8_t symbol =
-          static_cast<uint8_t>((frame[byte] >>
-                                (symbol_index * GS_SWD_PULSE_SYMBOL_BITS)) &
-                               0x03u);
+      const uint8_t symbol = static_cast<uint8_t>(
+          (frame[byte] >> (symbol_index * GS_SWD_PULSE_SYMBOL_BITS)) & 0x03u);
       items[item_index].level0 = 0u;
       items[item_index].duration0 =
           static_cast<uint16_t>((symbol + 1u) * kCommandPulseUnitUs);

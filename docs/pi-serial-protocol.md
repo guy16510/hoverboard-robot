@@ -56,6 +56,9 @@ and yaw. The reference client sends hello when it opens the port.
 | `0x32` | motor telemetry | both |
 | `0x33` | odometry | both |
 | `0x34` | active faults | both |
+| `0x35` | drive telemetry | both |
+| `0x36` | controller telemetry | both |
+| `0x37` | resilience telemetry | both |
 | `0x40` | configuration read | both |
 | `0x41` | configuration update | Pi -> ESP32 |
 | `0x7E` | acknowledgment | ESP32 -> Pi |
@@ -134,6 +137,7 @@ field is the corrected Y-axis rate used by the controller.
 | motor | 46 | calculated L/R `i16[2]`, applied L/R `i16[2]`, sequence `u16`, flags `u16`, transmitted/feedback/CRC/timeout counts `u32[4]`, last/max acknowledgment latency `u32[2]`, last/max applied latency `u32[2]`, transmit rate centi-Hz `u16` |
 | odometry | 20 | left/right counts `i32[2]`, velocity milli-units `i32`, timestamp microseconds `u64` |
 | active faults | 16 | balance/master/slave/feedback-health masks `u32[4]` |
+| resilience | 48 | warning flags `u16`, CRC streak/threshold `u8[2]`, CRC total `u32`, Hall-glitch counters `u16[2]`, inter-controller invalid/framing counters `u16[4]`, first-fault drive/master/slave masks `u32[3]`, controller states and Hall values `u8[4]`, commanded/applied L/R `i16[4]`, ESP32 uptime milliseconds `u32` |
 
 Status states use `0` BOOT, `1` IMU_CALIBRATING, `2` DISARMED, `3`
 ARMED_BALANCE, `4` DRIVING, `5` FALLEN, and `6` FAULT. Active sources use `0`

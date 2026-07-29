@@ -2,6 +2,7 @@
 #ifndef GS_FRAME_PARSER_H
 #define GS_FRAME_PARSER_H
 
+#include <stdbool.h>
 #include <stddef.h>
 #include <stdint.h>
 
@@ -21,6 +22,7 @@ typedef struct {
   size_t frame_size;
   size_t marker_size;
   uint32_t last_byte_ms;
+  uint16_t framing_errors;
 } gs_frame_parser;
 
 void gs_frame_parser_init_full(gs_frame_parser *parser, const uint8_t *marker,
@@ -29,15 +31,15 @@ void gs_frame_parser_init_master_feedback(gs_frame_parser *parser,
                                           uint32_t legacy_timeout_ms);
 
 #define GS_FRAME_PARSER_INIT_SELECT(_1, _2, _3, _4, NAME, ...) NAME
-#define gs_frame_parser_init(...)                                             \
+#define gs_frame_parser_init(...)                                              \
   GS_FRAME_PARSER_INIT_SELECT(__VA_ARGS__, gs_frame_parser_init_full,          \
                               gs_frame_parser_init_invalid_arity,              \
                               gs_frame_parser_init_master_feedback)            \
   (__VA_ARGS__)
 
 gs_parse_result gs_frame_parser_feed(gs_frame_parser *parser, uint8_t byte,
-                                      uint32_t now_ms,
-                                      uint8_t out[GS_MAX_FRAME_SIZE]);
+                                     uint32_t now_ms,
+                                     uint8_t out[GS_MAX_FRAME_SIZE]);
 gs_parse_result gs_frame_parser_poll(gs_frame_parser *parser, uint32_t now_ms);
 
 #endif

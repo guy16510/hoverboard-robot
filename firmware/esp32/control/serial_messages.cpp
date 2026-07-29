@@ -115,6 +115,28 @@ size_t SerialMessageCodec::encodeMotor(const ProtocolMotorTelemetry &value,
   return kLength;
 }
 
+size_t SerialMessageCodec::encodeDrive(const ProtocolDriveTelemetry &value,
+                                       uint8_t *payload, size_t capacity) {
+  constexpr size_t kLength = 24u;
+  if (payload == nullptr || capacity < kLength) {
+    return 0u;
+  }
+  writeI16(&payload[0], value.requested_linear_milli);
+  writeI16(&payload[2], value.requested_yaw_milli);
+  writeI16(&payload[4], value.mixed_left);
+  writeI16(&payload[6], value.mixed_right);
+  writeI16(&payload[8], value.commanded_left);
+  writeI16(&payload[10], value.commanded_right);
+  writeI16(&payload[12], value.applied_left);
+  writeI16(&payload[14], value.applied_right);
+  writeU32(&payload[16], value.safety_faults);
+  payload[20] = value.active_source;
+  payload[21] = value.operating_mode;
+  payload[22] = value.arm_state;
+  payload[23] = value.flags;
+  return kLength;
+}
+
 size_t SerialMessageCodec::encodeOdometry(const ProtocolOdometry &value,
                                           uint8_t *payload, size_t capacity) {
   constexpr size_t kLength = 20u;
@@ -138,6 +160,63 @@ size_t SerialMessageCodec::encodeFaults(const ProtocolFaults &value,
   writeU32(&payload[4], value.master);
   writeU32(&payload[8], value.slave);
   writeU32(&payload[12], value.feedback_health);
+  return kLength;
+}
+
+size_t
+SerialMessageCodec::encodeController(const ProtocolControllerTelemetry &value,
+                                     uint8_t *payload, size_t capacity) {
+  constexpr size_t kLength = 24u;
+  if (payload == nullptr || capacity < kLength) {
+    return 0u;
+  }
+  payload[0] = value.master_state;
+  payload[1] = value.slave_state;
+  payload[2] = value.status_flags;
+  payload[3] = value.motor_status_flags;
+  writeU16(&payload[4], value.master_command_age_ms);
+  writeU16(&payload[6], value.slave_feedback_age_ms);
+  writeU16(&payload[8], value.slave_command_age_ms);
+  payload[10] = value.left_hall;
+  payload[11] = value.right_hall;
+  writeU16(&payload[12], value.left_compare_offset);
+  writeU16(&payload[14], value.right_compare_offset);
+  writeU16(&payload[16], value.remote_rx_bytes);
+  writeU16(&payload[18], value.remote_valid_frames);
+  writeU16(&payload[20], value.remote_invalid_frames);
+  writeU16(&payload[22], value.remote_framing_errors);
+  return kLength;
+}
+
+size_t
+SerialMessageCodec::encodeResilience(const ProtocolResilienceTelemetry &value,
+                                     uint8_t *payload, size_t capacity) {
+  constexpr size_t kLength = 48u;
+  if (payload == nullptr || capacity < kLength) {
+    return 0u;
+  }
+  writeU16(&payload[0], value.warning_flags);
+  payload[2] = value.feedback_crc_streak;
+  payload[3] = value.feedback_crc_threshold;
+  writeU32(&payload[4], value.feedback_crc_total);
+  writeU16(&payload[8], value.left_hall_glitches);
+  writeU16(&payload[10], value.right_hall_glitches);
+  writeU16(&payload[12], value.slave_feedback_invalid_frames);
+  writeU16(&payload[14], value.slave_feedback_framing_errors);
+  writeU16(&payload[16], value.slave_command_invalid_frames);
+  writeU16(&payload[18], value.slave_command_framing_errors);
+  writeU32(&payload[20], value.first_fault.drive_faults);
+  writeU32(&payload[24], value.first_fault.master_faults);
+  writeU32(&payload[28], value.first_fault.slave_faults);
+  payload[32] = value.first_fault.master_state;
+  payload[33] = value.first_fault.slave_state;
+  payload[34] = value.first_fault.left_hall;
+  payload[35] = value.first_fault.right_hall;
+  writeI16(&payload[36], value.first_fault.commanded_left);
+  writeI16(&payload[38], value.first_fault.commanded_right);
+  writeI16(&payload[40], value.first_fault.applied_left);
+  writeI16(&payload[42], value.first_fault.applied_right);
+  writeU32(&payload[44], value.first_fault.esp32_uptime_ms);
   return kLength;
 }
 

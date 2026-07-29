@@ -35,9 +35,19 @@ assert_single_directive Group "$EXPECTED_GROUP"
 assert_single_directive SupplementaryGroups "dialout video render gpio i2c input"
 assert_single_directive WorkingDirectory "$EXPECTED_APP"
 assert_single_directive ExecStart "$EXPECTED_APP/.venv/bin/python $EXPECTED_APP/manage.py drive --config $EXPECTED_APP/config/robot.yaml"
+assert_single_directive EnvironmentFile "-/etc/default/trashcan-donkeycar"
+assert_single_directive Restart "always"
 
 if grep -Fq '/opt/hoverboard-robot' "$UNIT_PATH"; then
   echo "Legacy /opt/hoverboard-robot path is forbidden in $UNIT_PATH" >&2
+  exit 1
+fi
+if grep -Eq 'dev-tty|\.device' "$UNIT_PATH"; then
+  echo "Serial device unit dependencies are forbidden in $UNIT_PATH" >&2
+  exit 1
+fi
+if ! grep -Fxq 'After=network-online.target' "$UNIT_PATH"; then
+  echo "Service must start after network-online.target only" >&2
   exit 1
 fi
 

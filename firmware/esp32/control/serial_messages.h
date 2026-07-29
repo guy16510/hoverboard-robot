@@ -63,6 +63,22 @@ struct ProtocolMotorTelemetry {
   uint16_t transmit_rate_centi_hz = 0u;
 };
 
+struct ProtocolDriveTelemetry {
+  int16_t requested_linear_milli = 0;
+  int16_t requested_yaw_milli = 0;
+  int16_t mixed_left = 0;
+  int16_t mixed_right = 0;
+  int16_t commanded_left = 0;
+  int16_t commanded_right = 0;
+  int16_t applied_left = 0;
+  int16_t applied_right = 0;
+  uint32_t safety_faults = 0u;
+  uint8_t active_source = 0u;
+  uint8_t operating_mode = 0u;
+  uint8_t arm_state = 0u;
+  uint8_t flags = 0u;
+};
+
 struct ProtocolOdometry {
   int32_t left = 0;
   int32_t right = 0;
@@ -77,6 +93,53 @@ struct ProtocolFaults {
   uint32_t feedback_health = 0u;
 };
 
+struct ProtocolControllerTelemetry {
+  uint8_t master_state = 0u;
+  uint8_t slave_state = 0u;
+  uint8_t status_flags = 0u;
+  uint8_t motor_status_flags = 0u;
+  uint16_t master_command_age_ms = 0u;
+  uint16_t slave_feedback_age_ms = 0u;
+  uint16_t slave_command_age_ms = 0u;
+  uint8_t left_hall = 0u;
+  uint8_t right_hall = 0u;
+  uint16_t left_compare_offset = 0u;
+  uint16_t right_compare_offset = 0u;
+  uint16_t remote_rx_bytes = 0u;
+  uint16_t remote_valid_frames = 0u;
+  uint16_t remote_invalid_frames = 0u;
+  uint16_t remote_framing_errors = 0u;
+};
+
+struct ProtocolFirstFault {
+  uint32_t drive_faults = 0u;
+  uint32_t master_faults = 0u;
+  uint32_t slave_faults = 0u;
+  uint8_t master_state = 0u;
+  uint8_t slave_state = 0u;
+  uint8_t left_hall = 0u;
+  uint8_t right_hall = 0u;
+  int16_t commanded_left = 0;
+  int16_t commanded_right = 0;
+  int16_t applied_left = 0;
+  int16_t applied_right = 0;
+  uint32_t esp32_uptime_ms = 0u;
+};
+
+struct ProtocolResilienceTelemetry {
+  uint16_t warning_flags = 0u;
+  uint8_t feedback_crc_streak = 0u;
+  uint8_t feedback_crc_threshold = 3u;
+  uint32_t feedback_crc_total = 0u;
+  uint16_t left_hall_glitches = 0u;
+  uint16_t right_hall_glitches = 0u;
+  uint16_t slave_feedback_invalid_frames = 0u;
+  uint16_t slave_feedback_framing_errors = 0u;
+  uint16_t slave_command_invalid_frames = 0u;
+  uint16_t slave_command_framing_errors = 0u;
+  ProtocolFirstFault first_fault{};
+};
+
 class SerialMessageCodec {
 public:
   static size_t encodeCapabilities(const ProtocolCapabilities &value,
@@ -87,15 +150,21 @@ public:
                           size_t capacity);
   static size_t encodeMotor(const ProtocolMotorTelemetry &value,
                             uint8_t *payload, size_t capacity);
+  static size_t encodeDrive(const ProtocolDriveTelemetry &value,
+                            uint8_t *payload, size_t capacity);
   static size_t encodeOdometry(const ProtocolOdometry &value, uint8_t *payload,
                                size_t capacity);
   static size_t encodeFaults(const ProtocolFaults &value, uint8_t *payload,
                              size_t capacity);
+  static size_t encodeController(const ProtocolControllerTelemetry &value,
+                                 uint8_t *payload, size_t capacity);
+  static size_t encodeResilience(const ProtocolResilienceTelemetry &value,
+                                 uint8_t *payload, size_t capacity);
 };
 
 class SerialFrameQueue {
 public:
-  static constexpr size_t kCapacity = 8u;
+  static constexpr size_t kCapacity = 12u;
 
   bool push(const SerialFrame &frame);
   bool pop(SerialFrame &frame);

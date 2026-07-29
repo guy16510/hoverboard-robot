@@ -119,6 +119,7 @@ systemctl is-enabled --quiet trashcan-donkeycar.service || {
 printf 'Trashcan robot service contract validated\n'
 
 PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$APP" "$VENV/bin/python" - <<'PY'
+import cv2
 import flask
 import psutil
 import serial
@@ -127,13 +128,38 @@ import donkeycar
 from inspect import signature
 from pathlib import Path
 from donkeycar.parts.tub_v2 import TubWriter
+from trashcan_robot.apriltag_camera import marker_geometry
 from trashcan_robot.config import load_config
 from trashcan_robot.pipeline import create_tub_writer
 from trashcan_robot.protocol import crc16_ccitt_false
+
+if not hasattr(cv2, 'aruco'):
+    raise SystemExit('OpenCV cv2.aruco AprilTag support is missing')
+for name in (
+    'DICT_APRILTAG_16h5',
+    'DICT_APRILTAG_25h9',
+    'DICT_APRILTAG_36h10',
+    'DICT_APRILTAG_36h11',
+):
+    if not hasattr(cv2.aruco, name):
+        raise SystemExit(f'OpenCV AprilTag dictionary is missing: {name}')
+
 cfg = load_config('/opt/trashcan-robot/donkeycar/config/robot.yaml')
 assert cfg.serial.baud == 115200
+assert cfg.raw['backup_camera']['enabled'] is True
+assert cfg.raw['backup_camera']['family'] == '36h11'
 assert crc16_ccitt_false(b'123456789') == 0x29B1
 assert 'base_path' in signature(TubWriter).parameters
+geometry = marker_geometry(
+    1,
+    [[300, 220], [340, 220], [340, 260], [300, 260]],
+    frame_width=640,
+    frame_height=480,
+    horizontal_fov_degrees=70.0,
+    tag_size_m=0.0,
+)
+assert geometry['id'] == 1
+assert geometry['horizontal_position'] == 'center'
 
 class TubWriterContract:
     def __init__(self, *, base_path, inputs, types):
@@ -146,6 +172,7 @@ writer = create_tub_writer(
     ['image_array'],
 )
 assert writer.base_path == '/tmp/tub-contract'
+print('Raspberry Pi image OpenCV AprilTag smoke test passed')
 print('Raspberry Pi image Python smoke test passed')
 PY
 
@@ -183,6 +210,8 @@ robot_working_directory=$APP
 robot_service=enabled
 robot_service_contract=validated
 python_smoke=passed
+opencv_apriltag=passed
+backup_camera_config=validated
 application_tests=passed
 systemd_verify=passed
 dependency_check=passed

@@ -64,19 +64,39 @@ static void reset_hall_tracking(gs_motor_controller *motor) {
 
 void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
                    uint32_t now_ms) {
-  gs_motor_init_profile(motor, bridge, GS_COMMUTATION_SYMMETRIC_REVERSE,
-                        now_ms);
+  const gs_motor_configuration configuration = {
+      .commutation_profile = GS_COMMUTATION_SYMMETRIC_REVERSE,
+      .hall_cycle_mode = GS_HALL_CYCLE_AUTO,
+  };
+  gs_motor_init_config(motor, bridge, &configuration, now_ms);
 }
 
 void gs_motor_init_profile(gs_motor_controller *motor, gs_bridge_port bridge,
                            gs_commutation_profile commutation_profile,
                            uint32_t now_ms) {
+  const gs_motor_configuration configuration = {
+      .commutation_profile = commutation_profile,
+      .hall_cycle_mode = GS_HALL_CYCLE_AUTO,
+  };
+  gs_motor_init_config(motor, bridge, &configuration, now_ms);
+}
+
+void gs_motor_init_config(gs_motor_controller *motor, gs_bridge_port bridge,
+                          const gs_motor_configuration *configuration,
+                          uint32_t now_ms) {
   if (motor == NULL) {
     return;
   }
+  const gs_motor_configuration defaults = {
+      .commutation_profile = GS_COMMUTATION_SYMMETRIC_REVERSE,
+      .hall_cycle_mode = GS_HALL_CYCLE_AUTO,
+  };
+  const gs_motor_configuration *selected =
+      configuration != NULL ? configuration : &defaults;
   *motor = (gs_motor_controller){0};
   motor->bridge = bridge;
-  motor->commutation_profile = commutation_profile;
+  motor->commutation_profile = selected->commutation_profile;
+  gs_hall_cycle_init(&motor->hall_cycle, selected->hall_cycle_mode);
   motor->state = GS_MOTOR_DISABLED;
   motor->last_step_ms = now_ms;
   disable_bridge(motor);
@@ -104,15 +124,13 @@ void gs_motor_clear_fault(gs_motor_controller *motor, uint32_t now_ms) {
     return;
   }
   const gs_bridge_port bridge = motor->bridge;
-  const gs_commutation_profile commutation_profile = motor->commutation_profile;
+  const gs_motor_configuration configuration = {
+      .commutation_profile = motor->commutation_profile,
+      .hall_cycle_mode = motor->hall_cycle.configured_mode,
+  };
   const int32_t odometer = motor->odometer;
-  *motor = (gs_motor_controller){0};
-  motor->bridge = bridge;
-  motor->commutation_profile = commutation_profile;
+  gs_motor_init_config(motor, bridge, &configuration, now_ms);
   motor->odometer = odometer;
-  motor->state = GS_MOTOR_DISABLED;
-  motor->last_step_ms = now_ms;
-  disable_bridge(motor);
 }
 
 static gs_motor_output motor_output(const gs_motor_controller *motor,
@@ -208,9 +226,9 @@ gs_motor_output gs_motor_step(gs_motor_controller *motor,
     motor->hall_seen = true;
     motor->state = GS_MOTOR_STARTING;
   } else if (input->hall_changed) {
-    hall_result =
-        gs_validate_hall_transition(motor->previous_hall, input->hall,
-                                    motor->direction, input->hall_interval_us);
+    hall_result = gs_hall_cycle_validate(
+        &motor->hall_cycle, motor->previous_hall, input->hall, motor->direction,
+        input->hall_interval_us);
     if (hall_result != GS_HALL_LEGAL) {
       return fault_motor(motor, hall_result);
     }

@@ -317,6 +317,55 @@ test("IMU, motor, odometry, fault, and configuration payloads decode", () => {
   );
 });
 
+test("fixed 48-byte resilience telemetry decodes warning and first-fault fields", () => {
+  const payload = Buffer.alloc(48);
+  payload.writeUInt16LE(3, 0);
+  payload[2] = 2;
+  payload[3] = 3;
+  payload.writeUInt32LE(17, 4);
+  payload.writeUInt16LE(5, 8);
+  payload.writeUInt16LE(6, 10);
+  payload.writeUInt16LE(7, 12);
+  payload.writeUInt16LE(8, 14);
+  payload.writeUInt16LE(9, 16);
+  payload.writeUInt16LE(10, 18);
+  payload.writeUInt32LE(0x100, 20);
+  payload.writeUInt32LE(0x200, 24);
+  payload.writeUInt32LE(0x400, 28);
+  payload.set([3, 4, 2, 6], 32);
+  payload.writeInt16LE(-250, 36);
+  payload.writeInt16LE(250, 38);
+  payload.writeInt16LE(-200, 40);
+  payload.writeInt16LE(200, 42);
+  payload.writeUInt32LE(123456, 44);
+
+  assert.deepEqual(
+    decodeMessage({ type: MessageType.RESILIENCE_TELEMETRY, payload }),
+    {
+      name: "resilience",
+      warningFlags: 3,
+      feedbackCrc: { streak: 2, threshold: 3, total: 17 },
+      hallGlitches: [5, 6],
+      interControllerLink: {
+        slaveFeedbackInvalid: 7,
+        slaveFeedbackFraming: 8,
+        slaveCommandInvalid: 9,
+        slaveCommandFraming: 10,
+      },
+      firstFault: {
+        drive: 0x100,
+        master: 0x200,
+        slave: 0x400,
+        states: [3, 4],
+        halls: [2, 6],
+        commanded: [-250, 250],
+        applied: [-200, 200],
+        esp32UptimeMs: 123456,
+      },
+    },
+  );
+});
+
 test("mixed telemetry decoder preserves text and fragmented binary frames", () => {
   const frame = encodeFrame({
     type: MessageType.STATUS,

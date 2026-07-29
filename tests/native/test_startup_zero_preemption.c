@@ -5,8 +5,8 @@
 #include "gs_protocol.h"
 #include "gs_slave.h"
 
-static gs_master_feedback decode_master_feedback(
-    const gs_master_coordinator *master, uint32_t now_ms) {
+static gs_master_feedback
+decode_master_feedback(const gs_master_coordinator *master, uint32_t now_ms) {
   uint8_t frame[GS_MASTER_FEEDBACK_SIZE] = {0};
   gs_master_feedback feedback = {0};
   GS_EXPECT_TRUE(gs_master_make_feedback(master, frame, now_ms));
@@ -15,16 +15,14 @@ static gs_master_feedback decode_master_feedback(
 }
 
 static void deliver_to_master(gs_master_coordinator *master,
-                              const gs_esp_command *command,
-                              uint32_t now_ms) {
+                              const gs_esp_command *command, uint32_t now_ms) {
   uint8_t frame[GS_ESP_COMMAND_SIZE] = {0};
   GS_EXPECT_TRUE(gs_encode_esp_command(frame, command));
   GS_EXPECT_TRUE(gs_master_accept_esp_frame(master, frame, now_ms));
 }
 
 static void exchange_with_slave(gs_master_coordinator *master,
-                                gs_slave_coordinator *slave,
-                                uint32_t now_ms) {
+                                gs_slave_coordinator *slave, uint32_t now_ms) {
   uint8_t command_frame[GS_SLAVE_COMMAND_SIZE] = {0};
   uint8_t feedback_frame[GS_SLAVE_FEEDBACK_SIZE] = {0};
   GS_EXPECT_TRUE(gs_master_make_slave_frame(master, command_frame, now_ms));
@@ -75,8 +73,7 @@ static void test_partial_disable_ack_recovers_to_ready_zero(void) {
   const gs_esp_command ready_zero = {
       .master_flags = GS_COMMAND_DIRECT_LR,
   };
-  selected =
-      gs_command_sequencer_select(&sequencer, &ready_zero, false, 4u);
+  selected = gs_command_sequencer_select(&sequencer, &ready_zero, false, 4u);
   GS_EXPECT_TRUE(selected != NULL);
   GS_EXPECT_EQ(2u, selected->sequence);
   GS_EXPECT_EQ(0, selected->speed);
@@ -107,13 +104,12 @@ static void test_partial_disable_ack_recovers_to_ready_zero(void) {
   GS_EXPECT_TRUE(gs_master_feedback_motion_ready(&recovered, 2u, true));
   GS_EXPECT_EQ(0, recovered.left_applied);
   GS_EXPECT_EQ(0, recovered.right_applied);
-  GS_EXPECT_EQ(0u,
-               recovered.motor_status_flags &
-                   (GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED |
-                    GS_MASTER_MOTOR_RIGHT_BRIDGE_ENABLED));
+  GS_EXPECT_EQ(0u, recovered.motor_status_flags &
+                       (GS_MASTER_MOTOR_LEFT_BRIDGE_ENABLED |
+                        GS_MASTER_MOTOR_RIGHT_BRIDGE_ENABLED));
 }
 
-static void test_fault_clear_disable_cannot_be_preempted(void) {
+static void test_fault_clear_disable_recovers_to_safe_ready_zero(void) {
   gs_command_sequencer sequencer;
   gs_command_sequencer_init(&sequencer);
 
@@ -132,14 +128,14 @@ static void test_fault_clear_disable_cannot_be_preempted(void) {
 
   selected = gs_command_sequencer_select(&sequencer, &ready_zero, false, 2u);
   GS_EXPECT_TRUE(selected != NULL);
-  GS_EXPECT_EQ(1u, selected->sequence);
-  GS_EXPECT_TRUE((selected->master_flags & GS_COMMAND_CLEAR_FAULT) != 0u);
-  GS_EXPECT_TRUE((selected->master_flags & GS_COMMAND_DISABLE) != 0u);
-  GS_EXPECT_TRUE((selected->slave_flags & GS_COMMAND_CLEAR_FAULT) != 0u);
-  GS_EXPECT_TRUE((selected->slave_flags & GS_COMMAND_DISABLE) != 0u);
+  GS_EXPECT_EQ(2u, selected->sequence);
+  GS_EXPECT_EQ(0, selected->speed);
+  GS_EXPECT_EQ(0, selected->steer);
+  GS_EXPECT_EQ(GS_COMMAND_DIRECT_LR, selected->master_flags);
+  GS_EXPECT_EQ(0u, selected->slave_flags);
 }
 
 void gs_test_startup_zero_preemption(void) {
   test_partial_disable_ack_recovers_to_ready_zero();
-  test_fault_clear_disable_cannot_be_preempted();
+  test_fault_clear_disable_recovers_to_safe_ready_zero();
 }

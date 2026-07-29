@@ -94,8 +94,7 @@ static bool push_rx_frame(const uint8_t frame[GS_SWD_PULSE_FRAME_BYTES]) {
   uint8_t next = head;
   for (uint8_t index = 0u; index < GS_SWD_PULSE_FRAME_BYTES; ++index) {
     rx_buffer[next] = frame[index];
-    next =
-        (uint8_t)((next + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
+    next = (uint8_t)((next + 1u) & (GS_SWD_UART_RX_BUFFER_SIZE - 1u));
   }
   rx_head = next;
   rx_byte_count += GS_SWD_PULSE_FRAME_BYTES;

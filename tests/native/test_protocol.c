@@ -23,16 +23,16 @@ static void test_exact_sizes_and_endianness(void) {
       .slave_flags = 0u,
       .sequence = 0x1234u,
   };
-  const uint8_t prefix[] = {0x32, 0x34, 0x12, 0x18, 0xFC,
+  const uint8_t prefix[] = {0x42, 0x34, 0x12, 0x18, 0xFC,
                             0xE8, 0x03, 0x20, 0x00};
   uint8_t frame[GS_ESP_COMMAND_SIZE] = {0};
   gs_esp_command decoded = {0};
 
-  GS_EXPECT_EQ(3, GS_PROTOCOL_VERSION);
+  GS_EXPECT_EQ(4, GS_PROTOCOL_VERSION);
   GS_EXPECT_EQ(11, GS_ESP_COMMAND_SIZE);
   GS_EXPECT_EQ(8, GS_SLAVE_COMMAND_SIZE);
-  GS_EXPECT_EQ(22, GS_SLAVE_FEEDBACK_SIZE);
-  GS_EXPECT_EQ(55, GS_MASTER_FEEDBACK_SIZE);
+  GS_EXPECT_EQ(28, GS_SLAVE_FEEDBACK_SIZE);
+  GS_EXPECT_EQ(67, GS_MASTER_FEEDBACK_SIZE);
   GS_EXPECT_TRUE(gs_encode_esp_command(frame, &command));
   GS_EXPECT_BYTES(prefix, frame, sizeof(prefix));
   GS_EXPECT_EQ(gs_crc16(frame, GS_ESP_COMMAND_SIZE - 2u),
@@ -62,6 +62,9 @@ static void test_all_frame_round_trips(void) {
       .status_flags =
           GS_MOTOR_FEEDBACK_BRIDGE_ENABLED | GS_MOTOR_FEEDBACK_PA4_RAW_HIGH,
       .compare_offset = 80u,
+      .hall_glitch_count = 0x1234u,
+      .command_invalid_frames = 0x2345u,
+      .command_framing_errors = 0x3456u,
   };
   const gs_master_feedback master = {
       .protocol_version = GS_PROTOCOL_VERSION,
@@ -91,6 +94,12 @@ static void test_all_frame_round_trips(void) {
       .remote_valid_frames = 7u,
       .remote_invalid_frames = 3u,
       .remote_framing_errors = 2u,
+      .left_hall_glitch_count = 0x4567u,
+      .right_hall_glitch_count = 0x5678u,
+      .slave_feedback_invalid_frames = 0x6789u,
+      .slave_feedback_framing_errors = 0x789au,
+      .slave_command_invalid_frames = 0x89abu,
+      .slave_command_framing_errors = 0x9abcu,
   };
   uint8_t command_frame[GS_SLAVE_COMMAND_SIZE];
   uint8_t slave_frame[GS_SLAVE_FEEDBACK_SIZE];
@@ -117,6 +126,9 @@ static void test_all_frame_round_trips(void) {
   GS_EXPECT_EQ(slave.hall, slave_out.hall);
   GS_EXPECT_EQ(slave.status_flags, slave_out.status_flags);
   GS_EXPECT_EQ(slave.compare_offset, slave_out.compare_offset);
+  GS_EXPECT_EQ(slave.hall_glitch_count, slave_out.hall_glitch_count);
+  GS_EXPECT_EQ(slave.command_invalid_frames, slave_out.command_invalid_frames);
+  GS_EXPECT_EQ(slave.command_framing_errors, slave_out.command_framing_errors);
 
   GS_EXPECT_TRUE(gs_encode_master_feedback(master_frame, &master));
   GS_EXPECT_EQ(GS_FEEDBACK_MARKER_0, master_frame[0]);
@@ -140,13 +152,24 @@ static void test_all_frame_round_trips(void) {
   GS_EXPECT_EQ(master.remote_rx_bytes, master_out.remote_rx_bytes);
   GS_EXPECT_EQ(master.remote_valid_frames, master_out.remote_valid_frames);
   GS_EXPECT_EQ(master.remote_invalid_frames, master_out.remote_invalid_frames);
-  GS_EXPECT_EQ(master.remote_framing_errors,
-               master_out.remote_framing_errors);
+  GS_EXPECT_EQ(master.remote_framing_errors, master_out.remote_framing_errors);
   GS_EXPECT_EQ(master.left_hall, master_out.left_hall);
   GS_EXPECT_EQ(master.right_hall, master_out.right_hall);
   GS_EXPECT_EQ(master.left_compare_offset, master_out.left_compare_offset);
   GS_EXPECT_EQ(master.right_compare_offset, master_out.right_compare_offset);
   GS_EXPECT_EQ(master.motor_status_flags, master_out.motor_status_flags);
+  GS_EXPECT_EQ(master.left_hall_glitch_count,
+               master_out.left_hall_glitch_count);
+  GS_EXPECT_EQ(master.right_hall_glitch_count,
+               master_out.right_hall_glitch_count);
+  GS_EXPECT_EQ(master.slave_feedback_invalid_frames,
+               master_out.slave_feedback_invalid_frames);
+  GS_EXPECT_EQ(master.slave_feedback_framing_errors,
+               master_out.slave_feedback_framing_errors);
+  GS_EXPECT_EQ(master.slave_command_invalid_frames,
+               master_out.slave_command_invalid_frames);
+  GS_EXPECT_EQ(master.slave_command_framing_errors,
+               master_out.slave_command_framing_errors);
 }
 
 static void test_semantic_crc_and_version_rejection(void) {

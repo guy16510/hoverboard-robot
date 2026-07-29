@@ -11,9 +11,9 @@ Before flashing:
 1. Confirm the artifact name contains the exact branch HEAD commit.
 2. Open `MANIFEST.txt` and confirm the same commit is recorded there.
 3. Run `sha256sum -c SHA256SUMS` from inside the extracted bundle. On macOS, use `shasum -a 256 -c SHA256SUMS` if GNU `sha256sum` is unavailable.
-4. Confirm the manifest reports protocol version `3`, command marker `0x32`, and SLAVE feedback marker `0x33`.
+4. Confirm the manifest reports protocol version `4`, command marker `0x42`, and SLAVE feedback marker `0x43`.
 
-Protocol epoch 3 deliberately prevents mixed firmware from communicating. If any one of ESP32, MASTER, or SLAVE is from an older build, command or feedback frames are rejected and motion remains disabled.
+Protocol epoch 4 deliberately prevents mixed firmware from communicating. If any one of ESP32, MASTER, or SLAVE is from an older build, command or feedback frames are rejected and motion remains disabled.
 
 ## Required images
 

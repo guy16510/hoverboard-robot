@@ -2,13 +2,13 @@
 #include "test_harness.h"
 
 #include "balance_configuration.h"
-#include "balance_user_config.h"
 #include "balance_controller.h"
 #include "balance_state_machine.h"
+#include "balance_user_config.h"
 #include "command_arbiter.h"
 #include "complementary_pitch_estimator.h"
-#include "controller_fault_clear.h"
 #include "control_runtime.h"
+#include "controller_fault_clear.h"
 #include "loop_metrics.h"
 #include "motor_transport_metrics.h"
 #include "mpu6050.h"
@@ -950,8 +950,8 @@ void testBalanceConfigurationCodecValidatesAndUpdatesOneKey() {
   GS_ESP32_EXPECT_NEAR(250.0, config.output_limit, 0.0001);
 
   const size_t offset_length = BalanceConfigurationCodec::encodeValue(
-      BalanceConfigKey::kUprightOffset,
-      user_config::kUprightMountingOffsetDeg, payload, sizeof(payload));
+      BalanceConfigKey::kUprightOffset, user_config::kUprightMountingOffsetDeg,
+      payload, sizeof(payload));
   GS_ESP32_EXPECT_TRUE(
       BalanceConfigurationCodec::applyUpdate(payload, offset_length, config));
   GS_ESP32_EXPECT_NEAR(20.0, config.upright_offset_deg, 0.0001);
@@ -1058,9 +1058,8 @@ void testEveryBinaryTelemetrySchemaHasDeterministicWidthAndOffsets() {
   controller.right_hall = 6u;
   controller.right_compare_offset = 0x5678u;
   controller.remote_framing_errors = 9u;
-  GS_ESP32_EXPECT_EQ(
-      24, SerialMessageCodec::encodeController(controller, payload,
-                                                sizeof(payload)));
+  GS_ESP32_EXPECT_EQ(24, SerialMessageCodec::encodeController(
+                             controller, payload, sizeof(payload)));
   GS_ESP32_EXPECT_EQ(2, payload[0]);
   GS_ESP32_EXPECT_EQ(3, payload[1]);
   GS_ESP32_EXPECT_EQ(0x34, payload[4]);
@@ -1071,6 +1070,46 @@ void testEveryBinaryTelemetrySchemaHasDeterministicWidthAndOffsets() {
   GS_ESP32_EXPECT_EQ(0x56, payload[15]);
   GS_ESP32_EXPECT_EQ(9, payload[22]);
   GS_ESP32_EXPECT_EQ(0, payload[23]);
+
+  ProtocolResilienceTelemetry resilience{};
+  resilience.warning_flags = 0x1234u;
+  resilience.feedback_crc_streak = 2u;
+  resilience.feedback_crc_threshold = 3u;
+  resilience.feedback_crc_total = 0x11223344u;
+  resilience.left_hall_glitches = 0x4567u;
+  resilience.right_hall_glitches = 0x5678u;
+  resilience.slave_feedback_invalid_frames = 0x6789u;
+  resilience.slave_feedback_framing_errors = 0x789au;
+  resilience.slave_command_invalid_frames = 0x89abu;
+  resilience.slave_command_framing_errors = 0x9abcu;
+  resilience.first_fault.drive_faults = 0x01020304u;
+  resilience.first_fault.master_faults = 0x11121314u;
+  resilience.first_fault.slave_faults = 0x21222324u;
+  resilience.first_fault.master_state = 3u;
+  resilience.first_fault.slave_state = 4u;
+  resilience.first_fault.left_hall = 5u;
+  resilience.first_fault.right_hall = 6u;
+  resilience.first_fault.commanded_left = -250;
+  resilience.first_fault.commanded_right = 250;
+  resilience.first_fault.applied_left = -200;
+  resilience.first_fault.applied_right = 200;
+  resilience.first_fault.esp32_uptime_ms = 0xa1b2c3d4u;
+  GS_ESP32_EXPECT_EQ(48, SerialMessageCodec::encodeResilience(
+                             resilience, payload, sizeof(payload)));
+  GS_ESP32_EXPECT_EQ(0x34, payload[0]);
+  GS_ESP32_EXPECT_EQ(0x12, payload[1]);
+  GS_ESP32_EXPECT_EQ(2, payload[2]);
+  GS_ESP32_EXPECT_EQ(3, payload[3]);
+  GS_ESP32_EXPECT_EQ(0x44, payload[4]);
+  GS_ESP32_EXPECT_EQ(0x11, payload[7]);
+  GS_ESP32_EXPECT_EQ(0x04, payload[20]);
+  GS_ESP32_EXPECT_EQ(0x01, payload[23]);
+  GS_ESP32_EXPECT_EQ(3, payload[32]);
+  GS_ESP32_EXPECT_EQ(6, payload[35]);
+  GS_ESP32_EXPECT_EQ(0x06, payload[36]);
+  GS_ESP32_EXPECT_EQ(0xff, payload[37]);
+  GS_ESP32_EXPECT_EQ(0xd4, payload[44]);
+  GS_ESP32_EXPECT_EQ(0xa1, payload[47]);
 }
 
 void testProtocolDeclaresRequiredMessageTypes() {
@@ -1089,6 +1128,8 @@ void testProtocolDeclaresRequiredMessageTypes() {
       static_cast<uint8_t>(SerialMessageType::kErrorResponse));
   GS_ESP32_EXPECT_EQ(
       0x36, static_cast<uint8_t>(SerialMessageType::kControllerTelemetry));
+  GS_ESP32_EXPECT_EQ(
+      0x37, static_cast<uint8_t>(SerialMessageType::kResilienceTelemetry));
 }
 
 void feedEncodedFrame(SerialCommandSource &source, const SerialFrame &frame,
@@ -1385,12 +1426,10 @@ void testControllerFaultClearStaysDisabledUntilBothPeersConfirm() {
   GS_ESP32_EXPECT_TRUE(clear.pending());
   GS_ESP32_EXPECT_EQ(0, command.speed);
   GS_ESP32_EXPECT_EQ(0, command.steer);
-  GS_ESP32_EXPECT_EQ(
-      GS_COMMAND_DISABLE | GS_COMMAND_CLEAR_FAULT,
-      command.master_flags);
-  GS_ESP32_EXPECT_EQ(
-      GS_COMMAND_DISABLE | GS_COMMAND_CLEAR_FAULT,
-      command.slave_flags);
+  GS_ESP32_EXPECT_EQ(GS_COMMAND_DISABLE | GS_COMMAND_CLEAR_FAULT,
+                     command.master_flags);
+  GS_ESP32_EXPECT_EQ(GS_COMMAND_DISABLE | GS_COMMAND_CLEAR_FAULT,
+                     command.slave_flags);
 
   gs_master_feedback feedback{};
   feedback.accepted_esp_sequence = 7u;

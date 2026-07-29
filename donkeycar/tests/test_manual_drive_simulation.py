@@ -12,6 +12,8 @@ from trashcan_robot.protocol import (
     ERROR,
     HELLO,
     ODOMETRY,
+    CLEAR_FAULT,
+    RESILIENCE_TELEMETRY,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
     STOP,
@@ -209,6 +211,80 @@ def test_fault_injection_zeroes_and_disarms(inject, fault) -> None:
     assert_disabled(endpoint, gd32)
     if fault is not None:
         assert endpoint.faults & fault
+
+
+def test_feedback_crc_requires_three_consecutive_corrupt_frames() -> None:
+    _, _, _, endpoint, _, transport = build_stack()
+    transport.connect()
+    transport.send_command(0.2, 0.0)
+
+    endpoint.inject_feedback_crc(2)
+    endpoint.advance(0.01)
+    assert endpoint.armed
+    assert not endpoint.faults & FAULT_FEEDBACK_CRC
+
+    endpoint.advance(0.01)
+    endpoint.inject_feedback_crc(3)
+    endpoint.advance(0.02)
+    assert endpoint.faults & FAULT_FEEDBACK_CRC
+
+
+def test_fault_recovery_rejects_replay_and_requires_zero_clear_arm_fresh_motion() -> None:
+    endpoint = SimulatedEsp32Serial()
+    endpoint.write(encode_frame(HELLO, 0))
+    endpoint.write(encode_frame(SET_OPERATING_MODE, 1, b"\x02"))
+    endpoint.write(
+        encode_frame(
+            SET_VELOCITY_YAW, 2, encode_motion(0.0, 0.0, 7, 500)
+        )
+    )
+    endpoint.write(encode_frame(CLEAR_FAULT, 3))
+    endpoint.write(encode_frame(ARM, 4))
+    endpoint.write(
+        encode_frame(
+            SET_VELOCITY_YAW, 5, encode_motion(0.2, 0.0, 7, 500)
+        )
+    )
+    endpoint.advance(0.10)
+    assert endpoint.commanded != (0, 0)
+
+    endpoint.inject_feedback_crc(3)
+    endpoint.advance(0.02)
+    assert_disabled(endpoint, endpoint.gd32)
+
+    endpoint.write(
+        encode_frame(
+            SET_VELOCITY_YAW, 6, encode_motion(0.2, 0.0, 7, 500)
+        )
+    )
+    responses = drain(endpoint)
+    assert responses[-1].message_type == ERROR
+    assert_disabled(endpoint, endpoint.gd32)
+
+    endpoint.write(
+        encode_frame(
+            SET_VELOCITY_YAW, 7, encode_motion(0.0, 0.0, 8, 500)
+        )
+    )
+    endpoint.write(encode_frame(CLEAR_FAULT, 8))
+    endpoint.write(encode_frame(RESILIENCE_TELEMETRY, 9))
+    retained = decode_message(drain(endpoint)[-1])
+    assert retained["first_fault"]["drive"] & FAULT_FEEDBACK_CRC
+
+    endpoint.write(encode_frame(ARM, 10))
+    endpoint.advance(0.10)
+    assert endpoint.armed
+    assert endpoint.commanded == (0, 0)
+    assert endpoint.gd32.applied_left == 0
+    assert endpoint.gd32.applied_right == 0
+
+    endpoint.write(
+        encode_frame(
+            SET_VELOCITY_YAW, 11, encode_motion(0.2, 0.0, 8, 500)
+        )
+    )
+    endpoint.advance(0.10)
+    assert endpoint.commanded != (0, 0)
 
 
 def test_feedback_timeout_zeroes_and_disarms() -> None:

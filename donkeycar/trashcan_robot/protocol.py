@@ -24,6 +24,7 @@ ODOMETRY = 0x33
 FAULTS = 0x34
 DRIVE_TELEMETRY = 0x35
 CONTROLLER_TELEMETRY = 0x36
+RESILIENCE_TELEMETRY = 0x37
 ACK = 0x7E
 ERROR = 0x7F
 DRIVE_MODE = 2
@@ -224,6 +225,34 @@ def decode_message(frame: Frame) -> dict[str, Any]:
             "remote_valid_frames": values[12],
             "remote_invalid_frames": values[13],
             "remote_framing_errors": values[14],
+        }
+    if frame.message_type == RESILIENCE_TELEMETRY and len(payload) == 48:
+        values = struct.unpack("<HBBIHHHHHHIIIBBBBhhhhI", payload)
+        return {
+            "name": "resilience",
+            "warning_flags": values[0],
+            "feedback_crc": {
+                "streak": values[1],
+                "threshold": values[2],
+                "total": values[3],
+            },
+            "hall_glitches": [values[4], values[5]],
+            "inter_controller_link": {
+                "slave_feedback_invalid": values[6],
+                "slave_feedback_framing": values[7],
+                "slave_command_invalid": values[8],
+                "slave_command_framing": values[9],
+            },
+            "first_fault": {
+                "drive": values[10],
+                "master": values[11],
+                "slave": values[12],
+                "states": [values[13], values[14]],
+                "halls": [values[15], values[16]],
+                "commanded": [values[17], values[18]],
+                "applied": [values[19], values[20]],
+                "esp32_uptime_ms": values[21],
+            },
         }
     if frame.message_type == ACK and len(payload) == 2:
         return {"name": "acknowledgment", "request_type": payload[0], "status": payload[1]}

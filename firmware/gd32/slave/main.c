@@ -5,6 +5,7 @@
 #include "gausstop_board.h"
 #include "gd32f1x0.h"
 #include "gs_frame_parser.h"
+#include "gs_hall_qualifier.h"
 #include "gs_motor_control.h"
 #include "gs_safety.h"
 #include "gs_slave.h"
@@ -14,6 +15,7 @@ static gs_slave_coordinator slave;
 static gs_motor_controller motor;
 static gs_safety_supervisor safety;
 static gs_frame_parser parser;
+static gs_hall_qualifier hall_qualifier;
 
 static void calibrate_protection(void) {
   for (uint8_t sample = 0; sample < GS_ADC_CALIBRATION_SAMPLES; ++sample) {
@@ -58,6 +60,8 @@ static void service_transport_health(void) {
   static uint32_t link_tx_overflows;
   gs_board_uart_stats link = {0};
   gs_board_uart_get_stats(GS_UART_LINK, &link);
+  gs_slave_set_link_diagnostics(&slave,
+                                link.framing_errors + parser.framing_errors);
   const bool overflowed = link.rx_overflows != link_rx_overflows ||
                           link.tx_overflows != link_tx_overflows;
   link_rx_overflows = link.rx_overflows;
@@ -117,15 +121,18 @@ static void service_motor(void) {
     observed_hall_overflows = hall_overflows;
     force_slave_fault(GS_FAULT_HALL_CAPTURE_OVERFLOW);
   }
-  const uint8_t hall = gs_board_read_hall();
+  const uint8_t raw_hall = gs_board_read_hall();
+  const uint8_t qualified_hall = gs_hall_qualifier_value(&hall_qualifier);
   gs_safety_set_enabled(&safety, slave.state == GS_CONTROLLER_READY ||
                                      slave.state == GS_CONTROLLER_ACTIVE);
   gs_safety_note_demand(&safety, gs_motor_bridge_active(&motor), now_ms);
-  const gs_safety_sample sample = {gs_board_shutdown_clear(), adc_valid,
-                                   adc_value, hall != 0u && hall != 7u};
+  const gs_safety_sample sample = {
+      gs_board_shutdown_clear(), adc_valid, adc_value,
+      qualified_hall >= 1u && qualified_hall <= 6u};
   if (gs_slave_fault_clear_requested(&slave) &&
       slave.demanded_electrical == 0 && slave.applied_electrical == 0 &&
       motor.requested_command == 0 && motor.applied_command == 0 &&
+      gs_hall_qualifier_clear_safe(&hall_qualifier, raw_hall) &&
       gs_safety_clear(&safety, &sample, now_ms)) {
     gs_motor_clear_fault(&motor, now_ms);
     gs_slave_finish_fault_clear(&slave, true);
@@ -140,18 +147,35 @@ static void service_motor(void) {
   const bool permitted =
       safety.enabled && safety.adc_ready && safety.faults.bits == 0u;
   bool processed_event = false;
+  gs_qualified_hall_event qualified_event = {0};
   if (event_available) {
-    processed_event = true;
-    apply_motor_step(first_event.hall, true, first_event.interval_us, permitted,
-                     now_ms);
+    if (gs_hall_qualifier_update(&hall_qualifier, first_event.hall,
+                                 first_event.timestamp_us, &qualified_event)) {
+      processed_event = true;
+      apply_motor_step(qualified_event.hall, true, qualified_event.interval_us,
+                       permitted, now_ms);
+    }
   }
   gs_board_hall_event event;
   while (gs_board_hall_event_read(&event)) {
-    processed_event = true;
-    apply_motor_step(event.hall, true, event.interval_us, permitted, now_ms);
+    if (gs_hall_qualifier_update(&hall_qualifier, event.hall,
+                                 event.timestamp_us, &qualified_event)) {
+      processed_event = true;
+      apply_motor_step(qualified_event.hall, true, qualified_event.interval_us,
+                       permitted, now_ms);
+    }
   }
+  if (gs_hall_qualifier_update(&hall_qualifier, raw_hall, gs_board_micros(),
+                               &qualified_event)) {
+    processed_event = true;
+    apply_motor_step(qualified_event.hall, true, qualified_event.interval_us,
+                     permitted, now_ms);
+  }
+  gs_slave_set_hall_glitch_count(&slave,
+                                 gs_hall_qualifier_glitches(&hall_qualifier));
   if (!processed_event) {
-    apply_motor_step(hall, false, 0u, permitted, now_ms);
+    apply_motor_step(gs_hall_qualifier_value(&hall_qualifier), false, 0u,
+                     permitted, now_ms);
   }
 }
 
@@ -159,6 +183,8 @@ int main(void) {
   const bool watchdog_reset = gs_board_watchdog_was_reset();
   rcu_all_reset_flag_clear();
   gs_board_operational_init();
+  gs_hall_qualifier_init(&hall_qualifier, gs_board_read_hall(),
+                         gs_board_micros());
   gs_slave_init(&slave, gs_board_millis());
   gs_motor_init_profile(&motor, gs_board_bridge_port(),
                         GS_COMMUTATION_SYMMETRIC_REVERSE, gs_board_millis());

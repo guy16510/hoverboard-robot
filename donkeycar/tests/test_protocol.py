@@ -3,6 +3,7 @@ import struct
 from trashcan_robot.protocol import (
     CONTROLLER_TELEMETRY,
     FAULTS,
+    RESILIENCE_TELEMETRY,
     SET_VELOCITY_YAW,
     Frame,
     FrameDecoder,
@@ -81,3 +82,57 @@ def test_controller_telemetry_decodes_raw_halls_and_link_ages() -> None:
     assert decoded["bridges_enabled"] == [False, False]
     assert decoded["compare_offsets"] == [111, 222]
     assert decoded["remote_framing_errors"] == 1
+
+
+def test_resilience_telemetry_decodes_exact_48_byte_payload() -> None:
+    payload = struct.pack(
+        "<HBBIHHHHHHIIIBBBBhhhhI",
+        0x0003,
+        2,
+        3,
+        17,
+        5,
+        6,
+        7,
+        8,
+        9,
+        10,
+        0x100,
+        0x200,
+        0x400,
+        3,
+        4,
+        2,
+        6,
+        -250,
+        250,
+        -200,
+        200,
+        123456,
+    )
+    assert len(payload) == 48
+
+    decoded = decode_message(Frame(RESILIENCE_TELEMETRY, 0, 3, payload))
+
+    assert decoded == {
+        "name": "resilience",
+        "warning_flags": 3,
+        "feedback_crc": {"streak": 2, "threshold": 3, "total": 17},
+        "hall_glitches": [5, 6],
+        "inter_controller_link": {
+            "slave_feedback_invalid": 7,
+            "slave_feedback_framing": 8,
+            "slave_command_invalid": 9,
+            "slave_command_framing": 10,
+        },
+        "first_fault": {
+            "drive": 0x100,
+            "master": 0x200,
+            "slave": 0x400,
+            "states": [3, 4],
+            "halls": [2, 6],
+            "commanded": [-250, 250],
+            "applied": [-200, 200],
+            "esp32_uptime_ms": 123456,
+        },
+    }

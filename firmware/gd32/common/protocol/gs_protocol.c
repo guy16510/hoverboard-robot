@@ -77,9 +77,8 @@ static bool ready_zero_preempts_unacknowledged_disable(
   if (sequencer == NULL || desired == NULL || !sequencer->sent ||
       desired->speed != 0 || desired->steer != 0 ||
       (desired->master_flags & GS_COMMAND_DIRECT_LR) == 0u ||
-      (desired->master_flags &
-       (GS_COMMAND_CLEAR_FAULT | GS_COMMAND_DISABLE | GS_COMMAND_SHUTDOWN)) !=
-          0u ||
+      (desired->master_flags & (GS_COMMAND_CLEAR_FAULT | GS_COMMAND_DISABLE |
+                                GS_COMMAND_SHUTDOWN)) != 0u ||
       desired->slave_flags != 0u) {
     return false;
   }
@@ -113,9 +112,8 @@ gs_command_sequencer_select(gs_command_sequencer *sequencer,
   const bool zero_ready_preemption =
       payload_changed &&
       ready_zero_preempts_unacknowledged_disable(sequencer, desired);
-  if (payload_changed &&
-      (!sequencer->sent || exact_ack || safety_preemption ||
-       zero_ready_preemption)) {
+  if (payload_changed && (!sequencer->sent || exact_ack || safety_preemption ||
+                          zero_ready_preemption)) {
     ++sequencer->sequence;
     if (sequencer->sequence == 0u) {
       ++sequencer->sequence;
@@ -176,9 +174,9 @@ bool gs_master_feedback_runtime_healthy(const gs_master_feedback *feedback) {
   const bool master_pa4_safe =
       (feedback->status_flags & GS_FEEDBACK_PA4_RAW_HIGH) != 0u ||
       master_pa4_bypass;
-  const bool slave_pa4_safe =
-      (feedback->motor_status_flags & GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH) != 0u ||
-      master_pa4_bypass;
+  const bool slave_pa4_safe = (feedback->motor_status_flags &
+                               GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH) != 0u ||
+                              master_pa4_bypass;
   if ((feedback->status_flags & required_status) != required_status ||
       (feedback->status_flags & prohibited_status) != 0u || !master_pa4_safe ||
       !slave_pa4_safe || !hall_valid(feedback->left_hall) ||
@@ -293,6 +291,9 @@ bool gs_encode_slave_feedback(uint8_t out[GS_SLAVE_FEEDBACK_SIZE],
   out[16] = feedback->hall;
   out[17] = feedback->status_flags;
   write_u16(&out[18], feedback->compare_offset);
+  write_u16(&out[20], feedback->hall_glitch_count);
+  write_u16(&out[22], feedback->command_invalid_frames);
+  write_u16(&out[24], feedback->command_framing_errors);
   append_crc(out, GS_SLAVE_FEEDBACK_SIZE);
   return true;
 }
@@ -312,6 +313,9 @@ bool gs_decode_slave_feedback(gs_slave_feedback *out,
   out->hall = frame[16];
   out->status_flags = frame[17];
   out->compare_offset = read_u16(&frame[18]);
+  out->hall_glitch_count = read_u16(&frame[20]);
+  out->command_invalid_frames = read_u16(&frame[22]);
+  out->command_framing_errors = read_u16(&frame[24]);
   return true;
 }
 
@@ -348,6 +352,12 @@ bool gs_encode_master_feedback(uint8_t out[GS_MASTER_FEEDBACK_SIZE],
   write_u16(&out[47], feedback->remote_valid_frames);
   write_u16(&out[49], feedback->remote_invalid_frames);
   write_u16(&out[51], feedback->remote_framing_errors);
+  write_u16(&out[53], feedback->left_hall_glitch_count);
+  write_u16(&out[55], feedback->right_hall_glitch_count);
+  write_u16(&out[57], feedback->slave_feedback_invalid_frames);
+  write_u16(&out[59], feedback->slave_feedback_framing_errors);
+  write_u16(&out[61], feedback->slave_command_invalid_frames);
+  write_u16(&out[63], feedback->slave_command_framing_errors);
   append_crc(out, GS_MASTER_FEEDBACK_SIZE);
   return true;
 }
@@ -386,12 +396,18 @@ bool gs_decode_master_feedback(gs_master_feedback *out,
   out->remote_valid_frames = read_u16(&frame[47]);
   out->remote_invalid_frames = read_u16(&frame[49]);
   out->remote_framing_errors = read_u16(&frame[51]);
+  out->left_hall_glitch_count = read_u16(&frame[53]);
+  out->right_hall_glitch_count = read_u16(&frame[55]);
+  out->slave_feedback_invalid_frames = read_u16(&frame[57]);
+  out->slave_feedback_framing_errors = read_u16(&frame[59]);
+  out->slave_command_invalid_frames = read_u16(&frame[61]);
+  out->slave_command_framing_errors = read_u16(&frame[63]);
   return true;
 }
 
 _Static_assert(GS_ESP_COMMAND_SIZE == 11, "ESP32 command wire size changed");
 _Static_assert(GS_SLAVE_COMMAND_SIZE == 8, "slave command wire size changed");
-_Static_assert(GS_SLAVE_FEEDBACK_SIZE == 22,
+_Static_assert(GS_SLAVE_FEEDBACK_SIZE == 28,
                "slave feedback wire size changed");
-_Static_assert(GS_MASTER_FEEDBACK_SIZE == 55,
+_Static_assert(GS_MASTER_FEEDBACK_SIZE == 67,
                "master feedback wire size changed");

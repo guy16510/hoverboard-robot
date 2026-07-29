@@ -18,7 +18,7 @@ odometers advance in a bounded lifted-wheel test.
   prevent the 100 ms acknowledgment watchdog from expiring forever. The timeout
   now starts when a new sequence is first forwarded.
 - ESP32 changed its sequence whenever the ramp changed, faster than the
-  47-byte/19,200-baud feedback chain could acknowledge it. Commands now use
+  67-byte/19,200-baud feedback chain could acknowledge it. Commands now use
   stop-and-wait: resend the in-flight sequence until the MASTER and SLAVE
   acknowledgments match. Disable/shutdown still preempt an in-flight command.
 - The previous drive helper could report a successful transport-only run with

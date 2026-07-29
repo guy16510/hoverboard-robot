@@ -34,12 +34,12 @@ BalanceOutput ControlRuntime::stepDirect(float left, float right,
   controller_.clear();
   output_was_permitted_ = output_permitted;
   BalanceOutput output;
-  output.left = std::clamp(
-      left, -static_cast<float>(kMaximumTransportTestCommand),
-      static_cast<float>(kMaximumTransportTestCommand));
-  output.right = std::clamp(
-      right, -static_cast<float>(kMaximumTransportTestCommand),
-      static_cast<float>(kMaximumTransportTestCommand));
+  output.left =
+      std::clamp(left, -static_cast<float>(kMaximumTransportTestCommand),
+                 static_cast<float>(kMaximumTransportTestCommand));
+  output.right =
+      std::clamp(right, -static_cast<float>(kMaximumTransportTestCommand),
+                 static_cast<float>(kMaximumTransportTestCommand));
   MotorCommand command;
   command.enabled = output_permitted && !dry_run_;
   if (command.enabled) {

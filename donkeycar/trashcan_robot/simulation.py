@@ -20,6 +20,7 @@ from .protocol import (
     IMU,
     MOTOR,
     ODOMETRY,
+    RESILIENCE_TELEMETRY,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
     STATUS,
@@ -284,9 +285,13 @@ class SimulatedEsp32Serial:
         self._last_telemetry_at = 0.0
         self._telemetry_sequence = 0
         self._crc_errors = 0
+        self._crc_streak = 0
+        self._corrupt_feedback_frames_remaining = 0
         self._ack_timeouts = 0
         self._feedback_frames = 0
         self._transmitted_frames = 0
+        self._first_fault: tuple[int, int, int, int, int, int, int, int, int, int, int] | None = None
+        self._recovery_clear_completed = False
         self.event_log: list[str] = []
         self.clock.add_listener(self._on_time)
         self._send_gd32(0, 0, disable=True)
@@ -378,8 +383,8 @@ class SimulatedEsp32Serial:
         self.gd32.slave_faults = value
         self._on_time(self.clock.monotonic())
 
-    def inject_feedback_crc(self) -> None:
-        self.gd32.crc_failure = True
+    def inject_feedback_crc(self, count: int = 3) -> None:
+        self._corrupt_feedback_frames_remaining += count
         self._on_time(self.clock.monotonic())
 
     def inject_malformed_feedback(self) -> None:
@@ -430,6 +435,13 @@ class SimulatedEsp32Serial:
                 self._queue_error(frame.sequence, frame.message_type, ERROR_MALFORMED)
                 return
             linear_milli, yaw_milli, lease_id, lease_ms = struct.unpack("<hhIH", frame.payload)
+            if (linear_milli != 0 or yaw_milli != 0) and (
+                self._faults or not self._armed
+            ):
+                self._queue_error(
+                    frame.sequence, frame.message_type, ERROR_UNSAFE_STATE
+                )
+                return
             if self._lease_id and now <= self._lease_expires_at and lease_id != self._lease_id:
                 self._trip(FAULT_MALFORMED_COMMAND)
                 self._queue_error(frame.sequence, frame.message_type, ERROR_LEASE_CONFLICT)
@@ -452,6 +464,9 @@ class SimulatedEsp32Serial:
             reason = self._arm_rejection_reason()
             if reason == 0 and self._faults == 0:
                 self._armed = True
+                if self._recovery_clear_completed:
+                    self._first_fault = None
+                    self._recovery_clear_completed = False
                 self.event_log.append("ARM")
                 self._queue_ack(frame)
             else:
@@ -475,6 +490,9 @@ class SimulatedEsp32Serial:
                 self._faults = 0
                 self.gd32.crc_failure = False
                 self.gd32.malformed_feedback = False
+                self._crc_streak = 0
+                self._corrupt_feedback_frames_remaining = 0
+                self._recovery_clear_completed = True
                 self.event_log.append("CLEAR_FAULT")
                 self._queue_ack(frame)
             else:
@@ -493,6 +511,8 @@ class SimulatedEsp32Serial:
             self._queue_odometry(frame.sequence)
         elif frame.message_type == FAULTS:
             self._queue_faults(frame.sequence)
+        elif frame.message_type == RESILIENCE_TELEMETRY:
+            self._queue_resilience(frame.sequence)
         elif frame.message_type == DRIVE_TELEMETRY:
             self._queue_drive(frame.sequence)
         else:
@@ -532,6 +552,7 @@ class SimulatedEsp32Serial:
         if not self.is_open:
             return
         self.mpu.sample()
+        self.gd32.crc_failure = self._corrupt_feedback_frames_remaining > 0
         self.gd32.step()
         if self.gd32.feedback_enabled:
             self._feedback_frames += 1
@@ -550,12 +571,18 @@ class SimulatedEsp32Serial:
                 self._trip(FAULT_SLAVE)
             elif self.gd32.crc_failure:
                 self._crc_errors += 1
-                self._trip(FAULT_FEEDBACK_CRC)
+                self._crc_streak += 1
+                self._corrupt_feedback_frames_remaining -= 1
+                if self._corrupt_feedback_frames_remaining == 0:
+                    self.gd32.crc_failure = False
+                if self._crc_streak >= 3:
+                    self._trip(FAULT_FEEDBACK_CRC)
             elif self.gd32.malformed_feedback:
                 self._trip(FAULT_CONTROLLER_UNHEALTHY)
             elif not self.gd32.feedback_fresh():
                 self._trip(FAULT_FEEDBACK_LOST)
             else:
+                self._crc_streak = 0
                 self._mix_and_slew(CONTROL_PERIOD_SECONDS)
         else:
             self._commanded_left = 0.0
@@ -586,6 +613,7 @@ class SimulatedEsp32Serial:
             self._queue_motor(sequence)
             self._queue_odometry(sequence)
             self._queue_faults(sequence)
+            self._queue_resilience(sequence)
 
     def _mix_and_slew(self, dt: float) -> None:
         linear = self._requested_linear * 650.0
@@ -629,8 +657,26 @@ class SimulatedEsp32Serial:
         self.gd32.step()
 
     def _trip(self, fault: int) -> None:
+        if self._first_fault is None:
+            self._first_fault = (
+                self._faults | fault,
+                self.gd32.master_faults,
+                self.gd32.slave_faults,
+                3 if self.gd32.master_faults else 2,
+                3 if self.gd32.slave_faults else 2,
+                2,
+                2,
+                round(self._commanded_left),
+                round(self._commanded_right),
+                self.gd32.applied_left,
+                self.gd32.applied_right,
+            )
         self._faults |= fault
         self._armed = False
+        self._neutral_seen = False
+        self._lease_id = 0
+        self._lease_expires_at = 0.0
+        self._recovery_clear_completed = False
         self._zero_and_disable()
 
     def _queue(self, message_type: int, sequence: int, payload: bytes) -> None:
@@ -726,6 +772,35 @@ class SimulatedEsp32Serial:
     def _queue_faults(self, sequence: int) -> None:
         payload = struct.pack("<IIII", self._faults, self.gd32.master_faults, self.gd32.slave_faults, 0)
         self._queue(FAULTS, sequence, payload)
+
+    def _queue_resilience(self, sequence: int) -> None:
+        first = self._first_fault or (0,) * 11
+        payload = struct.pack(
+            "<HBBIHHHHHHIIIBBBBhhhhI",
+            1 if self._crc_streak else 0,
+            self._crc_streak,
+            3,
+            self._crc_errors,
+            0,
+            0,
+            0,
+            0,
+            0,
+            0,
+            first[0],
+            first[1],
+            first[2],
+            first[3],
+            first[4],
+            first[5],
+            first[6],
+            first[7],
+            first[8],
+            first[9],
+            first[10],
+            round(self.clock.monotonic() * 1000),
+        )
+        self._queue(RESILIENCE_TELEMETRY, sequence, payload)
 
 
 class SimulatedSerialFactory:

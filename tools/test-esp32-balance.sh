@@ -80,7 +80,7 @@ build_startup_recovery_test() {
     local object="$build_dir/${source_name}-${variant}.o"
     "$c_compiler" \
       -std=c11 -Wall -Wextra -Wpedantic -Werror \
-      "${integration_includes[@]}" "${extra_flags[@]}" \
+      "${integration_includes[@]}" ${extra_flags[@]+"${extra_flags[@]}"} \
       -c "$source" -o "$object"
     objects+=("$object")
   done
@@ -88,7 +88,7 @@ build_startup_recovery_test() {
   local executable="$build_dir/esp32_drive_startup_recovery_${variant}"
   "$compiler" \
     -std=c++17 -Wall -Wextra -Wpedantic -Werror \
-    "${integration_includes[@]}" "${extra_flags[@]}" \
+    "${integration_includes[@]}" ${extra_flags[@]+"${extra_flags[@]}"} \
     tests/esp32/test_drive_startup_recovery.cpp \
     firmware/esp32/control/drive_safety.cpp \
     "${objects[@]}" \

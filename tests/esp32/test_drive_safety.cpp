@@ -77,9 +77,13 @@ int main() {
   gate.evaluate(inputs);
   assert(!gate.armed());
   assert(gate.faults() & kDriveFaultLeaseExpired);
+  assert(!gate.neutralObserved());
   assert(!gate.outputEnabled(inputs));
 
   inputs = healthy();
+  gate.clearRecoverableFaults(inputs);
+  assert(gate.faults() & kDriveFaultLeaseExpired);
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.faults() == 0u);
   assert(gate.requestArm(inputs));
@@ -90,6 +94,7 @@ int main() {
   assert(gate.faults() & kDriveFaultMasterController);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.requestArm(inputs));
   inputs.slave_faults = 1u;
@@ -97,6 +102,7 @@ int main() {
   assert(gate.faults() & kDriveFaultSlaveController);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.requestArm(inputs));
   inputs.feedback_fresh = false;
@@ -104,6 +110,7 @@ int main() {
   assert(gate.faults() & kDriveFaultFeedbackLost);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.requestArm(inputs));
   inputs.acknowledgment_timed_out = true;
@@ -111,6 +118,7 @@ int main() {
   assert(gate.faults() & kDriveFaultAcknowledgmentTimeout);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.requestArm(inputs));
   inputs.feedback_crc_error = true;
@@ -118,6 +126,7 @@ int main() {
   assert(gate.faults() & kDriveFaultFeedbackCrc);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.requestArm(inputs));
   inputs.pitch_deg = 46.0f;
@@ -125,6 +134,7 @@ int main() {
   assert(gate.faults() & kDriveFaultUnsafeOrientation);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.requestArm(inputs));
   inputs.roll_deg = -46.0f;
@@ -132,6 +142,7 @@ int main() {
   assert(gate.faults() & kDriveFaultUnsafeOrientation);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   assert(gate.requestArm(inputs));
   inputs.pitch_deg = std::numeric_limits<float>::quiet_NaN();
@@ -139,6 +150,7 @@ int main() {
   assert(gate.faults() & kDriveFaultUnsafeOrientation);
 
   inputs = healthy();
+  gate.observeDemand(0.0f, 0.0f);
   gate.clearRecoverableFaults(inputs);
   gate.setOperatingMode(1u);
   assert(!gate.requestArm(inputs));

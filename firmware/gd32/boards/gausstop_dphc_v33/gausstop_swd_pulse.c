@@ -36,10 +36,8 @@ static bool decode_sync_unit(uint16_t low_width_us, uint8_t *unit_us) {
   if (unit_us == NULL) {
     return false;
   }
-  const uint16_t minimum =
-      GS_SWD_PULSE_MIN_UNIT_US * GS_SWD_PULSE_SYNC_UNITS;
-  const uint16_t maximum =
-      GS_SWD_PULSE_MAX_UNIT_US * GS_SWD_PULSE_SYNC_UNITS;
+  const uint16_t minimum = GS_SWD_PULSE_MIN_UNIT_US * GS_SWD_PULSE_SYNC_UNITS;
+  const uint16_t maximum = GS_SWD_PULSE_MAX_UNIT_US * GS_SWD_PULSE_SYNC_UNITS;
   if (low_width_us < minimum || low_width_us > maximum) {
     return false;
   }
@@ -60,9 +58,9 @@ static bool decode_symbol(uint16_t low_width_us, uint8_t unit_us,
       unit_us > GS_SWD_PULSE_MAX_UNIT_US) {
     return false;
   }
-  const uint16_t tolerance = (uint16_t)(
-      (unit_us * GS_SWD_PULSE_SYMBOL_TOLERANCE_NUMERATOR) /
-      GS_SWD_PULSE_SYMBOL_TOLERANCE_DENOMINATOR);
+  const uint16_t tolerance =
+      (uint16_t)((unit_us * GS_SWD_PULSE_SYMBOL_TOLERANCE_NUMERATOR) /
+                 GS_SWD_PULSE_SYMBOL_TOLERANCE_DENOMINATOR);
   for (uint8_t candidate = 0u; candidate < 4u; ++candidate) {
     const uint16_t target = (uint16_t)((candidate + 1u) * unit_us);
     if (within(low_width_us, target, tolerance)) {

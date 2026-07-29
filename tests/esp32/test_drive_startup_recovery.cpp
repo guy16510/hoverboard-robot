@@ -29,7 +29,8 @@ gs_master_feedback exchangeCommand(gs_master_coordinator &master,
   assert(gs_encode_esp_command(esp_frame, &command));
   assert(gs_master_accept_esp_frame(&master, esp_frame, now_ms));
   assert(gs_master_make_slave_frame(&master, slave_command_frame, now_ms + 1u));
-  assert(gs_slave_accept_master_frame(&slave, slave_command_frame, now_ms + 1u));
+  assert(
+      gs_slave_accept_master_frame(&slave, slave_command_frame, now_ms + 1u));
   assert(gs_slave_make_feedback(&slave, slave_feedback_frame, now_ms + 2u));
   assert(gs_master_accept_slave_feedback(&master, slave_feedback_frame,
                                          now_ms + 2u));

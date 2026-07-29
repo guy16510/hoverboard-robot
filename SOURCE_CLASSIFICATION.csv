@@ -1,6 +1,9 @@
 path,classification
 .DS_Store,New GAUSSTOP-specific code
+.github/workflows/build-donkeycar-drive.yml,New GAUSSTOP-specific code
+.github/workflows/build-raspberry-pi-image.yml,New GAUSSTOP-specific code
 .github/workflows/build-swd-control.yml,New GAUSSTOP-specific code
+.github/workflows/manual-drive-simulation.yml,New GAUSSTOP-specific code
 .github/workflows/verify-swd-recovery.yml,New GAUSSTOP-specific code
 .gitignore,New GAUSSTOP-specific code
 ARCHITECTURE.md,New GAUSSTOP-specific code
@@ -54,12 +57,91 @@ dist/gausstop_slave/firmware.map,New GAUSSTOP-specific code
 dist/gausstop_slave/manifest.txt,New GAUSSTOP-specific code
 docs/balance-tuning.md,New ESP32 code
 docs/balance-wiring.md,New ESP32 code
+docs/hardware-flash-checklist.md,New GAUSSTOP-specific code
 docs/local-balance-validation.md,New ESP32 code
+docs/manual-drive-hardware-free-validation.md,New GAUSSTOP-specific code
 docs/pi-serial-protocol.md,New ESP32 code
+docs/raspberry-pi-bringup-2026-07-27.md,New GAUSSTOP-specific code
+docs/raspberry-pi-final-validation-2026-07-27.md,New GAUSSTOP-specific code
 docs/remote-balance-evidence.md,New ESP32 code
+docs/remote-hardware-handoff.md,New GAUSSTOP-specific code
 docs/swd-dual-motor-robustness-status.md,New GAUSSTOP-specific code
 docs/swd-esp32-control-plan.md,New GAUSSTOP-specific code
 docs/swd-uart-rx-fix.md,New GAUSSTOP-specific code
+donkeycar/HARDWARE_BRINGUP.md,New GAUSSTOP-specific code
+donkeycar/MOCK_VALIDATION.md,New GAUSSTOP-specific code
+donkeycar/README.md,New GAUSSTOP-specific code
+donkeycar/config/robot.yaml,New GAUSSTOP-specific code
+donkeycar/manage.py,New GAUSSTOP-specific code
+donkeycar/requirements-test.txt,New GAUSSTOP-specific code
+donkeycar/requirements.txt,New GAUSSTOP-specific code
+donkeycar/scripts/__pycache__/direct_motor_test.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/scripts/__pycache__/direct_motor_test.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/scripts/__pycache__/preflight.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/scripts/__pycache__/read_telemetry.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/scripts/__pycache__/runtime_safety_check.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/scripts/__pycache__/safe_motion_bringup.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/scripts/__pycache__/web_runtime_check.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/scripts/build-flash-esp32.sh,New GAUSSTOP-specific code
+donkeycar/scripts/capture_hall_movement.py,New GAUSSTOP-specific code
+donkeycar/scripts/direct_motor_sequence.py,New GAUSSTOP-specific code
+donkeycar/scripts/direct_motor_test.py,New GAUSSTOP-specific code
+donkeycar/scripts/install-pi.sh,New GAUSSTOP-specific code
+donkeycar/scripts/install-service.sh,New GAUSSTOP-specific code
+donkeycar/scripts/preflight.py,New GAUSSTOP-specific code
+donkeycar/scripts/read_telemetry.py,New GAUSSTOP-specific code
+donkeycar/scripts/runtime_safety_check.py,New GAUSSTOP-specific code
+donkeycar/scripts/safe_motion_bringup.py,New GAUSSTOP-specific code
+donkeycar/scripts/validate-service-unit.sh,New GAUSSTOP-specific code
+donkeycar/scripts/web_runtime_check.py,New GAUSSTOP-specific code
+donkeycar/systemd/trashcan-donkeycar.service,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_config.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_direct_motor_test.cpython-312-pytest-9.0.2.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_direct_motor_test.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_esp32_drive.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_logging_part.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_pipeline.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_preflight.cpython-312-pytest-9.0.2.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_preflight.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_protocol.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_protocol.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_read_telemetry.cpython-312-pytest-9.0.2.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_read_telemetry.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_safe_motion_bringup.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_transport.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/tests/__pycache__/test_transport.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/tests/test_capture_hall_movement.py,New GAUSSTOP-specific code
+donkeycar/tests/test_config.py,New GAUSSTOP-specific code
+donkeycar/tests/test_direct_motor_test.py,New GAUSSTOP-specific code
+donkeycar/tests/test_end_to_end_dashboard.py,New GAUSSTOP-specific code
+donkeycar/tests/test_esp32_drive.py,New GAUSSTOP-specific code
+donkeycar/tests/test_logging_part.py,New GAUSSTOP-specific code
+donkeycar/tests/test_manual_drive_simulation.py,New GAUSSTOP-specific code
+donkeycar/tests/test_pipeline.py,New GAUSSTOP-specific code
+donkeycar/tests/test_preflight.py,New GAUSSTOP-specific code
+donkeycar/tests/test_protocol.py,New GAUSSTOP-specific code
+donkeycar/tests/test_read_telemetry.py,New GAUSSTOP-specific code
+donkeycar/tests/test_resilience_simulation.py,New GAUSSTOP-specific code
+donkeycar/tests/test_safe_motion_bringup.py,New GAUSSTOP-specific code
+donkeycar/tests/test_transport.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__init__.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/__init__.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/__init__.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/config.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/config.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/pipeline.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/protocol.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/protocol.cpython-314.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/__pycache__/transport.cpython-312.pyc,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/config.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/dashboard.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/esp32_drive.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/logging_part.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/pipeline.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/protocol.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/simulation.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/state.py,New GAUSSTOP-specific code
+donkeycar/trashcan_robot/transport.py,New GAUSSTOP-specific code
 firmware/esp32/balance_coordinator/main.cpp,New ESP32 code
 firmware/esp32/balance_coordinator/web_controller_adapter.cpp,New ESP32 code
 firmware/esp32/balance_coordinator/web_controller_adapter.h,New ESP32 code
@@ -69,12 +151,19 @@ firmware/esp32/control/balance_controller.cpp,New ESP32 code
 firmware/esp32/control/balance_controller.h,New ESP32 code
 firmware/esp32/control/balance_state_machine.cpp,New ESP32 code
 firmware/esp32/control/balance_state_machine.h,New ESP32 code
+firmware/esp32/control/balance_user_config.h,New ESP32 code
 firmware/esp32/control/command_arbiter.cpp,New ESP32 code
 firmware/esp32/control/command_arbiter.h,New ESP32 code
 firmware/esp32/control/complementary_pitch_estimator.cpp,New ESP32 code
 firmware/esp32/control/complementary_pitch_estimator.h,New ESP32 code
 firmware/esp32/control/control_runtime.cpp,New ESP32 code
 firmware/esp32/control/control_runtime.h,New ESP32 code
+firmware/esp32/control/controller_fault_clear.cpp,New ESP32 code
+firmware/esp32/control/controller_fault_clear.h,New ESP32 code
+firmware/esp32/control/differential_drive_mixer.cpp,New ESP32 code
+firmware/esp32/control/differential_drive_mixer.h,New ESP32 code
+firmware/esp32/control/drive_safety.cpp,New ESP32 code
+firmware/esp32/control/drive_safety.h,New ESP32 code
 firmware/esp32/control/interfaces.h,New ESP32 code
 firmware/esp32/control/loop_metrics.cpp,New ESP32 code
 firmware/esp32/control/loop_metrics.h,New ESP32 code
@@ -93,6 +182,7 @@ firmware/esp32/control/transport_test_limits.h,New ESP32 code
 firmware/esp32/control/web_command_source.cpp,New ESP32 code
 firmware/esp32/control/web_command_source.h,New ESP32 code
 firmware/esp32/coordinator/main.cpp,New ESP32 code
+firmware/esp32/drive_coordinator/main.cpp,New ESP32 code
 firmware/esp32/passive_probe/main.cpp,New ESP32 code
 firmware/esp32/swd_coordinator/main.cpp,New ESP32 code
 firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.c,Modified upstream
@@ -114,6 +204,8 @@ firmware/gd32/common/coordination/gs_slave.c,Reused legacy code
 firmware/gd32/common/coordination/gs_slave.h,Reused legacy code
 firmware/gd32/common/motor/gs_commutation.c,Reused legacy code
 firmware/gd32/common/motor/gs_commutation.h,Reused legacy code
+firmware/gd32/common/motor/gs_hall_qualifier.c,New GAUSSTOP-specific code
+firmware/gd32/common/motor/gs_hall_qualifier.h,New GAUSSTOP-specific code
 firmware/gd32/common/motor/gs_motor_control.c,Reused legacy code
 firmware/gd32/common/motor/gs_motor_control.h,Reused legacy code
 firmware/gd32/common/motor/gs_motor_profile.c,New GAUSSTOP-specific code
@@ -130,26 +222,49 @@ firmware/gd32/communication_diagnostic/main.c,New GAUSSTOP-specific code
 firmware/gd32/master/main.c,Reused legacy code
 firmware/gd32/safe_recovery/main.c,Reused legacy code
 firmware/gd32/slave/main.c,Reused legacy code
+hardware-backups/20260728-slave-session/connected-original-full-0x08000000-65536.bin,New GAUSSTOP-specific code
+hardware-backups/20260728-slave-session/esp32-original-full-0x000000-0x400000.bin,New GAUSSTOP-specific code
+hardware-backups/20260728-slave-session/master-connected-original-full-0x08000000-65536.bin,New GAUSSTOP-specific code
+hardware-backups/20260728-slave-session/master-readback-15020.bin,New GAUSSTOP-specific code
+hardware-backups/20260728-slave-session/slave-readback-11860.bin,New GAUSSTOP-specific code
 logs/esp32-zero-demand-gate-settled.jsonl,New ESP32 code
 logs/esp32-zero-demand-gate.jsonl,New ESP32 code
 logs/hardware-validation-20260723.md,New GAUSSTOP-specific code
+platformio-drive.ini,New GAUSSTOP-specific code
 platformio.ini,New GAUSSTOP-specific code
+raspberry-pi-image/README.md,New GAUSSTOP-specific code
+raspberry-pi-image/build-image.sh,New GAUSSTOP-specific code
+raspberry-pi-image/config,New GAUSSTOP-specific code
+raspberry-pi-image/stage-trashcan/00-install/00-packages,New GAUSSTOP-specific code
+raspberry-pi-image/stage-trashcan/00-install/00-run-chroot.sh,New GAUSSTOP-specific code
+raspberry-pi-image/stage-trashcan/00-install/00-run.sh,New GAUSSTOP-specific code
+raspberry-pi-image/stage-trashcan/00-install/01-verify-marker.sh,New GAUSSTOP-specific code
+raspberry-pi-image/stage-trashcan/EXPORT_IMAGE,New GAUSSTOP-specific code
+raspberry-pi-image/stage-trashcan/prerun.sh,New GAUSSTOP-specific code
+raspberry-pi-image/validate-image.sh,New GAUSSTOP-specific code
 requirements-dev.txt,New GAUSSTOP-specific code
 tests/esp32/test_balance.cpp,New ESP32 code
+tests/esp32/test_differential_drive.cpp,New ESP32 code
+tests/esp32/test_drive_safety.cpp,New ESP32 code
+tests/esp32/test_drive_startup_recovery.cpp,New ESP32 code
 tests/esp32/test_harness.h,New ESP32 code
 tests/native/test_architecture.c,New GAUSSTOP-specific code
 tests/native/test_control.c,New GAUSSTOP-specific code
+tests/native/test_hall_qualifier.c,New GAUSSTOP-specific code
 tests/native/test_harness.h,New GAUSSTOP-specific code
 tests/native/test_main.c,New GAUSSTOP-specific code
+tests/native/test_motor_simulation.c,New GAUSSTOP-specific code
 tests/native/test_protocol.c,New GAUSSTOP-specific code
 tests/native/test_resync.c,New GAUSSTOP-specific code
 tests/native/test_simulation.c,New GAUSSTOP-specific code
+tests/native/test_startup_zero_preemption.c,New GAUSSTOP-specific code
 tests/native/test_swd_timing.c,New GAUSSTOP-specific code
 tests/test_drive_esp32.py,New ESP32 code
 tests/test_soak_esp32.py,New ESP32 code
 tools/audit-upstream.sh,New GAUSSTOP-specific code
 tools/bootstrap-tools.sh,New GAUSSTOP-specific code
 tools/build-all.sh,New GAUSSTOP-specific code
+tools/build-final-flash-bundle.sh,New GAUSSTOP-specific code
 tools/capture-balance-evidence.sh,New ESP32 code
 tools/check-architecture.sh,New GAUSSTOP-specific code
 tools/check-classification.sh,New GAUSSTOP-specific code
@@ -163,16 +278,19 @@ tools/hardware/openocd-gd32f130c8.cfg,New GAUSSTOP-specific code
 tools/hardware/read-flash.sh,New GAUSSTOP-specific code
 tools/hardware/uart-capture.sh,New GAUSSTOP-specific code
 tools/pi-client/capture.mjs,New ESP32 code
-tools/pi-client/capture_lifecycle.mjs,New ESP32 code
 tools/pi-client/capture_decoder.mjs,New ESP32 code
+tools/pi-client/capture_lifecycle.mjs,New ESP32 code
 tools/pi-client/cli.mjs,New ESP32 code
 tools/pi-client/client.mjs,New ESP32 code
 tools/pi-client/evidence.mjs,New ESP32 code
+tools/pi-client/manual_drive.mjs,New ESP32 code
 tools/pi-client/package.json,New ESP32 code
-tools/pi-client/protocol.mjs,New ESP32 code
-tools/pi-client/stage_plan.mjs,New ESP32 code
+tools/pi-client/plans/stage5-current-mount.json,New ESP32 code
 tools/pi-client/plans/stage5-minimum.json,New ESP32 code
 tools/pi-client/plans/stage6-lifted-wheel.json,New ESP32 code
+tools/pi-client/protocol.mjs,New ESP32 code
+tools/pi-client/stage_plan.mjs,New ESP32 code
+tools/pi-client/test/manual_drive.test.mjs,New ESP32 code
 tools/pi-client/test/protocol.test.mjs,New ESP32 code
 tools/pio_extra.py,New GAUSSTOP-specific code
 tools/soak_esp32.py,New ESP32 code
@@ -189,21 +307,4 @@ tools/tool-packages/tool-scons/package.json,New GAUSSTOP-specific code
 tools/tool-packages/tool-scons/scons.py,New GAUSSTOP-specific code
 tools/tool-packages/xtensa-package.json,New GAUSSTOP-specific code
 tools/verify-image.sh,New GAUSSTOP-specific code
-donkeycar/requirements.txt,New Raspberry Pi code
-donkeycar/config/robot.yaml,New Raspberry Pi code
-donkeycar/manage.py,New Raspberry Pi code
-donkeycar/README.md,New Raspberry Pi code
-donkeycar/MOCK_VALIDATION.md,New Raspberry Pi code
-donkeycar/scripts/install-pi.sh,New Raspberry Pi code
-donkeycar/trashcan_robot/__init__.py,New Raspberry Pi code
-donkeycar/trashcan_robot/config.py,New Raspberry Pi code
-donkeycar/trashcan_robot/dashboard.py,New Raspberry Pi code
-donkeycar/trashcan_robot/esp32_drive.py,New Raspberry Pi code
-donkeycar/trashcan_robot/logging_part.py,New Raspberry Pi code
-donkeycar/trashcan_robot/pipeline.py,New Raspberry Pi code
-donkeycar/trashcan_robot/protocol.py,New Raspberry Pi code
-donkeycar/trashcan_robot/state.py,New Raspberry Pi code
-donkeycar/trashcan_robot/transport.py,New Raspberry Pi code
-donkeycar/tests/test_esp32_drive.py,New Raspberry Pi code
-donkeycar/tests/test_pipeline.py,New Raspberry Pi code
-donkeycar/tests/test_protocol.py,New Raspberry Pi code
+trashcan-robot-bringup-report.md,New GAUSSTOP-specific code

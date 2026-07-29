@@ -145,8 +145,12 @@ Discarded input sections
  .text          0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
  .data          0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
  .bss           0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
+ .text.gs_frame_parser_init_master_feedback
+                0x00000000       0x10 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
  .text.gs_frame_parser_poll
-                0x00000000       0x1a .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
+                0x00000000       0x2c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
+ .rodata.marker.0
+                0x00000000        0x2 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
  .text          0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .data          0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .bss           0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
@@ -157,13 +161,13 @@ Discarded input sections
  .text.gs_command_sequencer_init
                 0x00000000        0xc .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_command_sequencer_select
-                0x00000000       0x76 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x00000000       0xbc .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_command_sequencer_ack_expired
                 0x00000000       0x1e .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_master_feedback_exact_ack
                 0x00000000       0x1e .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_master_feedback_runtime_healthy
-                0x00000000       0x76 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x00000000       0x78 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_master_feedback_motion_ready
                 0x00000000       0x44 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_encode_esp_command
@@ -171,9 +175,9 @@ Discarded input sections
  .text.gs_decode_slave_command
                 0x00000000       0x42 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_encode_slave_feedback
-                0x00000000       0x6a .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x00000000       0x86 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_decode_master_feedback
-                0x00000000       0xb8 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x00000000       0xf6 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text          0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/transport/gs_baremetal_syscalls.o
  .data          0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/transport/gs_baremetal_syscalls.o
  .bss           0x00000000        0x0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/transport/gs_baremetal_syscalls.o
@@ -977,7 +981,7 @@ LOAD /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib
                 0x08000000                g_pfnVectors
                 0x08000168                        . = ALIGN (0x4)
 
-.text           0x08000168     0x1254
+.text           0x08000168     0x1398
                 0x08000168                        . = ALIGN (0x4)
  *(.text)
  *(.text*)
@@ -1046,270 +1050,272 @@ LOAD /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib
                 0x0800023c                FMC_IRQHandler
                 0x0800023c                TIMER2_IRQHandler
  *fill*         0x0800023e        0x2 
+ .text.service_uart_rx
+                0x08000240       0x9c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .text.service_uart_tx
-                0x08000240       0x68 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080002dc       0x68 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .text.SysTick_Handler
-                0x080002a8       0x10 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x080002a8                SysTick_Handler
+                0x08000344       0x10 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x08000344                SysTick_Handler
  .text.TIMER1_IRQHandler
-                0x080002b8       0x28 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x080002b8                TIMER1_IRQHandler
+                0x08000354       0x28 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x08000354                TIMER1_IRQHandler
  .text.gs_board_safe_gpio_init
-                0x080002e0       0x74 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x080002e0                gs_board_safe_gpio_init
+                0x0800037c       0x74 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x0800037c                gs_board_safe_gpio_init
  .text.gs_board_time_init
-                0x08000354       0x8c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x08000354                gs_board_time_init
+                0x080003f0       0x8c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080003f0                gs_board_time_init
  .text.gs_board_read_hall
-                0x080003e0       0x4c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x080003e0                gs_board_read_hall
+                0x0800047c       0x4c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x0800047c                gs_board_read_hall
  .text.gs_board_micros
-                0x0800042c       0x34 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x0800042c                gs_board_micros
+                0x080004c8       0x34 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080004c8                gs_board_micros
  .text.capture_hall_edge
-                0x08000460       0x78 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080004fc       0x78 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .text.EXTI0_1_IRQHandler
-                0x080004d8       0x1a .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x080004d8                EXTI0_1_IRQHandler
+                0x08000574       0x1a .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x08000574                EXTI0_1_IRQHandler
  .text.gs_board_hall_exti_service
-                0x080004f2       0x38 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x080004f2                gs_board_hall_exti_service
+                0x0800058e       0x38 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x0800058e                gs_board_hall_exti_service
  .text.EXTI4_15_IRQHandler
-                0x0800052a        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x0800052a                EXTI4_15_IRQHandler
- *fill*         0x0800052e        0x2 
+                0x080005c6        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080005c6                EXTI4_15_IRQHandler
+ *fill*         0x080005ca        0x2 
  .text.gs_board_millis
-                0x08000530        0xc .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x08000530                gs_board_millis
+                0x080005cc        0xc .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080005cc                gs_board_millis
  .text.gs_board_uart_init
-                0x0800053c       0xf4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x0800053c                gs_board_uart_init
+                0x080005d8      0x10c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080005d8                gs_board_uart_init
  .text.gs_board_uart_read
-                0x08000630       0x78 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x08000630                gs_board_uart_read
+                0x080006e4       0x3c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080006e4                gs_board_uart_read
  .text.gs_board_uart_write
-                0x080006a8       0x7c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x080006a8                gs_board_uart_write
+                0x08000720       0x7c .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x08000720                gs_board_uart_write
  .text.USART0_IRQHandler
-                0x08000724        0x6 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x08000724                USART0_IRQHandler
+                0x0800079c       0x12 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x0800079c                USART0_IRQHandler
  .text.USART1_IRQHandler
-                0x0800072a        0x6 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
-                0x0800072a                USART1_IRQHandler
- .text.gs_frame_parser_init
-                0x08000730       0x3e .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
-                0x08000730                gs_frame_parser_init
+                0x080007ae       0x12 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x080007ae                USART1_IRQHandler
+ .text.gs_frame_parser_init_full
+                0x080007c0       0x3e .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
+                0x080007c0                gs_frame_parser_init_full
  .text.gs_frame_parser_feed
-                0x0800076e       0xce .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
-                0x0800076e                gs_frame_parser_feed
+                0x080007fe       0xf2 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_frame_parser.o
+                0x080007fe                gs_frame_parser_feed
  .text.write_u32
-                0x0800083c       0x10 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x080008f0       0x10 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.read_u32
-                0x0800084c        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x08000900        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_crc16
-                0x08000850       0x32 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x08000850                gs_crc16
+                0x08000904       0x32 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x08000904                gs_crc16
  .text.append_crc
-                0x08000882       0x16 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x08000936       0x16 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.crc_matches
-                0x08000898       0x16 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x0800094c       0x16 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
  .text.gs_decode_esp_command
-                0x080008ae       0x60 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x080008ae                gs_decode_esp_command
+                0x08000962       0x60 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x08000962                gs_decode_esp_command
  .text.gs_encode_slave_command
-                0x0800090e       0x46 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x0800090e                gs_encode_slave_command
+                0x080009c2       0x46 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x080009c2                gs_encode_slave_command
  .text.gs_decode_slave_feedback
-                0x08000954       0x52 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x08000954                gs_decode_slave_feedback
+                0x08000a08       0x5e .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x08000a08                gs_decode_slave_feedback
  .text.gs_encode_master_feedback
-                0x080009a6      0x102 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
-                0x080009a6                gs_encode_master_feedback
+                0x08000a66      0x182 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/common/protocol/gs_protocol.o
+                0x08000a66                gs_encode_master_feedback
  .text.send_remote_feedback.isra.0
-                0x08000aa8       0x5a .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/communication_diagnostic/main.o
- *fill*         0x08000b02        0x2 
+                0x08000be8       0x5a .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/communication_diagnostic/main.o
+ *fill*         0x08000c42        0x2 
  .text.startup.main
-                0x08000b04      0x180 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/communication_diagnostic/main.o
-                0x08000b04                main
- .text.memcmp   0x08000c84       0x20 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcmp.o)
-                0x08000c84                memcmp
- .text.memmove  0x08000ca4       0x32 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memmove.o)
-                0x08000ca4                memmove
- .text.memset   0x08000cd6       0x10 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memset.o)
-                0x08000cd6                memset
- *fill*         0x08000ce6        0x2 
+                0x08000c44      0x184 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/communication_diagnostic/main.o
+                0x08000c44                main
+ .text.memcmp   0x08000dc8       0x20 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcmp.o)
+                0x08000dc8                memcmp
+ .text.memmove  0x08000de8       0x32 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memmove.o)
+                0x08000de8                memmove
+ .text.memset   0x08000e1a       0x10 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memset.o)
+                0x08000e1a                memset
+ *fill*         0x08000e2a        0x2 
  .text.__libc_init_array
-                0x08000ce8       0x48 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-init.o)
-                0x08000ce8                __libc_init_array
- .text.memcpy   0x08000d30       0x1c /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcpy-stub.o)
-                0x08000d30                memcpy
+                0x08000e2c       0x48 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-init.o)
+                0x08000e2c                __libc_init_array
+ .text.memcpy   0x08000e74       0x1c /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/../../../../arm-none-eabi/lib/thumb/v7-m/nofp/libc_nano.a(libc_a-memcpy-stub.o)
+                0x08000e74                memcpy
  .text.SystemInit
-                0x08000d4c       0x84 .pio/build/gausstop_communication_diagnostic/libFrameworkCMSISVariant.a(system_gd32f1x0.o)
-                0x08000d4c                SystemInit
+                0x08000e90       0x84 .pio/build/gausstop_communication_diagnostic/libFrameworkCMSISVariant.a(system_gd32f1x0.o)
+                0x08000e90                SystemInit
  .text.exti_interrupt_flag_get
-                0x08000dd0       0x20 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_exti.o)
-                0x08000dd0                exti_interrupt_flag_get
+                0x08000f14       0x20 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_exti.o)
+                0x08000f14                exti_interrupt_flag_get
  .text.exti_interrupt_flag_clear
-                0x08000df0        0xc .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_exti.o)
-                0x08000df0                exti_interrupt_flag_clear
+                0x08000f34        0xc .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_exti.o)
+                0x08000f34                exti_interrupt_flag_clear
  .text.gpio_mode_set
-                0x08000dfc       0x44 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x08000dfc                gpio_mode_set
+                0x08000f40       0x44 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x08000f40                gpio_mode_set
  .text.gpio_output_options_set
-                0x08000e40       0x38 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x08000e40                gpio_output_options_set
+                0x08000f84       0x38 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x08000f84                gpio_output_options_set
  .text.gpio_bit_set
-                0x08000e78        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x08000e78                gpio_bit_set
+                0x08000fbc        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x08000fbc                gpio_bit_set
  .text.gpio_bit_reset
-                0x08000e7c        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x08000e7c                gpio_bit_reset
+                0x08000fc0        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x08000fc0                gpio_bit_reset
  .text.gpio_input_bit_get
-                0x08000e80        0xc .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x08000e80                gpio_input_bit_get
+                0x08000fc4        0xc .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x08000fc4                gpio_input_bit_get
  .text.gpio_af_set
-                0x08000e8c       0x60 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
-                0x08000e8c                gpio_af_set
+                0x08000fd0       0x60 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_gpio.o)
+                0x08000fd0                gpio_af_set
  .text.nvic_irq_enable
-                0x08000eec       0x84 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_misc.o)
-                0x08000eec                nvic_irq_enable
+                0x08001030       0x84 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_misc.o)
+                0x08001030                nvic_irq_enable
  .text.nvic_vector_table_set
-                0x08000f70       0x14 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_misc.o)
-                0x08000f70                nvic_vector_table_set
+                0x080010b4       0x14 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_misc.o)
+                0x080010b4                nvic_vector_table_set
  .text.rcu_periph_clock_enable
-                0x08000f84       0x1a .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x08000f84                rcu_periph_clock_enable
+                0x080010c8       0x1a .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x080010c8                rcu_periph_clock_enable
  .text.rcu_periph_clock_disable
-                0x08000f9e       0x1c .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x08000f9e                rcu_periph_clock_disable
+                0x080010e2       0x1c .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x080010e2                rcu_periph_clock_disable
  .text.rcu_periph_reset_enable
-                0x08000fba        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x08000fba                rcu_periph_reset_enable
+                0x080010fe        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x080010fe                rcu_periph_reset_enable
  .text.rcu_periph_reset_disable
-                0x08000fbe        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x08000fbe                rcu_periph_reset_disable
- *fill*         0x08000fc2        0x2 
+                0x08001102        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x08001102                rcu_periph_reset_disable
+ *fill*         0x08001106        0x2 
  .text.rcu_clock_freq_get
-                0x08000fc4      0x144 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
-                0x08000fc4                rcu_clock_freq_get
+                0x08001108      0x144 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
+                0x08001108                rcu_clock_freq_get
  .text.timer_deinit
-                0x08001108       0xc4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x08001108                timer_deinit
+                0x0800124c       0xc4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x0800124c                timer_deinit
  .text.timer_init
-                0x080011cc       0x98 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x080011cc                timer_init
+                0x08001310       0x98 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x08001310                timer_init
  .text.timer_enable
-                0x08001264        0xa .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x08001264                timer_enable
+                0x080013a8        0xa .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x080013a8                timer_enable
  .text.timer_counter_read
-                0x0800126e        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0800126e                timer_counter_read
+                0x080013b2        0x4 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x080013b2                timer_counter_read
  .text.timer_interrupt_enable
-                0x08001272        0x8 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x08001272                timer_interrupt_enable
+                0x080013b6        0x8 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x080013b6                timer_interrupt_enable
  .text.timer_interrupt_flag_get
-                0x0800127a       0x12 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0800127a                timer_interrupt_flag_get
+                0x080013be       0x12 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x080013be                timer_interrupt_flag_get
  .text.timer_interrupt_flag_clear
-                0x0800128c        0x6 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
-                0x0800128c                timer_interrupt_flag_clear
- *fill*         0x08001292        0x2 
+                0x080013d0        0x6 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_timer.o)
+                0x080013d0                timer_interrupt_flag_clear
+ *fill*         0x080013d6        0x2 
  .text.usart_deinit
-                0x08001294       0x38 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001294                usart_deinit
+                0x080013d8       0x38 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x080013d8                usart_deinit
  .text.usart_baudrate_set
-                0x080012cc       0x54 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x080012cc                usart_baudrate_set
+                0x08001410       0x54 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x08001410                usart_baudrate_set
  .text.usart_parity_config
-                0x08001320       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001320                usart_parity_config
+                0x08001464       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x08001464                usart_parity_config
  .text.usart_word_length_set
-                0x08001338       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001338                usart_word_length_set
+                0x0800147c       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x0800147c                usart_word_length_set
  .text.usart_stop_bit_set
-                0x08001350       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001350                usart_stop_bit_set
+                0x08001494       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x08001494                usart_stop_bit_set
  .text.usart_enable
-                0x08001368        0xa .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001368                usart_enable
+                0x080014ac        0xa .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x080014ac                usart_enable
  .text.usart_transmit_config
-                0x08001372       0x10 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001372                usart_transmit_config
+                0x080014b6       0x10 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x080014b6                usart_transmit_config
  .text.usart_receive_config
-                0x08001382       0x10 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001382                usart_receive_config
+                0x080014c6       0x10 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x080014c6                usart_receive_config
  .text.usart_data_transmit
-                0x08001392        0x8 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x08001392                usart_data_transmit
+                0x080014d6        0x8 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x080014d6                usart_data_transmit
  .text.usart_data_receive
-                0x0800139a        0x8 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
-                0x0800139a                usart_data_receive
+                0x080014de        0x8 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_usart.o)
+                0x080014de                usart_data_receive
  *(.glue_7)
- .glue_7        0x080013a2        0x0 linker stubs
+ .glue_7        0x080014e6        0x0 linker stubs
  *(.glue_7t)
- .glue_7t       0x080013a2        0x0 linker stubs
+ .glue_7t       0x080014e6        0x0 linker stubs
  *(.eh_frame)
- *fill*         0x080013a2        0x2 
- .eh_frame      0x080013a4        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
+ *fill*         0x080014e6        0x2 
+ .eh_frame      0x080014e8        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
  *(.init)
- .init          0x080013a4        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crti.o
-                0x080013a4                _init
- .init          0x080013a8        0x8 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtn.o
+ .init          0x080014e8        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crti.o
+                0x080014e8                _init
+ .init          0x080014ec        0x8 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtn.o
  *(.fini)
- .fini          0x080013b0        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crti.o
-                0x080013b0                _fini
- .fini          0x080013b4        0x8 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtn.o
-                0x080013bc                        . = ALIGN (0x4)
-                0x080013bc                        _etext = .
+ .fini          0x080014f4        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crti.o
+                0x080014f4                _fini
+ .fini          0x080014f8        0x8 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtn.o
+                0x08001500                        . = ALIGN (0x4)
+                0x08001500                        _etext = .
 
-.vfp11_veneer   0x080013bc        0x0
- .vfp11_veneer  0x080013bc        0x0 linker stubs
+.vfp11_veneer   0x08001500        0x0
+ .vfp11_veneer  0x08001500        0x0 linker stubs
 
-.v4_bx          0x080013bc        0x0
- .v4_bx         0x080013bc        0x0 linker stubs
+.v4_bx          0x08001500        0x0
+ .v4_bx         0x08001500        0x0 linker stubs
 
-.iplt           0x080013bc        0x0
- .iplt          0x080013bc        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
+.iplt           0x08001500        0x0
+ .iplt          0x08001500        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
 
-.rodata         0x080013bc       0x18
-                0x080013bc                        . = ALIGN (0x4)
+.rodata         0x08001500       0x18
+                0x08001500                        . = ALIGN (0x4)
  *(.rodata)
- .rodata        0x080013bc       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
+ .rodata        0x08001500       0x18 .pio/build/gausstop_communication_diagnostic/libFrameworkSPL.a(gd32f1x0_rcu.o)
  *(.rodata*)
-                0x080013d4                        . = ALIGN (0x4)
+                0x08001518                        . = ALIGN (0x4)
 
-.rel.dyn        0x080013d4        0x0
- .rel.iplt      0x080013d4        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
+.rel.dyn        0x08001518        0x0
+ .rel.iplt      0x08001518        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
 
 .ARM.extab
  *(.ARM.extab* .gnu.linkonce.armextab.*)
 
-.ARM            0x080013d4        0x0
-                0x080013d4                        __exidx_start = .
+.ARM            0x08001518        0x0
+                0x08001518                        __exidx_start = .
  *(.ARM.exidx*)
-                0x080013d4                        __exidx_end = .
+                0x08001518                        __exidx_end = .
 
-.preinit_array  0x080013d4        0x0
-                0x080013d4                        PROVIDE (__preinit_array_start = .)
+.preinit_array  0x08001518        0x0
+                0x08001518                        PROVIDE (__preinit_array_start = .)
  *(.preinit_array*)
-                0x080013d4                        PROVIDE (__preinit_array_end = .)
+                0x08001518                        PROVIDE (__preinit_array_end = .)
 
-.init_array     0x080013d4        0x4
-                0x080013d4                        PROVIDE (__init_array_start = .)
+.init_array     0x08001518        0x4
+                0x08001518                        PROVIDE (__init_array_start = .)
  *(SORT_BY_NAME(.init_array.*))
  *(.init_array*)
- .init_array    0x080013d4        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
-                0x080013d8                        PROVIDE (__init_array_end = .)
+ .init_array    0x08001518        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
+                0x0800151c                        PROVIDE (__init_array_end = .)
 
-.fini_array     0x080013d8        0x4
+.fini_array     0x0800151c        0x4
                 [!provide]                        PROVIDE (__fini_array_start = .)
  *(SORT_BY_NAME(.fini_array.*))
  *(.fini_array*)
- .fini_array    0x080013d8        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
+ .fini_array    0x0800151c        0x4 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
                 [!provide]                        PROVIDE (__fini_array_end = .)
-                0x080013dc                        _sidata = LOADADDR (.data)
+                0x08001520                        _sidata = LOADADDR (.data)
 
-.data           0x20000000       0x40 load address 0x080013dc
+.data           0x20000000       0x40 load address 0x08001520
                 0x20000000                        . = ALIGN (0x4)
                 0x20000000                        _sdata = .
  *(.data)
@@ -1321,16 +1327,16 @@ LOAD /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib
                 0x20000040                        _edata = .
 
 .tm_clone_table
-                0x20000040        0x0 load address 0x0800141c
+                0x20000040        0x0 load address 0x08001560
  .tm_clone_table
                 0x20000040        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
  .tm_clone_table
                 0x20000040        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtend.o
 
-.igot.plt       0x20000040        0x0 load address 0x0800141c
+.igot.plt       0x20000040        0x0 load address 0x08001560
  .igot.plt      0x20000040        0x0 /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib/gcc/arm-none-eabi/14.2.1/thumb/v7-m/nofp/crtbegin.o
 
-.bss            0x20000040      0x220 load address 0x0800141c
+.bss            0x20000040      0x324 load address 0x08001560
                 0x20000040                        . = ALIGN (0x4)
                 0x20000040                        _sbss = .
                 0x20000040                        __bss_start__ = .
@@ -1346,30 +1352,36 @@ LOAD /Users/burnschris/Git/hoverboard-robot/.toolchains/arm-none-eabi/bin/../lib
                 0x20000084        0x2 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.uart_tx_heads
                 0x20000086        0x2 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+ .bss.uart_rx_tails
+                0x20000088        0x2 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+ .bss.uart_rx_heads
+                0x2000008a        0x2 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+ .bss.uart_rx_buffers
+                0x2000008c      0x100 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.uart_tx_buffers
-                0x20000088      0x100 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x2000018c      0x100 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.hall_last_timestamp_us
-                0x20000188        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x2000028c        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.hall_last_state
-                0x2000018c        0x1 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
- *fill*         0x2000018d        0x3 
+                0x20000290        0x1 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+ *fill*         0x20000291        0x3 
  .bss.hall_event_overflows
-                0x20000190        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x20000294        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.hall_event_tail
-                0x20000194        0x1 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x20000298        0x1 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.hall_event_head
-                0x20000195        0x1 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
- *fill*         0x20000196        0x2 
+                0x20000299        0x1 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+ *fill*         0x2000029a        0x2 
  .bss.hall_events
-                0x20000198       0xc0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x2000029c       0xc0 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.milliseconds
-                0x20000258        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x2000035c        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  .bss.micros_high
-                0x2000025c        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
+                0x20000360        0x4 .pio/build/gausstop_communication_diagnostic/src/firmware/gd32/boards/gausstop_dphc_v33/gausstop_board.o
  *(COMMON)
-                0x20000260                        . = ALIGN (0x4)
-                0x20000260                        _ebss = .
-                0x20000260                        __bss_end__ = .
+                0x20000364                        . = ALIGN (0x4)
+                0x20000364                        _ebss = .
+                0x20000364                        __bss_end__ = .
 
 .heartbeat
  *(.heartbeat)

@@ -8,6 +8,10 @@
 #include "gs_safety.h"
 #include "gs_wheel_mix.h"
 
+static uint16_t saturate_u16(uint32_t value) {
+  return value > UINT16_MAX ? UINT16_MAX : (uint16_t)value;
+}
+
 static void stop_master(gs_master_coordinator *master,
                         gs_controller_state state) {
   master->requested = (gs_wheel_pair){0, 0};
@@ -39,8 +43,7 @@ static bool safe_resync_command(const gs_esp_command *command) {
 static bool safe_resync_allowed(const gs_master_coordinator *master,
                                 const gs_esp_command *command,
                                 uint32_t now_ms) {
-  if (master == NULL || master->shutdown ||
-      !safe_resync_command(command)) {
+  if (master == NULL || master->shutdown || !safe_resync_command(command)) {
     return false;
   }
   return master->state == GS_CONTROLLER_DISABLED ||
@@ -303,6 +306,21 @@ void gs_master_set_motor_status(gs_master_coordinator *master, uint8_t hall,
   master->local_bridge_enabled = bridge_enabled;
 }
 
+void gs_master_set_hall_glitch_count(gs_master_coordinator *master,
+                                     uint16_t hall_glitch_count) {
+  if (master != NULL) {
+    master->local_hall_glitch_count = hall_glitch_count;
+  }
+}
+
+void gs_master_set_link_diagnostics(gs_master_coordinator *master,
+                                    uint32_t slave_feedback_framing_errors) {
+  if (master != NULL) {
+    master->slave_feedback_framing_errors =
+        saturate_u16(slave_feedback_framing_errors);
+  }
+}
+
 bool gs_master_make_feedback(const gs_master_coordinator *master,
                              uint8_t out[GS_MASTER_FEEDBACK_SIZE],
                              uint32_t now_ms) {
@@ -359,9 +377,18 @@ bool gs_master_make_feedback(const gs_master_coordinator *master,
                          ? GS_MASTER_MOTOR_SLAVE_PA4_RAW_HIGH
                          : 0u)),
       .remote_rx_bytes = master->remote_rx_bytes,
-      .remote_valid_frames = (uint16_t)master->valid_esp_frames,
-      .remote_invalid_frames = (uint16_t)master->invalid_esp_frames,
+      .remote_valid_frames = saturate_u16(master->valid_esp_frames),
+      .remote_invalid_frames = saturate_u16(master->invalid_esp_frames),
       .remote_framing_errors = master->remote_framing_errors,
+      .left_hall_glitch_count = master->local_hall_glitch_count,
+      .right_hall_glitch_count = master->slave_feedback.hall_glitch_count,
+      .slave_feedback_invalid_frames =
+          saturate_u16(master->invalid_slave_feedback_frames),
+      .slave_feedback_framing_errors = master->slave_feedback_framing_errors,
+      .slave_command_invalid_frames =
+          master->slave_feedback.command_invalid_frames,
+      .slave_command_framing_errors =
+          master->slave_feedback.command_framing_errors,
   };
   return gs_encode_master_feedback(out, &feedback);
 }

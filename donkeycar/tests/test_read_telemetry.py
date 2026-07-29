@@ -11,6 +11,7 @@ from trashcan_robot.protocol import (
     IMU,
     MOTOR,
     ODOMETRY,
+    RESILIENCE_TELEMETRY,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
     STATUS,
@@ -38,6 +39,7 @@ def test_read_only_capture_cannot_arm_or_send_movement() -> None:
         MOTOR,
         ODOMETRY,
         FAULTS,
+        RESILIENCE_TELEMETRY,
         STOP,
         DISARM,
     ]

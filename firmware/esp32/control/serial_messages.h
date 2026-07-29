@@ -111,6 +111,35 @@ struct ProtocolControllerTelemetry {
   uint16_t remote_framing_errors = 0u;
 };
 
+struct ProtocolFirstFault {
+  uint32_t drive_faults = 0u;
+  uint32_t master_faults = 0u;
+  uint32_t slave_faults = 0u;
+  uint8_t master_state = 0u;
+  uint8_t slave_state = 0u;
+  uint8_t left_hall = 0u;
+  uint8_t right_hall = 0u;
+  int16_t commanded_left = 0;
+  int16_t commanded_right = 0;
+  int16_t applied_left = 0;
+  int16_t applied_right = 0;
+  uint32_t esp32_uptime_ms = 0u;
+};
+
+struct ProtocolResilienceTelemetry {
+  uint16_t warning_flags = 0u;
+  uint8_t feedback_crc_streak = 0u;
+  uint8_t feedback_crc_threshold = 3u;
+  uint32_t feedback_crc_total = 0u;
+  uint16_t left_hall_glitches = 0u;
+  uint16_t right_hall_glitches = 0u;
+  uint16_t slave_feedback_invalid_frames = 0u;
+  uint16_t slave_feedback_framing_errors = 0u;
+  uint16_t slave_command_invalid_frames = 0u;
+  uint16_t slave_command_framing_errors = 0u;
+  ProtocolFirstFault first_fault{};
+};
+
 class SerialMessageCodec {
 public:
   static size_t encodeCapabilities(const ProtocolCapabilities &value,
@@ -128,6 +157,8 @@ public:
   static size_t encodeFaults(const ProtocolFaults &value, uint8_t *payload,
                              size_t capacity);
   static size_t encodeController(const ProtocolControllerTelemetry &value,
+                                 uint8_t *payload, size_t capacity);
+  static size_t encodeResilience(const ProtocolResilienceTelemetry &value,
                                  uint8_t *payload, size_t capacity);
 };
 

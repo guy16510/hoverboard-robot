@@ -12,12 +12,13 @@ remains **Awaiting hardware validation**.
 | Command deadband | 50 command units | legacy software | avoid sub-start oscillation | **Native-test validated** |
 | Acceleration | 400 command units/s | legacy internal limit | conservative increase | **Native-test validated** |
 | Deceleration | 800 command units/s | legacy internal limit | reach coast sooner | **Native-test validated** |
-| ESP32 heartbeat | 20 ms resend, stop-and-wait sequence advance | 47-byte feedback at 19,200 baud | keep the link alive without outrunning end-to-end acknowledgment | **Native-test validated**, **Build validated** |
+| ESP32 heartbeat | 20 ms resend, stop-and-wait sequence advance | 67-byte feedback at 19,200 baud | keep the link alive without outrunning end-to-end acknowledgment | **Native-test validated**, **Build validated** |
 | ESP32 timeout | 400 ms | reconciles legacy 500/600 ms | stop demand below 500 ms maximum | **Native-test validated** |
 | Master/slave timeout | 100 ms | new conservative policy | fast subordinate stop | **Native-test validated** |
 | Startup timeout | 700 ms after bridge activation | legacy safety | require Hall progress without charging timeout during ramp/deadband | **Native-test validated** |
 | Stall timeout | 300 ms | legacy safety | stop absent transitions | **Native-test validated** |
 | Minimum Hall interval | 500 microseconds | legacy safety | reject implausibly fast transitions | **Native-test validated** |
+| Hall input qualification | 50 microseconds | noise resilience | reject unconfirmed pulses without changing commutation or odometry | **Native-test validated** |
 | Direction dwell | 250 ms | legacy safety | coast at zero before reversal | **Native-test validated** |
 | Fault-clear safe time | 250 ms bridge-off | new conservative policy | explicit quiet interval | **Native-test validated** |
 | Watchdog | nominal 1 second | plan requirement | detect stalled loop | **Build validated** only |

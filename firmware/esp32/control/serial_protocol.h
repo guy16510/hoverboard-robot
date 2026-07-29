@@ -34,6 +34,7 @@ enum class SerialMessageType : uint8_t {
   kActiveFaults = 0x34,
   kDriveTelemetry = 0x35,
   kControllerTelemetry = 0x36,
+  kResilienceTelemetry = 0x37,
   kConfigurationRead = 0x40,
   kConfigurationUpdate = 0x41,
   kAcknowledgment = 0x7e,

@@ -90,8 +90,7 @@ static void test_disabled_zero_recovers_to_motion_ready_ack(void) {
   GS_EXPECT_EQ(GS_CONTROLLER_DISABLED, slave.state);
   exchange_slave_feedback(&master, &slave, 3u);
   GS_EXPECT_FALSE(gs_master_peer_healthy(&master, 3u));
-  GS_EXPECT_TRUE(
-      gs_master_make_feedback(&master, master_feedback_frame, 3u));
+  GS_EXPECT_TRUE(gs_master_make_feedback(&master, master_feedback_frame, 3u));
   GS_EXPECT_TRUE(gs_decode_master_feedback(&feedback, master_feedback_frame));
   GS_EXPECT_TRUE(gs_master_feedback_exact_ack(&feedback, 1u, true));
   GS_EXPECT_FALSE(gs_master_feedback_runtime_healthy(&feedback));
@@ -109,8 +108,7 @@ static void test_disabled_zero_recovers_to_motion_ready_ack(void) {
   GS_EXPECT_EQ(GS_CONTROLLER_READY, slave.state);
   exchange_slave_feedback(&master, &slave, 6u);
   GS_EXPECT_TRUE(gs_master_peer_healthy(&master, 6u));
-  GS_EXPECT_TRUE(
-      gs_master_make_feedback(&master, master_feedback_frame, 7u));
+  GS_EXPECT_TRUE(gs_master_make_feedback(&master, master_feedback_frame, 7u));
   GS_EXPECT_TRUE(gs_decode_master_feedback(&feedback, master_feedback_frame));
   GS_EXPECT_TRUE(gs_master_feedback_exact_ack(&feedback, 2u, true));
   GS_EXPECT_TRUE(gs_master_feedback_runtime_healthy(&feedback));
@@ -318,6 +316,40 @@ static void test_transport_overflow_sources_are_reported(void) {
       (feedback.status_flags & GS_FEEDBACK_TRANSPORT_LINK_TX_OVERFLOW) != 0u);
 }
 
+static void test_resilience_counters_saturate_on_wire(void) {
+  gs_master_coordinator master;
+  gs_slave_coordinator slave;
+  uint8_t slave_frame[GS_SLAVE_FEEDBACK_SIZE];
+  uint8_t master_frame[GS_MASTER_FEEDBACK_SIZE];
+  gs_master_feedback feedback;
+
+  gs_master_init(&master, 0);
+  gs_slave_init(&slave, 0);
+
+  master.valid_esp_frames = UINT32_MAX;
+  master.invalid_esp_frames = UINT32_MAX;
+  master.invalid_slave_feedback_frames = UINT32_MAX;
+  gs_master_set_hall_glitch_count(&master, UINT16_MAX);
+  gs_master_set_link_diagnostics(&master, UINT32_MAX);
+
+  slave.invalid_master_frames = UINT32_MAX;
+  gs_slave_set_hall_glitch_count(&slave, UINT16_MAX);
+  gs_slave_set_link_diagnostics(&slave, UINT32_MAX);
+  GS_EXPECT_TRUE(gs_slave_make_feedback(&slave, slave_frame, 1));
+  GS_EXPECT_TRUE(gs_master_accept_slave_feedback(&master, slave_frame, 1));
+
+  GS_EXPECT_TRUE(gs_master_make_feedback(&master, master_frame, 1));
+  GS_EXPECT_TRUE(gs_decode_master_feedback(&feedback, master_frame));
+  GS_EXPECT_EQ(UINT16_MAX, feedback.remote_valid_frames);
+  GS_EXPECT_EQ(UINT16_MAX, feedback.remote_invalid_frames);
+  GS_EXPECT_EQ(UINT16_MAX, feedback.left_hall_glitch_count);
+  GS_EXPECT_EQ(UINT16_MAX, feedback.right_hall_glitch_count);
+  GS_EXPECT_EQ(UINT16_MAX, feedback.slave_feedback_invalid_frames);
+  GS_EXPECT_EQ(UINT16_MAX, feedback.slave_feedback_framing_errors);
+  GS_EXPECT_EQ(UINT16_MAX, feedback.slave_command_invalid_frames);
+  GS_EXPECT_EQ(UINT16_MAX, feedback.slave_command_framing_errors);
+}
+
 void gs_test_architecture(void) {
   test_zero_ready_then_sequence_acknowledged_motion();
   test_disabled_zero_recovers_to_motion_ready_ack();
@@ -328,4 +360,5 @@ void gs_test_architecture(void) {
   test_deadband_normalized_before_state_and_transport();
   test_fault_clear_pending_reports_both_controllers();
   test_transport_overflow_sources_are_reported();
+  test_resilience_counters_saturate_on_wire();
 }

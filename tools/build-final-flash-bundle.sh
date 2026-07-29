@@ -95,9 +95,9 @@ cp -R "$staging/esp32_drive_coordinator" "$bundle/"
 cat > "$bundle/MANIFEST.txt" <<EOF
 repository=guy16510/hoverboard-robot
 commit=$source_sha
-protocol_version=3
-command_marker=0x32
-slave_feedback_marker=0x33
+protocol_version=4
+command_marker=0x42
+slave_feedback_marker=0x43
 
 These three firmware directories are one indivisible matched set.
 Mixed protocol epochs fail closed and cannot arm.

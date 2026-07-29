@@ -31,8 +31,7 @@ void DriveSafetyGate::setOperatingMode(uint8_t mode) {
 }
 
 void DriveSafetyGate::observeDemand(float linear_velocity, float yaw_rate) {
-  neutral_observed_ =
-      nearZero(linear_velocity) && nearZero(yaw_rate);
+  neutral_observed_ = nearZero(linear_velocity) && nearZero(yaw_rate);
   if (neutral_observed_) {
     latched_faults_ &= ~kDriveFaultNonNeutralArm;
   }
@@ -54,11 +53,10 @@ bool DriveSafetyGate::requestArm(const DriveSafetyInputs &inputs) {
     armed_ = false;
     return false;
   }
-  latched_faults_ &= ~(kDriveFaultNonNeutralArm |
-                       kDriveFaultWrongOperatingMode |
-                       kDriveFaultZeroNotAcknowledged |
-                       kDriveFaultLeaseExpired |
-                       kDriveFaultSerialDisconnected);
+  latched_faults_ &=
+      ~(kDriveFaultNonNeutralArm | kDriveFaultWrongOperatingMode |
+        kDriveFaultZeroNotAcknowledged | kDriveFaultLeaseExpired |
+        kDriveFaultSerialDisconnected);
   if (latched_faults_ != 0u) {
     armed_ = false;
     return false;
@@ -70,11 +68,13 @@ bool DriveSafetyGate::requestArm(const DriveSafetyInputs &inputs) {
 void DriveSafetyGate::disarm(uint32_t reason) {
   armed_ = false;
   latched_faults_ |= reason;
+  if (reason != 0u) {
+    neutral_observed_ = false;
+  }
 }
 
 void DriveSafetyGate::clearRecoverableFaults(const DriveSafetyInputs &inputs) {
-  if ((currentFaults(inputs, true) == 0u ||
-       zeroEstablishmentAllowed(inputs)) &&
+  if ((currentFaults(inputs, true) == 0u || zeroEstablishmentAllowed(inputs)) &&
       operating_mode_ == kManualDriveMode && neutral_observed_) {
     latched_faults_ = 0u;
   }
@@ -88,10 +88,12 @@ void DriveSafetyGate::evaluate(const DriveSafetyInputs &inputs) {
   if (current != 0u) {
     latched_faults_ |= current;
     armed_ = false;
+    neutral_observed_ = false;
   }
   if (armed_ && !inputs.lease_active) {
     latched_faults_ |= kDriveFaultLeaseExpired;
     armed_ = false;
+    neutral_observed_ = false;
   }
 }
 
@@ -128,15 +130,14 @@ uint32_t DriveSafetyGate::currentFaults(const DriveSafetyInputs &inputs,
                                         bool require_zero_ack) {
   uint32_t faults = 0u;
   faults |= inputs.serial_connected ? 0u : kDriveFaultSerialDisconnected;
-  faults |= inputs.command_transport_ready ? 0u
-                                            : kDriveFaultTransportUnavailable;
+  faults |=
+      inputs.command_transport_ready ? 0u : kDriveFaultTransportUnavailable;
   faults |= inputs.feedback_fresh ? 0u : kDriveFaultFeedbackLost;
-  faults |= inputs.feedback_runtime_healthy ? 0u
-                                             : kDriveFaultControllerUnhealthy;
+  faults |=
+      inputs.feedback_runtime_healthy ? 0u : kDriveFaultControllerUnhealthy;
   faults |= inputs.imu_healthy ? 0u : kDriveFaultImuUnhealthy;
-  faults |= inputs.acknowledgment_timed_out
-                ? kDriveFaultAcknowledgmentTimeout
-                : 0u;
+  faults |=
+      inputs.acknowledgment_timed_out ? kDriveFaultAcknowledgmentTimeout : 0u;
   faults |= inputs.feedback_crc_error ? kDriveFaultFeedbackCrc : 0u;
   faults |= inputs.malformed_command ? kDriveFaultMalformedCommand : 0u;
   faults |= inputs.local_disarm ? kDriveFaultLocalDisarm : 0u;

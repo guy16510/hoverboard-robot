@@ -163,9 +163,9 @@ size_t SerialMessageCodec::encodeFaults(const ProtocolFaults &value,
   return kLength;
 }
 
-size_t SerialMessageCodec::encodeController(
-    const ProtocolControllerTelemetry &value, uint8_t *payload,
-    size_t capacity) {
+size_t
+SerialMessageCodec::encodeController(const ProtocolControllerTelemetry &value,
+                                     uint8_t *payload, size_t capacity) {
   constexpr size_t kLength = 24u;
   if (payload == nullptr || capacity < kLength) {
     return 0u;
@@ -185,6 +185,38 @@ size_t SerialMessageCodec::encodeController(
   writeU16(&payload[18], value.remote_valid_frames);
   writeU16(&payload[20], value.remote_invalid_frames);
   writeU16(&payload[22], value.remote_framing_errors);
+  return kLength;
+}
+
+size_t
+SerialMessageCodec::encodeResilience(const ProtocolResilienceTelemetry &value,
+                                     uint8_t *payload, size_t capacity) {
+  constexpr size_t kLength = 48u;
+  if (payload == nullptr || capacity < kLength) {
+    return 0u;
+  }
+  writeU16(&payload[0], value.warning_flags);
+  payload[2] = value.feedback_crc_streak;
+  payload[3] = value.feedback_crc_threshold;
+  writeU32(&payload[4], value.feedback_crc_total);
+  writeU16(&payload[8], value.left_hall_glitches);
+  writeU16(&payload[10], value.right_hall_glitches);
+  writeU16(&payload[12], value.slave_feedback_invalid_frames);
+  writeU16(&payload[14], value.slave_feedback_framing_errors);
+  writeU16(&payload[16], value.slave_command_invalid_frames);
+  writeU16(&payload[18], value.slave_command_framing_errors);
+  writeU32(&payload[20], value.first_fault.drive_faults);
+  writeU32(&payload[24], value.first_fault.master_faults);
+  writeU32(&payload[28], value.first_fault.slave_faults);
+  payload[32] = value.first_fault.master_state;
+  payload[33] = value.first_fault.slave_state;
+  payload[34] = value.first_fault.left_hall;
+  payload[35] = value.first_fault.right_hall;
+  writeI16(&payload[36], value.first_fault.commanded_left);
+  writeI16(&payload[38], value.first_fault.commanded_right);
+  writeI16(&payload[40], value.first_fault.applied_left);
+  writeI16(&payload[42], value.first_fault.applied_right);
+  writeU32(&payload[44], value.first_fault.esp32_uptime_ms);
   return kLength;
 }
 

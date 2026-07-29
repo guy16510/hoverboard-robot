@@ -1,8 +1,15 @@
 /* SPDX-License-Identifier: GPL-3.0-only */
 #include "gs_frame_parser.h"
 
+#include <limits.h>
 #include <stdbool.h>
 #include <string.h>
+
+static void count_framing_error(gs_frame_parser *parser) {
+  if (parser->framing_errors != UINT16_MAX) {
+    ++parser->framing_errors;
+  }
+}
 
 static bool marker_at(const gs_frame_parser *parser, size_t offset) {
   return offset + parser->marker_size <= parser->length &&
@@ -40,8 +47,7 @@ void gs_frame_parser_init_full(gs_frame_parser *parser, const uint8_t *marker,
 
 void gs_frame_parser_init_master_feedback(gs_frame_parser *parser,
                                           uint32_t legacy_timeout_ms) {
-  static const uint8_t marker[] = {GS_FEEDBACK_MARKER_0,
-                                   GS_FEEDBACK_MARKER_1};
+  static const uint8_t marker[] = {GS_FEEDBACK_MARKER_0, GS_FEEDBACK_MARKER_1};
   (void)legacy_timeout_ms;
   gs_frame_parser_init_full(parser, marker, sizeof(marker),
                             GS_MASTER_FEEDBACK_SIZE);
@@ -69,13 +75,14 @@ static void accept_marker_byte(gs_frame_parser *parser, uint8_t byte,
 }
 
 gs_parse_result gs_frame_parser_feed(gs_frame_parser *parser, uint8_t byte,
-                                      uint32_t now_ms,
-                                      uint8_t out[GS_MAX_FRAME_SIZE]) {
+                                     uint32_t now_ms,
+                                     uint8_t out[GS_MAX_FRAME_SIZE]) {
   if (parser == NULL || parser->frame_size == 0u) {
     return GS_PARSE_NONE;
   }
   if (parser->length != 0u &&
       (uint32_t)(now_ms - parser->last_byte_ms) > GS_PARTIAL_FRAME_TIMEOUT_MS) {
+    count_framing_error(parser);
     parser->length = 0u;
   }
   if (parser->length < parser->marker_size) {
@@ -101,6 +108,7 @@ gs_parse_result gs_frame_parser_feed(gs_frame_parser *parser, uint8_t byte,
     parser->length = 0u;
     return GS_PARSE_FRAME;
   }
+  count_framing_error(parser);
   preserve_nested_marker(parser);
   return GS_PARSE_BAD_CRC;
 }
@@ -113,6 +121,7 @@ gs_parse_result gs_frame_parser_poll(gs_frame_parser *parser, uint32_t now_ms) {
       GS_PARTIAL_FRAME_TIMEOUT_MS) {
     return GS_PARSE_NONE;
   }
+  count_framing_error(parser);
   parser->length = 0u;
   return GS_PARSE_TIMEOUT;
 }

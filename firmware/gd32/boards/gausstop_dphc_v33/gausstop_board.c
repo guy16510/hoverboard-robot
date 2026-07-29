@@ -456,8 +456,7 @@ bool gs_board_uart_read(gs_board_uart uart, uint8_t *byte) {
     return false;
   }
   *byte = uart_rx_buffers[index][tail];
-  uart_rx_tails[index] =
-      (uint8_t)((tail + 1u) & (GS_UART_RX_BUFFER_SIZE - 1u));
+  uart_rx_tails[index] = (uint8_t)((tail + 1u) & (GS_UART_RX_BUFFER_SIZE - 1u));
   return true;
 }
 
@@ -483,8 +482,7 @@ static void service_uart_rx(gs_board_uart uart) {
   const uint8_t received = (uint8_t)usart_data_receive(peripheral);
   ++uart_stats[index].rx_bytes;
   const uint8_t head = uart_rx_heads[index];
-  const uint8_t next =
-      (uint8_t)((head + 1u) & (GS_UART_RX_BUFFER_SIZE - 1u));
+  const uint8_t next = (uint8_t)((head + 1u) & (GS_UART_RX_BUFFER_SIZE - 1u));
   if (next == uart_rx_tails[index]) {
     ++uart_stats[index].rx_overflows;
     return;

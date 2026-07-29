@@ -31,6 +31,7 @@ export const MessageType = Object.freeze({
   MOTOR_TELEMETRY: 0x32,
   ODOMETRY: 0x33,
   ACTIVE_FAULTS: 0x34,
+  RESILIENCE_TELEMETRY: 0x37,
   CONFIGURATION_READ: 0x40,
   CONFIGURATION_UPDATE: 0x41,
   ACKNOWLEDGMENT: 0x7e,
@@ -264,6 +265,38 @@ function decodeFaults(payload) {
   };
 }
 
+function decodeResilience(payload) {
+  if (payload.length !== 48) {
+    return invalidPayload(MessageType.RESILIENCE_TELEMETRY, payload, 48);
+  }
+  return {
+    name: "resilience",
+    warningFlags: payload.readUInt16LE(0),
+    feedbackCrc: {
+      streak: payload[2],
+      threshold: payload[3],
+      total: payload.readUInt32LE(4),
+    },
+    hallGlitches: [payload.readUInt16LE(8), payload.readUInt16LE(10)],
+    interControllerLink: {
+      slaveFeedbackInvalid: payload.readUInt16LE(12),
+      slaveFeedbackFraming: payload.readUInt16LE(14),
+      slaveCommandInvalid: payload.readUInt16LE(16),
+      slaveCommandFraming: payload.readUInt16LE(18),
+    },
+    firstFault: {
+      drive: payload.readUInt32LE(20),
+      master: payload.readUInt32LE(24),
+      slave: payload.readUInt32LE(28),
+      states: [payload[32], payload[33]],
+      halls: [payload[34], payload[35]],
+      commanded: [payload.readInt16LE(36), payload.readInt16LE(38)],
+      applied: [payload.readInt16LE(40), payload.readInt16LE(42)],
+      esp32UptimeMs: payload.readUInt32LE(44),
+    },
+  };
+}
+
 function decodeConfiguration(payload) {
   if (payload.length !== 5) {
     return invalidPayload(MessageType.CONFIGURATION_READ, payload, 5);
@@ -313,6 +346,8 @@ export function decodeMessage(frame) {
       return decodeOdometry(payload);
     case MessageType.ACTIVE_FAULTS:
       return decodeFaults(payload);
+    case MessageType.RESILIENCE_TELEMETRY:
+      return decodeResilience(payload);
     case MessageType.CONFIGURATION_READ:
       return decodeConfiguration(payload);
     case MessageType.ACKNOWLEDGMENT:

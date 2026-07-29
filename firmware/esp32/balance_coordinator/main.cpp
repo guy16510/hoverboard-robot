@@ -88,8 +88,7 @@ static_assert(kCommandRmtItems <= 64u,
               "pulse command must fit one RMT memory block");
 static_assert(GS_BALANCE_DRY_RUN == 0 || GS_BALANCE_DRY_RUN == 1,
               "GS_BALANCE_DRY_RUN must be zero or one");
-static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 ||
-                  GS_STAGE5_TRANSPORT_ONLY == 1,
+static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 || GS_STAGE5_TRANSPORT_ONLY == 1,
               "GS_STAGE5_TRANSPORT_ONLY must be zero or one");
 static_assert(GS_STAGE5_TRANSPORT_ONLY == 0 || GS_BALANCE_DRY_RUN == 0,
               "Stage 5 transport image must permit bounded direct output");
@@ -754,9 +753,8 @@ void serviceWebControl(uint64_t now_us) {
 SafetySnapshot safetySnapshot(uint64_t now_us, const PitchEstimate &pitch) {
   const auto &diagnostics = imu.diagnostics();
   SafetySnapshot safety;
-  safety.imu_healthy =
-      imu_started && !imu.timedOut(now_us) &&
-      (!diagnostics.calibration_complete || pitch.valid);
+  safety.imu_healthy = imu_started && !imu.timedOut(now_us) &&
+                       (!diagnostics.calibration_complete || pitch.valid);
   safety.calibrated = diagnostics.calibration_complete;
 #if GS_STAGE5_TRANSPORT_ONLY
   // Direct transport validation is not a balance-mode test. The chassis may
@@ -764,8 +762,8 @@ SafetySnapshot safetySnapshot(uint64_t now_us, const PitchEstimate &pitch) {
   safety.approximately_upright = true;
 #else
   safety.approximately_upright =
-      std::fabs(balanceFramePitchDeg(pitch.filtered_pitch_deg,
-                                     balance_config)) <=
+      std::fabs(
+          balanceFramePitchDeg(pitch.filtered_pitch_deg, balance_config)) <=
       user_config::kArmingToleranceDeg;
 #endif
   safety.motor_feedback_healthy = feedbackFresh(now_us) && !feedbackFaulted();
@@ -862,14 +860,14 @@ void runControlLoop(uint64_t scheduled_us) {
   const PitchEstimate &pitch = estimator.estimate();
   SafetySnapshot safety = safetySnapshot(started_us, pitch);
   latest_safety = safety;
-  state_machine.update(
-      safety,
+  state_machine.update(safety,
 #if GS_STAGE5_TRANSPORT_ONLY
-      0.0f,
+                       0.0f,
 #else
-      balanceFramePitchDeg(pitch.filtered_pitch_deg, balance_config),
+                       balanceFramePitchDeg(pitch.filtered_pitch_deg,
+                                            balance_config),
 #endif
-      started_us);
+                       started_us);
   command_arbiter.setLocalDisarm(digitalRead(kLocalDisarmPin) == LOW);
   const ControlRequest request = command_arbiter.resolve(started_us);
   if (request.clear_fault) {

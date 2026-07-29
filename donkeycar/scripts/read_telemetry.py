@@ -21,6 +21,7 @@ from trashcan_robot.protocol import (
     IMU,
     MOTOR,
     ODOMETRY,
+    RESILIENCE_TELEMETRY,
     STATUS,
     STOP,
     FrameDecoder,
@@ -34,6 +35,7 @@ TELEMETRY_TYPES = {
     "motor": MOTOR,
     "odometry": ODOMETRY,
     "faults": FAULTS,
+    "resilience": RESILIENCE_TELEMETRY,
 }
 
 

@@ -8,6 +8,10 @@
 #include "gs_safety.h"
 #include "gs_wheel_mix.h"
 
+static uint16_t saturate_u16(uint32_t value) {
+  return value > UINT16_MAX ? UINT16_MAX : (uint16_t)value;
+}
+
 static void stop_slave(gs_slave_coordinator *slave, gs_controller_state state) {
   slave->demanded_electrical = 0;
   slave->applied_electrical = 0;
@@ -166,6 +170,20 @@ void gs_slave_set_motor_status(gs_slave_coordinator *slave, uint8_t hall,
   slave->pa4_raw_high = pa4_raw_high;
 }
 
+void gs_slave_set_hall_glitch_count(gs_slave_coordinator *slave,
+                                    uint16_t hall_glitch_count) {
+  if (slave != NULL) {
+    slave->hall_glitch_count = hall_glitch_count;
+  }
+}
+
+void gs_slave_set_link_diagnostics(gs_slave_coordinator *slave,
+                                   uint32_t framing_errors) {
+  if (slave != NULL) {
+    slave->command_framing_errors = saturate_u16(framing_errors);
+  }
+}
+
 bool gs_slave_make_feedback(const gs_slave_coordinator *slave,
                             uint8_t out[GS_SLAVE_FEEDBACK_SIZE],
                             uint32_t now_ms) {
@@ -187,11 +205,15 @@ bool gs_slave_make_feedback(const gs_slave_coordinator *slave,
       .status_flags =
           (uint8_t)((slave->bridge_enabled ? GS_MOTOR_FEEDBACK_BRIDGE_ENABLED
                                            : 0u) |
-                    (slave->pa4_raw_high ? GS_MOTOR_FEEDBACK_PA4_RAW_HIGH : 0u) |
+                    (slave->pa4_raw_high ? GS_MOTOR_FEEDBACK_PA4_RAW_HIGH
+                                         : 0u) |
                     (slave->clear_fault_pending
                          ? GS_MOTOR_FEEDBACK_CLEAR_PENDING
                          : 0u)),
       .compare_offset = slave->compare_offset,
+      .hall_glitch_count = slave->hall_glitch_count,
+      .command_invalid_frames = saturate_u16(slave->invalid_master_frames),
+      .command_framing_errors = slave->command_framing_errors,
   };
   return gs_encode_slave_feedback(out, &feedback);
 }

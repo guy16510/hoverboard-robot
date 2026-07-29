@@ -60,7 +60,7 @@ static void test_commutation_and_hall_sequences(void) {
   expect_vector(4, 1, GS_PHASE_G, GS_PHASE_B, GS_PHASE_Y);
   expect_vector(5, 1, GS_PHASE_G, GS_PHASE_Y, GS_PHASE_B);
   expect_vector(6, 1, GS_PHASE_Y, GS_PHASE_B, GS_PHASE_G);
-  expect_vector(2, -1, GS_PHASE_G, GS_PHASE_B, GS_PHASE_Y);
+  expect_vector(2, -1, GS_PHASE_G, GS_PHASE_Y, GS_PHASE_B);
   GS_EXPECT_FALSE(gs_commutation_for_hall(0, 1, NULL));
   GS_EXPECT_FALSE(gs_commutation_for_hall(7, 1, NULL));
 
@@ -341,10 +341,9 @@ static void test_motor_uses_configured_symmetric_reverse_profile(void) {
 
   gs_motor_init_profile(&motor, port, GS_COMMUTATION_SYMMETRIC_REVERSE, 0);
   gs_motor_clear_fault(&motor, 10);
-  GS_EXPECT_EQ(GS_COMMUTATION_SYMMETRIC_REVERSE,
-               motor.commutation_profile);
-  const gs_motor_output out = gs_motor_step(
-      &motor, &(gs_motor_input){2, false, 0, true, -250, 210});
+  GS_EXPECT_EQ(GS_COMMUTATION_SYMMETRIC_REVERSE, motor.commutation_profile);
+  const gs_motor_output out =
+      gs_motor_step(&motor, &(gs_motor_input){2, false, 0, true, -250, 210});
 
   GS_EXPECT_TRUE(out.demand.bridge_enabled);
   GS_EXPECT_EQ(GS_PHASE_G, fake.last_vector.source);

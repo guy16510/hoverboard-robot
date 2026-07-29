@@ -64,7 +64,7 @@ static void reset_hall_tracking(gs_motor_controller *motor) {
 
 void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
                    uint32_t now_ms) {
-  gs_motor_init_profile(motor, bridge, GS_COMMUTATION_PHASE_ADVANCED_REVERSE,
+  gs_motor_init_profile(motor, bridge, GS_COMMUTATION_SYMMETRIC_REVERSE,
                         now_ms);
 }
 
@@ -104,8 +104,7 @@ void gs_motor_clear_fault(gs_motor_controller *motor, uint32_t now_ms) {
     return;
   }
   const gs_bridge_port bridge = motor->bridge;
-  const gs_commutation_profile commutation_profile =
-      motor->commutation_profile;
+  const gs_commutation_profile commutation_profile = motor->commutation_profile;
   const int32_t odometer = motor->odometer;
   *motor = (gs_motor_controller){0};
   motor->bridge = bridge;

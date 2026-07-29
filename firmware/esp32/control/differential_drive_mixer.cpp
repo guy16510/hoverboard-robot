@@ -11,7 +11,7 @@ DifferentialDriveMixer::DifferentialDriveMixer(
     : config_(config) {}
 
 float DifferentialDriveMixer::moveToward(float current, float target,
-                                          float maximum_delta) {
+                                         float maximum_delta) {
   if (target > current) {
     return std::min(target, current + maximum_delta);
   }
@@ -49,7 +49,8 @@ DifferentialDriveOutput DifferentialDriveMixer::update(float linear_velocity,
     target_right *= scale;
   }
   target_left = std::clamp(target_left, -kDriveOutputLimit, kDriveOutputLimit);
-  target_right = std::clamp(target_right, -kDriveOutputLimit, kDriveOutputLimit);
+  target_right =
+      std::clamp(target_right, -kDriveOutputLimit, kDriveOutputLimit);
 
   const float maximum_delta = config_.slew_per_second * dt_seconds;
   left_ = std::clamp(moveToward(left_, target_left, maximum_delta),

@@ -39,6 +39,8 @@ typedef struct {
   bool local_bridge_enabled;
   uint16_t remote_rx_bytes;
   uint16_t remote_framing_errors;
+  uint16_t local_hall_glitch_count;
+  uint16_t slave_feedback_framing_errors;
 } gs_master_coordinator;
 
 void gs_master_init(gs_master_coordinator *master, uint32_t now_ms);
@@ -65,6 +67,10 @@ void gs_master_set_remote_diagnostics(gs_master_coordinator *master,
                                       uint32_t framing_errors);
 void gs_master_set_motor_status(gs_master_coordinator *master, uint8_t hall,
                                 uint16_t compare_offset, bool bridge_enabled);
+void gs_master_set_hall_glitch_count(gs_master_coordinator *master,
+                                     uint16_t hall_glitch_count);
+void gs_master_set_link_diagnostics(gs_master_coordinator *master,
+                                    uint32_t slave_feedback_framing_errors);
 bool gs_master_make_feedback(const gs_master_coordinator *master,
                              uint8_t out[GS_MASTER_FEEDBACK_SIZE],
                              uint32_t now_ms);

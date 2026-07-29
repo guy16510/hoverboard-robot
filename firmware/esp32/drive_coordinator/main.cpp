@@ -43,8 +43,12 @@ constexpr uint32_t kSerialConnectionTimeoutUs = 750000u;
 constexpr uint32_t kImuTimeoutUs = 100000u;
 constexpr uint32_t kParserTimeoutUs = 50000u;
 constexpr uint32_t kAckTimeoutMs = 500u;
+constexpr uint8_t kFeedbackCrcThreshold = 3u;
 constexpr size_t kMaximumSerialBytesPerPass = 64u;
 constexpr size_t kMaximumFeedbackBytesPerPass = 64u;
+constexpr uint16_t kWarningFeedbackCrc = 1u << 0;
+constexpr uint16_t kWarningHallGlitch = 1u << 1;
+constexpr uint16_t kWarningControllerLink = 1u << 2;
 constexpr rmt_channel_t kCommandRmtChannel = RMT_CHANNEL_0;
 constexpr uint8_t kCommandRmtClockDivider = 80u;
 constexpr uint16_t kCommandPulseUnitUs = 80u;
@@ -180,6 +184,10 @@ uint32_t imu_errors = 0u;
 float pitch_deg = 0.0f;
 float roll_deg = 0.0f;
 int16_t acceleration_raw[3] = {};
+ProtocolFirstFault first_fault_snapshot{};
+bool first_fault_valid = false;
+bool recovery_clear_requested = false;
+bool recovery_clear_completed = false;
 
 uint64_t nowMicros() { return static_cast<uint64_t>(esp_timer_get_time()); }
 
@@ -187,24 +195,23 @@ int16_t boundedCommand(float value) {
   if (!std::isfinite(value)) {
     return 0;
   }
-  return static_cast<int16_t>(std::lround(
-      std::clamp(value, -kDriveOutputLimit, kDriveOutputLimit)));
+  return static_cast<int16_t>(
+      std::lround(std::clamp(value, -kDriveOutputLimit, kDriveOutputLimit)));
 }
 
 int16_t scaledI16(float value, float scale) {
   if (!std::isfinite(value)) {
     return 0;
   }
-  return static_cast<int16_t>(std::lround(
-      std::clamp(value * scale, -32768.0f, 32767.0f)));
+  return static_cast<int16_t>(
+      std::lround(std::clamp(value * scale, -32768.0f, 32767.0f)));
 }
 
 uint16_t scaledU16(float value, float scale) {
   if (!std::isfinite(value) || value <= 0.0f) {
     return 0u;
   }
-  return static_cast<uint16_t>(
-      std::lround(std::min(value * scale, 65535.0f)));
+  return static_cast<uint16_t>(std::lround(std::min(value * scale, 65535.0f)));
 }
 
 bool initializeCommandTransport() {
@@ -262,8 +269,7 @@ bool feedbackFresh(uint64_t now_us) {
 }
 
 bool feedbackHealthy(uint64_t now_us) {
-  return feedbackFresh(now_us) &&
-         gs_master_feedback_runtime_healthy(&feedback);
+  return feedbackFresh(now_us) && gs_master_feedback_runtime_healthy(&feedback);
 }
 
 bool leaseActive(const ControlRequest &request, uint64_t now_us) {
@@ -300,8 +306,33 @@ void stopMotion() {
   latest_mix = {};
 }
 
+void captureFirstFault(uint32_t drive_faults) {
+  if (first_fault_valid) {
+    return;
+  }
+  first_fault_snapshot.drive_faults = drive_faults;
+  first_fault_snapshot.master_faults = feedback.master_faults;
+  first_fault_snapshot.slave_faults = feedback.slave_faults;
+  first_fault_snapshot.master_state = feedback.master_state;
+  first_fault_snapshot.slave_state = feedback.slave_state;
+  first_fault_snapshot.left_hall = feedback.left_hall;
+  first_fault_snapshot.right_hall = feedback.right_hall;
+  first_fault_snapshot.commanded_left = boundedCommand(latest_mix.left);
+  first_fault_snapshot.commanded_right = boundedCommand(latest_mix.right);
+  first_fault_snapshot.applied_left = feedback.left_applied;
+  first_fault_snapshot.applied_right = feedback.right_applied;
+  first_fault_snapshot.esp32_uptime_ms =
+      static_cast<uint32_t>(nowMicros() / 1000u);
+  first_fault_valid = true;
+}
+
 void tripSafety(uint32_t reason) {
+  captureFirstFault(safety_gate.faults() | reason);
   safety_gate.disarm(reason);
+  serial_source.disconnect();
+  command_arbiter.disconnect(CommandSource::kSerial);
+  recovery_clear_requested = false;
+  recovery_clear_completed = false;
   stopMotion();
 }
 
@@ -347,7 +378,8 @@ void serviceFeedback(uint64_t now_us) {
     ++serviced;
     const gs_parse_result result = gs_frame_parser_feed(
         &feedback_parser, byte, static_cast<uint32_t>(now_us / 1000u), frame);
-    if (result == GS_PARSE_FRAME && gs_decode_master_feedback(&feedback, frame)) {
+    if (result == GS_PARSE_FRAME &&
+        gs_decode_master_feedback(&feedback, frame)) {
       ++feedback_frames;
       consecutive_feedback_crc_errors = 0u;
       last_feedback_us = now_us;
@@ -359,22 +391,31 @@ void serviceFeedback(uint64_t now_us) {
       if (transport_metrics.statistics().applied_commands > applied_before) {
         last_motor_applied_us = now_us;
       }
-      if (controller_fault_clear.observe(
-              feedback, command_sequencer.in_flight.sequence,
-              command_sequencer.sent)) {
+      (void)controller_fault_clear.observe(feedback,
+                                           command_sequencer.in_flight.sequence,
+                                           command_sequencer.sent);
+      if (recovery_clear_requested && !controller_fault_clear.pending() &&
+          zeroReadyAck()) {
         safety_gate.clearRecoverableFaults(safetyInputs(now_us, true));
+        if (safety_gate.faults() == 0u) {
+          recovery_clear_requested = false;
+          recovery_clear_completed = true;
+        }
       }
-      if (feedback.master_faults != 0u) {
+      if (feedback.master_faults != 0u && !controller_fault_clear.pending()) {
         tripSafety(kDriveFaultMasterController);
       }
-      if (feedback.slave_faults != 0u) {
+      if (feedback.slave_faults != 0u && !controller_fault_clear.pending()) {
         tripSafety(kDriveFaultSlaveController);
       }
       continue;
     }
     if (result == GS_PARSE_BAD_CRC) {
       ++feedback_crc_errors;
-      if (++consecutive_feedback_crc_errors >= 2u) {
+      if (consecutive_feedback_crc_errors != UINT8_MAX) {
+        ++consecutive_feedback_crc_errors;
+      }
+      if (consecutive_feedback_crc_errors >= kFeedbackCrcThreshold) {
         feedback_crc_latched = true;
         tripSafety(kDriveFaultFeedbackCrc);
       }
@@ -404,16 +445,14 @@ bool queueCapabilities(uint16_t sequence) {
 bool queueStatus(uint16_t sequence, uint64_t now_us) {
   ProtocolStatus status;
   status.state = safety_gate.faults() != 0u ? 6u
-                 : safety_gate.armed()       ? 4u
-                                             : 2u;
+                 : safety_gate.armed()      ? 4u
+                                            : 2u;
   status.operating_mode = safety_gate.operatingMode();
   status.active_source = static_cast<uint8_t>(command_arbiter.activeSource());
   status.health_flags =
-      (imu_healthy ? 1u << 0u : 0u) |
-      (feedbackFresh(now_us) ? 1u << 2u : 0u) |
+      (imu_healthy ? 1u << 0u : 0u) | (feedbackFresh(now_us) ? 1u << 2u : 0u) |
       (feedbackHealthy(now_us) ? 1u << 3u : 0u) |
-      (safety_gate.armed() ? 1u << 4u : 0u) |
-      (zeroReadyAck() ? 1u << 5u : 0u) |
+      (safety_gate.armed() ? 1u << 4u : 0u) | (zeroReadyAck() ? 1u << 5u : 0u) |
       (serial_connected ? 1u << 6u : 0u);
   status.faults = safety_gate.faults();
   status.loop_overruns = telemetry_sink.droppedFrames();
@@ -551,9 +590,62 @@ bool queueControllerTelemetry(uint16_t sequence) {
                                      sequence, payload, length);
 }
 
+bool queueResilienceTelemetry(uint16_t sequence) {
+  ProtocolResilienceTelemetry value;
+  value.warning_flags = static_cast<uint16_t>(
+      (consecutive_feedback_crc_errors != 0u ? kWarningFeedbackCrc : 0u) |
+      ((feedback.left_hall_glitch_count != 0u ||
+        feedback.right_hall_glitch_count != 0u)
+           ? kWarningHallGlitch
+           : 0u) |
+      ((feedback.slave_feedback_invalid_frames != 0u ||
+        feedback.slave_feedback_framing_errors != 0u ||
+        feedback.slave_command_invalid_frames != 0u ||
+        feedback.slave_command_framing_errors != 0u)
+           ? kWarningControllerLink
+           : 0u));
+  value.feedback_crc_streak = consecutive_feedback_crc_errors;
+  value.feedback_crc_threshold = kFeedbackCrcThreshold;
+  value.feedback_crc_total = feedback_crc_errors;
+  value.left_hall_glitches = feedback.left_hall_glitch_count;
+  value.right_hall_glitches = feedback.right_hall_glitch_count;
+  value.slave_feedback_invalid_frames = feedback.slave_feedback_invalid_frames;
+  value.slave_feedback_framing_errors = feedback.slave_feedback_framing_errors;
+  value.slave_command_invalid_frames = feedback.slave_command_invalid_frames;
+  value.slave_command_framing_errors = feedback.slave_command_framing_errors;
+  value.first_fault = first_fault_snapshot;
+  uint8_t payload[kSerialMaximumPayloadSize] = {};
+  const size_t length =
+      SerialMessageCodec::encodeResilience(value, payload, sizeof(payload));
+  return telemetry_sink.queuePayload(SerialMessageType::kResilienceTelemetry,
+                                     sequence, payload, length);
+}
+
 bool decodeMovement(const SerialFrame &frame, MovementCommand &movement) {
-  return MovementCommandCodec::decode(frame.payload.data(), frame.payload_length,
-                                      movement);
+  return MovementCommandCodec::decode(frame.payload.data(),
+                                      frame.payload_length, movement);
+}
+
+bool rejectUnsafeMotion(const SerialFrame &frame, bool nonzero) {
+  if (!nonzero ||
+      (safety_gate.armed() && safety_gate.faults() == 0u &&
+       !recovery_clear_requested && !controller_fault_clear.pending())) {
+    return false;
+  }
+  serial_source.disconnect();
+  (void)telemetry_sink.queueError(
+      frame.type, frame.sequence,
+      static_cast<uint8_t>(SerialErrorCode::kUnsafeState));
+  return true;
+}
+
+bool isMovementFrame(const SerialFrame &frame) {
+  return frame.type == SerialMessageType::kSetLinearVelocity ||
+         frame.type == SerialMessageType::kSetYawRate ||
+         frame.type == SerialMessageType::kSetVelocityAndYaw ||
+         frame.type == SerialMessageType::kSetDirectMotor ||
+         (frame.type == SerialMessageType::kHeartbeat &&
+          frame.payload_length != 0u);
 }
 
 bool handleAcceptedFrame(const SerialFrame &frame, uint64_t now_us) {
@@ -601,6 +693,9 @@ bool handleAcceptedFrame(const SerialFrame &frame, uint64_t now_us) {
   case SerialMessageType::kControllerTelemetry:
     (void)queueControllerTelemetry(frame.sequence);
     return true;
+  case SerialMessageType::kResilienceTelemetry:
+    (void)queueResilienceTelemetry(frame.sequence);
+    return true;
   case SerialMessageType::kSetOperatingMode:
     safety_gate.setOperatingMode(frame.payload[0]);
     stopMotion();
@@ -617,18 +712,64 @@ bool handleAcceptedFrame(const SerialFrame &frame, uint64_t now_us) {
           static_cast<uint8_t>(SerialErrorCode::kMalformed));
       return false;
     }
+    const bool nonzero =
+        movement.linear_velocity_milli != 0 || movement.yaw_rate_milli != 0;
+    if (rejectUnsafeMotion(frame, nonzero)) {
+      return false;
+    }
     safety_gate.observeDemand(
         static_cast<float>(movement.linear_velocity_milli) / 1000.0f,
         static_cast<float>(movement.yaw_rate_milli) / 1000.0f);
     (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     return true;
   }
+  case SerialMessageType::kSetDirectMotor: {
+    DirectMotorCommand direct{};
+    if (!DirectMotorCommandCodec::decode(frame.payload.data(),
+                                         frame.payload_length, direct)) {
+      tripSafety(kDriveFaultMalformedCommand);
+      (void)telemetry_sink.queueError(
+          frame.type, frame.sequence,
+          static_cast<uint8_t>(SerialErrorCode::kMalformed));
+      return false;
+    }
+    if (rejectUnsafeMotion(frame, direct.left != 0 || direct.right != 0)) {
+      return false;
+    }
+    safety_gate.observeDemand(static_cast<float>(direct.left),
+                              static_cast<float>(direct.right));
+    (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
+    return true;
+  }
   case SerialMessageType::kHeartbeat:
+    if (frame.payload_length != 0u) {
+      MovementCommand movement{};
+      if (!decodeMovement(frame, movement)) {
+        tripSafety(kDriveFaultMalformedCommand);
+        (void)telemetry_sink.queueError(
+            frame.type, frame.sequence,
+            static_cast<uint8_t>(SerialErrorCode::kMalformed));
+        return false;
+      }
+      const bool nonzero =
+          movement.linear_velocity_milli != 0 || movement.yaw_rate_milli != 0;
+      if (rejectUnsafeMotion(frame, nonzero)) {
+        return false;
+      }
+      safety_gate.observeDemand(
+          static_cast<float>(movement.linear_velocity_milli) / 1000.0f,
+          static_cast<float>(movement.yaw_rate_milli) / 1000.0f);
+    }
     (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     return true;
   case SerialMessageType::kArm: {
     const DriveSafetyInputs inputs = safetyInputs(now_us, true);
     if (safety_gate.requestArm(inputs)) {
+      if (recovery_clear_completed) {
+        first_fault_snapshot = {};
+        first_fault_valid = false;
+        recovery_clear_completed = false;
+      }
       (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     } else {
       (void)telemetry_sink.queueError(
@@ -651,13 +792,20 @@ bool handleAcceptedFrame(const SerialFrame &frame, uint64_t now_us) {
     (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     return true;
   case SerialMessageType::kClearFault: {
+    if (!safety_gate.neutralObserved()) {
+      (void)telemetry_sink.queueError(
+          frame.type, frame.sequence,
+          static_cast<uint8_t>(SerialErrorCode::kUnsafeState));
+      return false;
+    }
+    stopMotion();
+    recovery_clear_requested = true;
+    recovery_clear_completed = false;
     if (feedback.master_faults != 0u || feedback.slave_faults != 0u) {
       controller_fault_clear.request();
     }
     acknowledgment_timeout_latched = false;
     feedback_crc_latched = false;
-    const DriveSafetyInputs inputs = safetyInputs(now_us, true);
-    safety_gate.clearRecoverableFaults(inputs);
     (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     return true;
   }
@@ -693,9 +841,11 @@ void serviceNorthboundSerial(uint64_t now_us) {
     const SerialParseResult result = serial_source.feed(byte, now_us);
     if (result == SerialParseResult::kFrame) {
       if (handleAcceptedFrame(serial_source.lastFrame(), now_us)) {
-        ControlRequest request{};
-        if (serial_source.latest(request)) {
-          command_arbiter.submit(request);
+        if (isMovementFrame(serial_source.lastFrame())) {
+          ControlRequest request{};
+          if (serial_source.latest(request)) {
+            command_arbiter.submit(request);
+          }
         }
       }
     } else if (result != SerialParseResult::kIncomplete) {
@@ -713,7 +863,7 @@ void serviceSerialTimeout(uint64_t now_us) {
   serial_source.disconnect();
   command_arbiter.disconnect(CommandSource::kSerial);
   safety_gate.onConnectionLost();
-  stopMotion();
+  tripSafety(kDriveFaultSerialDisconnected);
 }
 
 void runControlLoop(uint64_t now_us) {
@@ -730,7 +880,12 @@ void runControlLoop(uint64_t now_us) {
   if (request.emergency_stop || request.disarm) {
     safety_gate.disarm();
   }
+  const uint32_t faults_before_evaluation = safety_gate.faults();
   safety_gate.evaluate(inputs);
+  if (safety_gate.faults() != faults_before_evaluation &&
+      safety_gate.faults() != 0u) {
+    tripSafety(safety_gate.faults());
+  }
   inputs = safetyInputs(now_us, lease_active);
 
   if (!safety_gate.outputEnabled(inputs)) {
@@ -774,9 +929,9 @@ void serviceMotorHeartbeat(uint64_t now_us) {
   }
   controller_fault_clear.apply(requested);
 
-  const gs_esp_command *selected = gs_command_sequencer_select(
-      &command_sequencer, &requested, exactAck(),
-      static_cast<uint32_t>(now_us / 1000u));
+  const gs_esp_command *selected =
+      gs_command_sequencer_select(&command_sequencer, &requested, exactAck(),
+                                  static_cast<uint32_t>(now_us / 1000u));
   uint8_t frame[GS_ESP_COMMAND_SIZE] = {};
   if (selected == nullptr || !gs_encode_esp_command(frame, selected) ||
       !transmitCommandFrame(frame)) {
@@ -787,9 +942,9 @@ void serviceMotorHeartbeat(uint64_t now_us) {
   ++command_frames;
   transport_metrics.recordTransmission(now_us);
   transport_metrics.beginCommand(selected->sequence, now_us);
-  if (gs_command_sequencer_ack_expired(
-          &command_sequencer, exactAck(),
-          static_cast<uint32_t>(now_us / 1000u), kAckTimeoutMs) &&
+  if (gs_command_sequencer_ack_expired(&command_sequencer, exactAck(),
+                                       static_cast<uint32_t>(now_us / 1000u),
+                                       kAckTimeoutMs) &&
       timed_out_sequence != command_sequencer.in_flight.sequence) {
     timed_out_sequence = command_sequencer.in_flight.sequence;
     ++acknowledgment_timeouts;
@@ -811,6 +966,7 @@ void queueTelemetryStream(uint64_t now_us) {
   (void)queueOdometry(sequence, now_us);
   (void)queueFaults(sequence);
   (void)queueControllerTelemetry(sequence);
+  (void)queueResilienceTelemetry(sequence);
 }
 
 } // namespace

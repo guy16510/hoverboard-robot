@@ -37,11 +37,22 @@ def load_config(path: str | Path) -> AppConfig:
     source = Path(path)
     with source.open("r", encoding="utf-8") as handle:
         raw = yaml.safe_load(handle) or {}
+
     serial = dict(raw["serial"])
     configured_port = os.environ.get("TRASHCAN_SERIAL_PORT", "").strip()
     if configured_port:
         serial["port"] = configured_port
     raw["serial"] = serial
+
+    backup_camera = dict(raw.get("backup_camera", {}))
+    configured_camera = os.environ.get(
+        "TRASHCAN_BACKUP_CAMERA_DEVICE",
+        "",
+    ).strip()
+    if configured_camera:
+        backup_camera["device"] = configured_camera
+    raw["backup_camera"] = backup_camera
+
     limits = raw["limits"]
     return AppConfig(
         raw=raw,

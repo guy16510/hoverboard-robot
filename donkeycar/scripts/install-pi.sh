@@ -9,8 +9,8 @@ PYTHON_BIN="${PYTHON_BIN:-python3.11}"
 sudo apt-get update
 sudo apt-get install -y \
   python3.11 python3.11-venv python3.11-dev \
-  build-essential libcamera-dev python3-picamera2 joystick \
-  nodejs npm
+  build-essential libcamera-dev python3-picamera2 python3-opencv \
+  joystick v4l-utils nodejs npm
 
 command -v "$PYTHON_BIN" >/dev/null 2>&1 || {
   echo "Donkeycar 5.3 requires Python 3.11. Set PYTHON_BIN to a Python 3.11 executable." >&2
@@ -43,7 +43,13 @@ node --test "$ROOT/tools/pi-client/test/"*.test.mjs
 "$PYTHON_BIN" -m venv --system-site-packages "$VENV"
 "$VENV/bin/python" -m pip install --upgrade pip wheel
 "$VENV/bin/pip" install -r "$APP/requirements.txt"
+"$VENV/bin/python" - <<'PY'
+import cv2
+if not hasattr(cv2, "aruco"):
+    raise SystemExit("python3-opencv is missing cv2.aruco AprilTag support")
+print("OpenCV AprilTag support available")
+PY
 mkdir -p "$APP/data/tubs" "$APP/data/logs" "$APP/models"
 printf 'Installed. Activate with: source %s/bin/activate\n' "$VENV"
 printf 'Node.js %s and npm %s installed.\n' "$node_version" "$(npm --version)"
-printf 'Add your user to dialout if needed: sudo usermod -aG dialout %s\n' "$USER"
+printf 'Add your user to dialout and video if needed: sudo usermod -aG dialout,video %s\n' "$USER"

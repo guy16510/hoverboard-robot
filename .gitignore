@@ -21,5 +21,10 @@ hardware_readbacks/
 # Host-side structured drive logs
 logs/
 
+# Local Raspberry Pi image secrets and work products
+raspberry-pi-image/wifi.env
+raspberry-pi-image/.work/
+raspberry-pi-image/dist/
+
 # macOS metadata
 .DS_Store

@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - goal/donkeycar-driveway-mvp
+      - feature/pi-esp32-wifi-simulated-drive
     paths:
       - 'raspberry-pi-image/**'
       - 'donkeycar/**'
@@ -23,6 +24,10 @@ permissions:
 concurrency:
   group: raspberry-pi-image-${{ github.ref }}
   cancel-in-progress: true
+
+env:
+  TRASHCAN_WIFI_SSID: ${{ secrets.TRASHCAN_WIFI_SSID }}
+  TRASHCAN_WIFI_PASSWORD: ${{ secrets.TRASHCAN_WIFI_PASSWORD }}
 
 jobs:
   build-image:
@@ -57,6 +62,9 @@ jobs:
             trashbot trashbot /opt/trashcan-robot/donkeycar
           grep -Fxq 'nodejs' raspberry-pi-image/stage-trashcan/00-install/00-packages
           grep -Fxq 'npm' raspberry-pi-image/stage-trashcan/00-install/00-packages
+          grep -Fxq 'python3-opencv' raspberry-pi-image/stage-trashcan/00-install/00-packages
+          grep -Fxq 'v4l-utils' raspberry-pi-image/stage-trashcan/00-install/00-packages
+          bash -n raspberry-pi-image/build-image.sh
           bash -n raspberry-pi-image/stage-trashcan/00-install/00-run-chroot.sh
           bash -n raspberry-pi-image/stage-trashcan/00-install/01-verify-marker.sh
           bash -n raspberry-pi-image/validate-image.sh
@@ -88,6 +96,12 @@ jobs:
             'robot_service_contract=validated'; do
             grep -Fxq "$fact" "$dist/IMAGE_SOURCE.txt"
           done
+          grep -Eq '^wifi_provisioned=(yes|no)$' "$dist/IMAGE_SOURCE.txt"
+          if [[ -n "${TRASHCAN_WIFI_SSID:-}" || -n "${TRASHCAN_WIFI_PASSWORD:-}" ]]; then
+            test -n "${TRASHCAN_WIFI_SSID:-}"
+            test -n "${TRASHCAN_WIFI_PASSWORD:-}"
+            grep -Fxq 'wifi_provisioned=yes' "$dist/IMAGE_SOURCE.txt"
+          fi
 
           grep -Fq 'TRASHCAN_IMAGE_ARCHITECTURE=arm64' raspberry-pi-image-build.log
           grep -Fq 'TRASHCAN_IMAGE_RELEASE=bookworm' raspberry-pi-image-build.log

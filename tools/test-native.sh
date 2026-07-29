@@ -21,6 +21,7 @@ mkdir -p "$build_dir"
   tests/native/test_startup_zero_preemption.c \
   tests/native/test_motor_simulation.c \
   tests/native/test_hall_qualifier.c \
+  tests/native/test_hall_cycle_orientation.c \
   firmware/gd32/boards/gausstop_dphc_v33/gausstop_swd_pulse.c \
   firmware/gd32/common/protocol/gs_protocol.c \
   firmware/gd32/common/protocol/gs_frame_parser.c \
@@ -28,6 +29,7 @@ mkdir -p "$build_dir"
   firmware/gd32/common/control/gs_console.c \
   firmware/gd32/common/motor/gs_commutation.c \
   firmware/gd32/common/motor/gs_hall_qualifier.c \
+  firmware/gd32/common/motor/gs_hall_cycle.c \
   firmware/gd32/common/motor/gs_motor_control.c \
   firmware/gd32/common/motor/gs_motor_profile.c \
   firmware/gd32/common/safety/gs_safety.c \

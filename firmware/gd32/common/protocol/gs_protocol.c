@@ -88,10 +88,8 @@ static bool ready_zero_preempts_unacknowledged_disable(
   return current->speed == 0 && current->steer == 0 &&
          (current->master_flags & GS_COMMAND_DISABLE) != 0u &&
          (current->slave_flags & GS_COMMAND_DISABLE) != 0u &&
-         (current->master_flags &
-          (GS_COMMAND_CLEAR_FAULT | GS_COMMAND_SHUTDOWN)) == 0u &&
-         (current->slave_flags &
-          (GS_COMMAND_CLEAR_FAULT | GS_COMMAND_SHUTDOWN)) == 0u;
+         (current->master_flags & GS_COMMAND_SHUTDOWN) == 0u &&
+         (current->slave_flags & GS_COMMAND_SHUTDOWN) == 0u;
 }
 
 void gs_command_sequencer_init(gs_command_sequencer *sequencer) {

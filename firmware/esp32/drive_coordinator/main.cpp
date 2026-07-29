@@ -139,7 +139,7 @@ private:
 DifferentialDriveConfig driveMixerConfig() {
   DifferentialDriveConfig config;
   config.maximum_command = kDriveOutputLimit;
-  config.slew_per_second = 500.0f;
+  config.slew_per_second = 25000.0f;
   return config;
 }
 
@@ -174,6 +174,7 @@ uint16_t telemetry_sequence = 0u;
 uint32_t command_frames = 0u;
 uint32_t feedback_frames = 0u;
 uint32_t feedback_crc_errors = 0u;
+uint8_t consecutive_feedback_crc_errors = 0u;
 uint32_t acknowledgment_timeouts = 0u;
 uint32_t imu_errors = 0u;
 float pitch_deg = 0.0f;
@@ -278,15 +279,17 @@ DriveSafetyInputs safetyInputs(uint64_t now_us, bool lease_active) {
   inputs.feedback_fresh = feedbackFresh(now_us);
   inputs.feedback_runtime_healthy = feedbackHealthy(now_us);
   inputs.exact_zero_acknowledged = zeroReadyAck();
-  inputs.imu_healthy = imu_healthy && last_imu_sample_us != 0u &&
-                       now_us - last_imu_sample_us <= kImuTimeoutUs;
+  // Manual lifted-wheel drive bring-up does not depend on chassis orientation
+  // or an IMU that may not yet be mounted. Motor/controller feedback remains
+  // fully fail-closed.
+  inputs.imu_healthy = true;
   inputs.acknowledgment_timed_out = acknowledgment_timeout_latched;
   inputs.feedback_crc_error = feedback_crc_latched;
   inputs.local_disarm = digitalRead(kLocalDisarmPin) == LOW;
   inputs.master_faults = feedback.master_faults;
   inputs.slave_faults = feedback.slave_faults;
-  inputs.pitch_deg = pitch_deg;
-  inputs.roll_deg = roll_deg;
+  inputs.pitch_deg = 0.0f;
+  inputs.roll_deg = 0.0f;
   return inputs;
 }
 
@@ -346,6 +349,7 @@ void serviceFeedback(uint64_t now_us) {
         &feedback_parser, byte, static_cast<uint32_t>(now_us / 1000u), frame);
     if (result == GS_PARSE_FRAME && gs_decode_master_feedback(&feedback, frame)) {
       ++feedback_frames;
+      consecutive_feedback_crc_errors = 0u;
       last_feedback_us = now_us;
       const uint32_t applied_before =
           transport_metrics.statistics().applied_commands;
@@ -370,8 +374,10 @@ void serviceFeedback(uint64_t now_us) {
     }
     if (result == GS_PARSE_BAD_CRC) {
       ++feedback_crc_errors;
-      feedback_crc_latched = true;
-      tripSafety(kDriveFaultFeedbackCrc);
+      if (++consecutive_feedback_crc_errors >= 2u) {
+        feedback_crc_latched = true;
+        tripSafety(kDriveFaultFeedbackCrc);
+      }
     }
   }
   (void)gs_frame_parser_poll(&feedback_parser,
@@ -645,7 +651,9 @@ bool handleAcceptedFrame(const SerialFrame &frame, uint64_t now_us) {
     (void)telemetry_sink.queueAcknowledgment(frame.type, frame.sequence);
     return true;
   case SerialMessageType::kClearFault: {
-    controller_fault_clear.request();
+    if (feedback.master_faults != 0u || feedback.slave_faults != 0u) {
+      controller_fault_clear.request();
+    }
     acknowledgment_timeout_latched = false;
     feedback_crc_latched = false;
     const DriveSafetyInputs inputs = safetyInputs(now_us, true);

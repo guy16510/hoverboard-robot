@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - goal/donkeycar-driveway-mvp
+      - feature/pi-esp32-wifi-simulated-drive
   pull_request:
     branches:
       - main

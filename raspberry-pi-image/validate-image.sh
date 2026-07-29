@@ -77,6 +77,8 @@ for fact in \
   'robot_service=enabled' \
   'robot_service_contract=validated' \
   'python_smoke=passed' \
+  'opencv_apriltag=passed' \
+  'backup_camera_config=validated' \
   'application_tests=passed' \
   'systemd_verify=passed' \
   'dependency_check=passed' \
@@ -149,6 +151,7 @@ printf 'Exported image Node.js validated: node %s, npm %s\n' "$node_version" "$n
 chroot "$root_mount" /usr/bin/env \
   PYTHONDONTWRITEBYTECODE=1 PYTHONPATH="$app" \
   "$app/.venv/bin/python" - <<'PY'
+import cv2
 import flask
 import psutil
 import serial
@@ -160,8 +163,15 @@ from donkeycar.parts.tub_v2 import TubWriter
 from trashcan_robot.config import load_config
 from trashcan_robot.pipeline import create_tub_writer
 from trashcan_robot.protocol import crc16_ccitt_false
+
+if not hasattr(cv2, 'aruco'):
+    raise SystemExit('Exported image is missing cv2.aruco')
+if not hasattr(cv2.aruco, 'DICT_APRILTAG_36h11'):
+    raise SystemExit('Exported image is missing AprilTag 36h11 support')
 cfg = load_config('/opt/trashcan-robot/donkeycar/config/robot.yaml')
 assert cfg.serial.baud == 115200
+assert cfg.raw['backup_camera']['enabled'] is True
+assert cfg.raw['backup_camera']['family'] == '36h11'
 assert crc16_ccitt_false(b'123456789') == 0x29B1
 assert 'base_path' in signature(TubWriter).parameters
 
@@ -176,6 +186,7 @@ writer = create_tub_writer(
     ['image_array'],
 )
 assert writer.base_path == '/tmp/tub-contract'
+print('Exported image OpenCV AprilTag smoke test passed')
 print('Exported image Python smoke test passed')
 PY
 chroot "$root_mount" /usr/bin/env PYTHONDONTWRITEBYTECODE=1 \

@@ -6,6 +6,7 @@
 #include <stdint.h>
 
 #include "gs_commutation.h"
+#include "gs_hall_cycle.h"
 #include "gs_motor_profile.h"
 #include "gs_types.h"
 
@@ -15,6 +16,11 @@ typedef struct {
   bool (*apply)(void *context, const gs_commutation_vector *vector,
                 uint16_t compare_offset);
 } gs_bridge_port;
+
+typedef struct {
+  gs_commutation_profile commutation_profile;
+  gs_hall_cycle_mode hall_cycle_mode;
+} gs_motor_configuration;
 
 typedef enum {
   GS_MOTOR_DISABLED = 0,
@@ -27,6 +33,7 @@ typedef enum {
 typedef struct {
   gs_motor_state state;
   gs_commutation_profile commutation_profile;
+  gs_hall_cycle_tracker hall_cycle;
   int16_t applied_command;
   int16_t requested_command;
   int32_t odometer;
@@ -61,6 +68,9 @@ void gs_motor_init(gs_motor_controller *motor, gs_bridge_port bridge,
 void gs_motor_init_profile(gs_motor_controller *motor, gs_bridge_port bridge,
                            gs_commutation_profile commutation_profile,
                            uint32_t now_ms);
+void gs_motor_init_config(gs_motor_controller *motor, gs_bridge_port bridge,
+                          const gs_motor_configuration *configuration,
+                          uint32_t now_ms);
 gs_motor_output gs_motor_step(gs_motor_controller *motor,
                               const gs_motor_input *input);
 bool gs_motor_bridge_active(const gs_motor_controller *motor);

@@ -43,7 +43,7 @@ node --test "$ROOT/tools/pi-client/test/"*.test.mjs
 "$PYTHON_BIN" -m venv --system-site-packages "$VENV"
 "$VENV/bin/python" -m pip install --upgrade pip wheel
 "$VENV/bin/pip" install -r "$APP/requirements.txt"
-"$VENV/bin/python" - <<'PY'
+PYTHONPATH="$APP" "$VENV/bin/python" - <<'PY'
 import cv2
 if not hasattr(cv2, "aruco"):
     raise SystemExit("python3-opencv is missing cv2.aruco AprilTag support")

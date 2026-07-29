@@ -1,6 +1,6 @@
 {
   "actions": [
-    { "atMs": 1000, "command": "mode", "value": 3 },
+    { "atMs": 1000, "command": "mode", "value": 2 },
     { "atMs": 1500, "command": "direct", "left": 0, "right": 0 },
     { "atMs": 2500, "command": "arm" },
     { "atMs": 3500, "command": "direct", "left": 50, "right": 0 },

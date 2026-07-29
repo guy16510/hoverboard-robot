@@ -27,6 +27,8 @@ public:
   explicit DifferentialDriveMixer(const DifferentialDriveConfig &config);
   DifferentialDriveOutput update(float linear_velocity, float angular_velocity,
                                  float dt_seconds);
+  DifferentialDriveOutput updateDirect(float left, float right,
+                                       float dt_seconds);
   void stop();
 
 private:

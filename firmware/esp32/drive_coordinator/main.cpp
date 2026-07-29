@@ -894,8 +894,13 @@ void runControlLoop(uint64_t now_us) {
     return;
   }
 
-  latest_mix = mixer.update(request.linear_velocity, request.yaw_rate,
-                            static_cast<float>(kControlPeriodUs) / 1000000.0f);
+  const float dt_seconds =
+      static_cast<float>(kControlPeriodUs) / 1000000.0f;
+  latest_mix =
+      request.direct_motor
+          ? mixer.updateDirect(request.direct_left, request.direct_right,
+                               dt_seconds)
+          : mixer.update(request.linear_velocity, request.yaw_rate, dt_seconds);
   if (!latest_mix.valid || std::fabs(latest_mix.left) > kDriveOutputLimit ||
       std::fabs(latest_mix.right) > kDriveOutputLimit) {
     tripSafety(kDriveFaultMalformedCommand);

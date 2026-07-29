@@ -75,6 +75,27 @@ int main() {
   assert(output.left == 0.0f);
   assert(output.right == 0.0f);
 
+  // Regression for the captured physical direct command [250, 0]: an
+  // acknowledged direct request must reach a nonzero left output rather than
+  // being discarded in favor of the zero velocity/yaw fields.
+  mixer.stop();
+  output = mixer.updateDirect(250.0f, 0.0f, 0.01f);
+  assert(output.valid);
+  assert(close(output.target_left, 250.0f));
+  assert(close(output.target_right, 0.0f));
+  assert(close(output.left, 5.0f));
+  assert(close(output.right, 0.0f));
+  for (int index = 0; index < 49; ++index) {
+    output = mixer.updateDirect(250.0f, 0.0f, 0.01f);
+  }
+  assert(close(output.left, 250.0f));
+  assert(close(output.right, 0.0f));
+
+  output = mixer.updateDirect(251.0f, 0.0f, 0.01f);
+  assert(!output.valid);
+  assert(output.left == 0.0f);
+  assert(output.right == 0.0f);
+
   DifferentialDriveConfig unsafe = config;
   unsafe.maximum_command = 700.0f;
   DifferentialDriveMixer unsafe_mixer(unsafe);

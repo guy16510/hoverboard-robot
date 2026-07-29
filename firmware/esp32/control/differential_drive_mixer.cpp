@@ -64,6 +64,35 @@ DifferentialDriveOutput DifferentialDriveMixer::update(float linear_velocity,
   return output;
 }
 
+DifferentialDriveOutput
+DifferentialDriveMixer::updateDirect(float left, float right,
+                                     float dt_seconds) {
+  DifferentialDriveOutput output;
+  output.target_left = left;
+  output.target_right = right;
+  if (!std::isfinite(left) || !std::isfinite(right) ||
+      !std::isfinite(dt_seconds) || dt_seconds <= 0.0f ||
+      !std::isfinite(config_.maximum_command) ||
+      !std::isfinite(config_.slew_per_second) ||
+      config_.maximum_command <= 0.0f || config_.slew_per_second <= 0.0f ||
+      config_.maximum_command > kDriveOutputLimit ||
+      std::fabs(left) > config_.maximum_command ||
+      std::fabs(right) > config_.maximum_command) {
+    stop();
+    output.valid = false;
+    return output;
+  }
+
+  const float maximum_delta = config_.slew_per_second * dt_seconds;
+  left_ = std::clamp(moveToward(left_, left, maximum_delta),
+                     -kDriveOutputLimit, kDriveOutputLimit);
+  right_ = std::clamp(moveToward(right_, right, maximum_delta),
+                      -kDriveOutputLimit, kDriveOutputLimit);
+  output.left = left_;
+  output.right = right_;
+  return output;
+}
+
 void DifferentialDriveMixer::stop() {
   left_ = 0.0f;
   right_ = 0.0f;

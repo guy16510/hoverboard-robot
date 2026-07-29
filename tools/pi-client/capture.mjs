@@ -397,16 +397,18 @@ async function capture(options) {
     if (lifecycle.canHandleSerialEvent) finish("serial-ended", 1);
   });
 
-  send(MessageType.HELLO, "hello");
-  send(MessageType.DISARM, "disarm");
-  send(MessageType.CAPABILITIES, "capabilities");
-  if (options.query) {
-    poll();
-    queryTimer = setInterval(poll, options.pollMilliseconds);
-  }
-  for (const action of options.commandPlan?.actions ?? []) {
-    actionTimers.push(setTimeout(() => executeAction(action), action.atMs));
-  }
+  actionTimers.push(setTimeout(() => {
+    send(MessageType.HELLO, "hello");
+    send(MessageType.DISARM, "disarm");
+    send(MessageType.CAPABILITIES, "capabilities");
+    if (options.query) {
+      poll();
+      queryTimer = setInterval(poll, options.pollMilliseconds);
+    }
+    for (const action of options.commandPlan?.actions ?? []) {
+      actionTimers.push(setTimeout(() => executeAction(action), action.atMs));
+    }
+  }, 1000));
 
   if (process.stdin.isTTY) {
     process.stdout.write(
@@ -429,7 +431,7 @@ async function capture(options) {
   process.once("SIGTERM", () => finish("terminated", 1));
   durationTimer = setTimeout(
     () => finish("duration-complete"),
-    options.durationSeconds * 1000,
+    options.durationSeconds * 1000 + 1000,
   );
 }
 

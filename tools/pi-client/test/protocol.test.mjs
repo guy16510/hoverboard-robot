@@ -456,7 +456,7 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
   const plan = normalizeStagePlan({
     actions: [
       { atMs: 500, command: "upright-offset", value: -16.3 },
-      { atMs: 1000, command: "mode", value: 3 },
+      { atMs: 1000, command: "mode", value: 2 },
       { atMs: 1500, command: "direct", left: 0, right: 0 },
       { atMs: 2000, command: "arm" },
       { atMs: 2500, command: "direct", left: 250, right: -250 },
@@ -473,7 +473,7 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
   assert.equal(offset.readInt32LE(1), -16300);
   assert.throws(() => normalizeStagePlan({
     actions: [
-      { atMs: 1000, command: "mode", value: 3 },
+      { atMs: 1000, command: "mode", value: 2 },
       { atMs: 1250, command: "direct", left: 0, right: 0 },
       { atMs: 1500, command: "arm" },
       { atMs: 2000, command: "direct", left: 251, right: 0 },
@@ -482,6 +482,17 @@ test("motor transport plans are bounded, ordered, and fail-safe", () => {
       { atMs: 4000, command: "disarm" },
     ],
   }, { stage: "motor-transport", durationSeconds: 10 }), /left/);
+  assert.throws(() => normalizeStagePlan({
+    actions: [
+      { atMs: 1000, command: "mode", value: 3 },
+      { atMs: 1500, command: "direct", left: 0, right: 0 },
+      { atMs: 2000, command: "arm" },
+      { atMs: 2500, command: "direct", left: 250, right: 0 },
+      { atMs: 3000, command: "direct", left: 0, right: 0 },
+      { atMs: 3500, command: "stop" },
+      { atMs: 4000, command: "disarm" },
+    ],
+  }, { stage: "motor-transport", durationSeconds: 10 }), /requires mode 2/);
 });
 
 test("lifted-wheel plans reject direct motion and require fail-safe ending", () => {

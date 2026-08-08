@@ -1,6 +1,0 @@
-{
-  "name": "tool-scons",
-  "version": "4.40801.0",
-  "description": "Local wrapper for pinned SCons 4.8.1",
-  "system": ["*"]
-}

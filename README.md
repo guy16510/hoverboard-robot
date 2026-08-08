@@ -1,75 +1,85 @@
-# GAUSSTOP one-ESP32 dual-motor firmware
+# Trashcan robot drivetrain
 
-Clean, GPLv3 firmware for one ESP32 coordinating two GAUSSTOP DPHC-V3.3
-GD32F130C8T6 motor controllers in a master/slave topology.
+This repository drives two hoverboard wheels using two independent WinXu 36/48 V 350 W 18 A brushless motor controllers and one ESP32.
 
-```text
-USB console (115200) -> ESP32 -> GPIO17/GPIO35 (19200) -> master GD32
-                                                         -> PA2/PA3 (115200) -> slave GD32
-```
+The previous GAUSSTOP GD32 firmware, reverse-engineering notes, research documents, SWD transport, and master/slave controller stack have been removed.
 
-The ESP32 is the only high-level controller. The master mixes logical left and
-right demands, drives its local motor, mirrors the slave electrical command,
-and combines feedback. The slave accepts commands only from the master.
-
-The USB command interface is newline-delimited ASCII:
+## Architecture
 
 ```text
-enable
-drive SPEED STEER
-lr LEFT RIGHT
-forward VALUE
-reverse VALUE
-ramp STEP
-stop
-disable
-clearfault
-shutdown
-status
-help
+Donkeycar on Raspberry Pi
+        |
+        | USB serial, 115200 baud
+        | versioned binary command + lease protocol
+        v
+      ESP32
+        |
+        +-- GPIO25 DAC -> left controller throttle
+        +-- GPIO26 DAC -> right controller throttle
+        +-- GPIO27 -> isolated left reverse switch
+        +-- GPIO14 -> isolated right reverse switch
+        +-- GPIO33 -> isolated left low-brake switch
+        +-- GPIO32 -> isolated right low-brake switch
+        |
+        +-- front ultrasonic: TRIG16 / ECHO34
+        +-- left ultrasonic:  TRIG17 / ECHO35
+        +-- right ultrasonic: TRIG18 / ECHO39
+        |
+        +-- WinXu controller -> left hoverboard wheel
+        +-- WinXu controller -> right hoverboard wheel
 ```
 
-Reset is disabled with zero demand. `enable` never creates motor demand.
-Motion commands are rejected until enabled. The default ramp is 10 command
-units per 50 ms heartbeat.
+The ESP32 starts with both low-level brakes asserted. Motion requires Donkeycar to select drive mode, establish a current 500 ms command lease, and arm. If Pi commands stop arriving, throttle drops to zero and the brakes are asserted locally on the ESP32.
 
-## Validation status
+Direction changes are interlocked. The ESP32 ramps throttle to zero, applies the brake, changes the isolated reverse input, waits for the controller to settle, then ramps throttle back up.
 
-- **Historically physically verified:** GAUSSTOP bridge and Hall pin mapping
-  recorded from the read-only legacy project.
-- **Awaiting hardware validation:** the exposed connector route to master
-  PB6/PB7, all electrical safety inputs, wheel direction, and loaded behavior.
-- No firmware is flashed and no serial or USB hardware is accessed by this
-  repository's build or test commands.
+## Wiring
 
-Use `./tools/test-all.sh` for host tests and `./tools/build-all.sh` for all
-firmware builds. Neither command uploads firmware or enumerates devices.
+Read [`docs/WIRING.md`](docs/WIRING.md) before powering the motor controllers. It contains the exact ESP32 pin map, the WinXu controller reference image, throttle wiring, brake/reverse isolation requirements, ultrasonic voltage dividers, and the lifted-wheel bring-up sequence.
 
-The next ESP32 balance layer is a separate, dry-run-first environment:
+## ESP32 build
 
 ```sh
-.venv/bin/pio run -e esp32_balance_coordinator
+python -m venv .venv
+.venv/bin/pip install -r requirements-dev.txt
+.venv/bin/pio run -e esp32_winxu_drive
 ```
 
-It scans an MPU6050 on GPIO21/22, runs a 200 Hz estimator/controller schedule,
-accepts the versioned Raspberry Pi protocol over USB serial, and preserves the
-GPIO17/35 motor path while always transmitting disabled zero output by default.
-The optional `esp32_balance_web` environment compiles a removable static
-page/WebSocket adapter; the default environment explicitly excludes Wi-Fi.
+Flash with PlatformIO after selecting the ESP32 serial port:
 
-See [the Pi serial protocol](docs/pi-serial-protocol.md),
-[balance wiring](docs/balance-wiring.md),
-[the tuning guide](docs/balance-tuning.md), and
-[local validation notes](docs/local-balance-validation.md). When the hardware
-is attached to another computer, use the
-[remote evidence capture workflow](docs/remote-balance-evidence.md).
+```sh
+.venv/bin/pio run -e esp32_winxu_drive -t upload --upload-port /dev/ttyUSB0
+```
 
-See [UPSTREAM.md](UPSTREAM.md), [LEGACY.md](LEGACY.md), [HARDWARE.md](HARDWARE.md),
-[PROTOCOL.md](PROTOCOL.md), [SAFETY.md](SAFETY.md), and
-[HARDWARE_VALIDATION.md](HARDWARE_VALIDATION.md) before using any artifact.
+The production build defaults are in `platformio.ini`.
 
-## License
+## Donkeycar
 
-GPL-3.0-only. See [LICENSE](LICENSE). Modified upstream concepts and retained
-legacy behavior are identified in `UPSTREAM.md`, `LEGACY.md`, and
-`SOURCE_CLASSIFICATION.csv`.
+The Raspberry Pi side remains under `donkeycar/`. The serial port is configured as `auto`, which prefers `/dev/serial/by-id/*` and falls back to `/dev/ttyUSB*` or `/dev/ttyACM*`.
+
+Donkeycar publishes these drivetrain outputs:
+
+```text
+esp32/connected
+drive/linear
+drive/angular
+serial/latency_ms
+drive/fault
+ultrasonic/front_m
+ultrasonic/left_m
+ultrasonic/right_m
+```
+
+The ultrasonic values are also included in the robot dashboard state and JSON run logs.
+
+Run the Pi tests with:
+
+```sh
+PYTHONPATH=donkeycar python -m pytest -q donkeycar/tests
+```
+
+## Safety boundary
+
+Software is not the emergency stop. Put the WinXu power-lock/controller-enable path behind a physical emergency-stop or keyed switch. The ESP32 brake outputs are useful fail-safe behavior while firmware is running, but an ESP32 reset or wiring failure must not be treated as a substitute for a physical power disconnect.
+
+Do all first motion and reverse testing with the wheels lifted and the chassis physically restrained.

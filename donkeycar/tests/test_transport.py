@@ -4,11 +4,17 @@ import pytest
 
 from trashcan_robot.config import SerialConfig
 from trashcan_robot.protocol import (
+    ACK,
     ARM,
+    CAPABILITIES,
+    DRIVE_MODE,
+    ERROR,
     HELLO,
+    MAX_PAYLOAD,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
     ULTRASONIC,
+    VERSION,
     FrameDecoder,
     encode_frame,
 )
@@ -26,85 +32,115 @@ def make_config(port: str = "/dev/ttyACM0") -> SerialConfig:
     )
 
 
-def test_connect_sends_zero_demand_before_every_arm_attempt(monkeypatch) -> None:
-    writes: list[bytes] = []
+class RespondingSerial:
+    def __init__(self, fail_message_type: int | None = None) -> None:
+        self.is_open = True
+        self.rx = bytearray()
+        self.writes: list[bytes] = []
+        self.fail_message_type = fail_message_type
 
-    class FakeSerial:
-        is_open = True
-        in_waiting = 0
+    @property
+    def in_waiting(self) -> int:
+        return len(self.rx)
 
-        def reset_input_buffer(self) -> None:
+    def reset_input_buffer(self) -> None:
+        self.rx.clear()
+
+    def write(self, data: bytes) -> None:
+        self.writes.append(data)
+        frame = FrameDecoder().feed(data)[0]
+        if frame.message_type == self.fail_message_type:
+            payload = struct.pack("<BBH", frame.message_type, 6, DRIVE_MODE)
+            self.rx.extend(encode_frame(ERROR, frame.sequence, payload))
             return
-
-        def write(self, data: bytes) -> None:
-            writes.append(data)
-
-        def flush(self) -> None:
+        if frame.message_type == HELLO:
+            payload = struct.pack(
+                "<BBBBHHHH",
+                VERSION,
+                0,
+                0,
+                1 << DRIVE_MODE,
+                50,
+                50,
+                MAX_PAYLOAD,
+                0,
+            )
+            self.rx.extend(encode_frame(CAPABILITIES, frame.sequence, payload))
             return
+        self.rx.extend(
+            encode_frame(ACK, frame.sequence, bytes((frame.message_type, 0)))
+        )
 
-        def close(self) -> None:
-            self.is_open = False
+    def read(self, count: int) -> bytes:
+        data = bytes(self.rx[:count])
+        del self.rx[:count]
+        return data
 
+    def flush(self) -> None:
+        return
+
+    def close(self) -> None:
+        self.is_open = False
+
+
+def install_serial(monkeypatch, fake: RespondingSerial) -> None:
     monkeypatch.setattr(
         "trashcan_robot.transport.serial.Serial",
-        lambda *args, **kwargs: FakeSerial(),
+        lambda *args, **kwargs: fake,
     )
-    monkeypatch.setattr("trashcan_robot.transport.time.sleep", lambda _: None)
+
+
+def written_message_types(fake: RespondingSerial) -> list[int]:
+    frames = FrameDecoder().feed(b"".join(fake.writes))
+    return [frame.message_type for frame in frames]
+
+
+def test_connect_requires_capabilities_mode_zero_lease_and_arm_ack(monkeypatch) -> None:
+    fake = RespondingSerial()
+    install_serial(monkeypatch, fake)
     transport = SerialMotorTransport(make_config())
 
     transport.connect()
 
-    frames = FrameDecoder().feed(b"".join(writes))
-    message_types = [frame.message_type for frame in frames]
-    assert message_types[:2] == [HELLO, SET_OPERATING_MODE]
-    assert message_types.count(ARM) == 20
-    assert all(
-        message_types[index - 1] == SET_VELOCITY_YAW
-        for index, message_type in enumerate(message_types)
-        if message_type == ARM
-    )
+    assert transport.is_connected()
+    assert written_message_types(fake)[:4] == [
+        HELLO,
+        SET_OPERATING_MODE,
+        SET_VELOCITY_YAW,
+        ARM,
+    ]
+
+
+def test_connect_fails_if_esp32_rejects_arm(monkeypatch) -> None:
+    fake = RespondingSerial(fail_message_type=ARM)
+    install_serial(monkeypatch, fake)
+    monkeypatch.setattr("trashcan_robot.transport.time.sleep", lambda _: None)
+    transport = SerialMotorTransport(make_config())
+
+    with pytest.raises(ConnectionError, match="handshake failed"):
+        transport.connect()
+
+    assert not transport.is_connected()
+
+
+def test_send_command_waits_for_matching_ack(monkeypatch) -> None:
+    fake = RespondingSerial()
+    install_serial(monkeypatch, fake)
+    transport = SerialMotorTransport(make_config())
+    transport.connect()
+
+    latency = transport.send_command(0.1, -0.2)
+
+    assert latency >= 0.0
+    assert written_message_types(fake)[-1] == SET_VELOCITY_YAW
 
 
 def test_transport_caches_ultrasonic_frames(monkeypatch) -> None:
-    instances: list[object] = []
-
-    class FakeSerial:
-        def __init__(self) -> None:
-            self.is_open = True
-            self.rx = bytearray()
-            instances.append(self)
-
-        @property
-        def in_waiting(self) -> int:
-            return len(self.rx)
-
-        def reset_input_buffer(self) -> None:
-            self.rx.clear()
-
-        def write(self, data: bytes) -> None:
-            return
-
-        def read(self, count: int) -> bytes:
-            data = bytes(self.rx[:count])
-            del self.rx[:count]
-            return data
-
-        def flush(self) -> None:
-            return
-
-        def close(self) -> None:
-            self.is_open = False
-
-    monkeypatch.setattr(
-        "trashcan_robot.transport.serial.Serial",
-        lambda *args, **kwargs: FakeSerial(),
-    )
-    monkeypatch.setattr("trashcan_robot.transport.time.sleep", lambda _: None)
+    fake = RespondingSerial()
+    install_serial(monkeypatch, fake)
     transport = SerialMotorTransport(make_config())
     transport.connect()
 
-    fake = instances[0]
-    assert isinstance(fake, FakeSerial)
     payload = struct.pack("<HHHBB", 500, 750, 1250, 0b111, 0)
     fake.rx.extend(encode_frame(ULTRASONIC, 123, payload))
 
@@ -116,6 +152,21 @@ def test_transport_caches_ultrasonic_frames(monkeypatch) -> None:
 
     telemetry = transport.read_telemetry()
     assert any(frame.message_type == ULTRASONIC for frame in telemetry)
+
+
+def test_stale_ultrasonic_is_not_reused_forever(monkeypatch) -> None:
+    fake = RespondingSerial()
+    install_serial(monkeypatch, fake)
+    transport = SerialMotorTransport(make_config())
+    transport.connect()
+
+    payload = struct.pack("<HHHBB", 500, 750, 1250, 0b111, 0)
+    fake.rx.extend(encode_frame(ULTRASONIC, 123, payload))
+    transport.send_command(0.0, 0.0)
+    assert transport.latest_ultrasonic().front_m == pytest.approx(0.5)
+
+    transport._ultrasonic_updated_at = 0.0
+    assert transport.latest_ultrasonic().front_m is None
 
 
 def test_auto_port_prefers_stable_by_id_path(monkeypatch) -> None:

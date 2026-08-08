@@ -7,6 +7,7 @@ MARKER = b"\xA5\x5A"
 VERSION = 1
 MAX_PAYLOAD = 48
 HELLO = 0x01
+CAPABILITIES = 0x02
 ARM = 0x10
 DISARM = 0x11
 STOP = 0x12
@@ -20,6 +21,7 @@ IMU = 0x31
 MOTOR = 0x32
 ODOMETRY = 0x33
 FAULTS = 0x34
+ULTRASONIC = 0x35
 ACK = 0x7E
 ERROR = 0x7F
 DRIVE_MODE = 2
@@ -53,6 +55,30 @@ class Frame:
     flags: int
     sequence: int
     payload: bytes
+
+
+@dataclass(frozen=True)
+class UltrasonicReading:
+    front_m: float | None
+    left_m: float | None
+    right_m: float | None
+
+
+def decode_ultrasonic(payload: bytes) -> UltrasonicReading:
+    if len(payload) != 8:
+        raise ValueError("ultrasonic payload must be 8 bytes")
+    front_mm, left_mm, right_mm, valid_mask, _reserved = struct.unpack("<HHHBB", payload)
+
+    def value(index: int, millimeters: int) -> float | None:
+        if not valid_mask & (1 << index) or millimeters == 0xFFFF:
+            return None
+        return millimeters / 1000.0
+
+    return UltrasonicReading(
+        front_m=value(0, front_mm),
+        left_m=value(1, left_mm),
+        right_m=value(2, right_mm),
+    )
 
 
 class FrameDecoder:

@@ -3,6 +3,7 @@ name: Build Donkeycar driveway MVP
 on:
   push:
     branches:
+      - main
       - feature/winxu-esp32-direct-drive
   pull_request:
     branches:

@@ -3,7 +3,7 @@ name: Build Donkeycar driveway MVP
 on:
   push:
     branches:
-      - goal/donkeycar-driveway-mvp
+      - feature/winxu-esp32-direct-drive
   pull_request:
     branches:
       - main
@@ -24,12 +24,11 @@ jobs:
         with:
           python-version: '3.12'
 
-      - name: Bootstrap pinned build tools
+      - name: Install pinned build tools
         run: |
           set -euo pipefail
           python -m venv .venv
           .venv/bin/pip install --disable-pip-version-check -r requirements-dev.txt
-          ./tools/bootstrap-tools.sh
 
       - name: Validate deployment contract
         run: |
@@ -51,27 +50,27 @@ jobs:
           .venv/bin/pip install --disable-pip-version-check -r donkeycar/requirements-test.txt
           PYTHONPATH=donkeycar .venv/bin/python -m pytest -q donkeycar/tests
 
-      - name: Build production ESP32 drive coordinator
+      - name: Build WinXu ESP32 drivetrain firmware
         run: |
           set -euo pipefail
           export PLATFORMIO_CORE_DIR="$PWD/.platformio"
           export PLATFORMIO_SETTING_ENABLE_TELEMETRY=no
-          if ! .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator > esp32-drive-build.log 2>&1; then
+          if ! .venv/bin/pio run -e esp32_winxu_drive > esp32-drive-build.log 2>&1; then
             tail -250 esp32-drive-build.log
             exit 1
           fi
           tail -80 esp32-drive-build.log
 
-      - name: Upload production ESP32 firmware
+      - name: Upload ESP32 firmware
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02
         with:
-          name: esp32-drive-coordinator-${{ github.event.pull_request.head.sha || github.sha }}
+          name: esp32-winxu-drive-${{ github.event.pull_request.head.sha || github.sha }}
           path: |
-            .pio/build/esp32_drive_coordinator/firmware.bin
-            .pio/build/esp32_drive_coordinator/firmware.elf
-            .pio/build/esp32_drive_coordinator/firmware.map
-            .pio/build/esp32_drive_coordinator/bootloader.bin
-            .pio/build/esp32_drive_coordinator/partitions.bin
+            .pio/build/esp32_winxu_drive/firmware.bin
+            .pio/build/esp32_winxu_drive/firmware.elf
+            .pio/build/esp32_winxu_drive/firmware.map
+            .pio/build/esp32_winxu_drive/bootloader.bin
+            .pio/build/esp32_winxu_drive/partitions.bin
           if-no-files-found: error
           retention-days: 30
 

@@ -6,7 +6,7 @@ camera:
 controller:
   web_port: 8887
 serial:
-  port: /dev/cu.usbserial-0001
+  port: auto
   baud: 115200
   timeout_seconds: 0.05
   reconnect_seconds: 1.0

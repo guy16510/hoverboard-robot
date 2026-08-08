@@ -1,6 +1,0 @@
-{
-  "name": "toolchain-xtensa-esp32",
-  "version": "8.4.0+2021r2-patch5",
-  "description": "Espressif crosstool-NG esp-2021r2-patch5",
-  "system": ["*"]
-}

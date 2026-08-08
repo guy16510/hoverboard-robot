@@ -1,6 +1,0 @@
-{
-  "name": "toolchain-gccarmnoneeabi",
-  "version": "1.140201.0",
-  "description": "Arm GNU Toolchain 14.2.Rel1",
-  "system": ["*"]
-}

@@ -1,6 +1,0 @@
-{
-  "name": "tool-esptoolpy",
-  "version": "2.41100.0",
-  "description": "Local wrapper for pinned esptool 4.11.0",
-  "system": ["*"]
-}

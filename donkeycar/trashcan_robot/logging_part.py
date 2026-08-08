@@ -3,9 +3,9 @@ from __future__ import annotations
 import json
 import os
 import time
+from collections.abc import Callable
 from datetime import datetime, timezone
 from pathlib import Path
-from collections.abc import Callable
 from typing import Any
 
 import psutil
@@ -64,10 +64,7 @@ class JsonRunLogger:
             "serial_latency_ms": snapshot.get("serial_latency_ms"),
             "esp32_heartbeat": snapshot.get("esp32_connected", False),
             "telemetry_packets": telemetry,
-            "wheel_speed": snapshot.get("telemetry", {}).get("wheel_speed"),
-            "pitch": snapshot.get("telemetry", {}).get("pitch"),
-            "roll": snapshot.get("telemetry", {}).get("roll"),
-            "yaw": snapshot.get("telemetry", {}).get("yaw"),
+            "ultrasonic": snapshot.get("ultrasonic", {}),
             "model_name": self._model_name,
             "mode": snapshot.get("mode"),
             "faults": snapshot.get("faults", []),

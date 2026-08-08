@@ -110,12 +110,12 @@ def test_pipeline_keeps_drive_and_ultrasonic_outputs_explicit() -> None:
         "ultrasonic/right_m",
     ]
     assert STATE_UPDATE_INPUTS[-5:] == [
+        "ultrasonic/front_m",
         "ultrasonic/left_m",
         "ultrasonic/right_m",
         "camera/fps",
         "inference/rate",
-    ][-5:]
-    assert "ultrasonic/front_m" in STATE_UPDATE_INPUTS
+    ]
 
 
 def test_autonomous_is_blocked_when_esp32_disconnects() -> None:

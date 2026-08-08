@@ -19,6 +19,11 @@ class RobotState:
             "fps": 0.0,
             "inference_rate": 0.0,
             "serial_latency_ms": None,
+            "ultrasonic": {
+                "front_m": None,
+                "left_m": None,
+                "right_m": None,
+            },
             "telemetry": {},
             "faults": [],
             "model_name": None,

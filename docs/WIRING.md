@@ -34,6 +34,28 @@ Important: WinXu sells several harness variants under the 350 W / 18 A family. T
 
 GPIO 25 and 26 are the ESP32 DAC outputs. The firmware uses real DAC voltage, not PWM, so no PWM-to-analog RC filter is required.
 
+```text
+ESP32                     LEFT CONTROLLER
+GPIO25  --1k--+---------- Throttle signal
+              |
+             10k
+              |
+GND ----------+---------- Throttle ground
+GPIO27 -> isolator ------ Reverse switch pair, only if labeled Reverse
+GPIO33 -> isolator ------ Low-brake switch pair
+
+ESP32                     RIGHT CONTROLLER
+GPIO26  --1k--+---------- Throttle signal
+              |
+             10k
+              |
+GND ----------+---------- Throttle ground
+GPIO14 -> isolator ------ Reverse switch pair, only if labeled Reverse
+GPIO32 -> isolator ------ Low-brake switch pair
+```
+
+The 10 kOhm throttle pull-down is intentional. It holds the controller throttle signal near zero while the ESP32 is unpowered, resetting, or before firmware configures the DAC pin.
+
 ## One motor controller
 
 Repeat this section for left and right controllers.
@@ -57,7 +79,7 @@ Typical throttle wiring is:
 |---|---|
 | +5 V, normally red | Leave disconnected from ESP32 |
 | GND, normally black | ESP32 GND |
-| Signal, often green or white | Left GPIO25 or right GPIO26 through a 1 kOhm series resistor |
+| Signal, often green or white | Left GPIO25 or right GPIO26 through a 1 kOhm series resistor, plus 10 kOhm signal-to-GND pull-down |
 
 Do not connect the controller's 5 V throttle supply to an ESP32 GPIO or to the ESP32 3.3 V rail.
 
@@ -76,7 +98,7 @@ ESP32 GPIO33 (left)  -> isolator -> LEFT controller low-brake pair
 ESP32 GPIO32 (right) -> isolator -> RIGHT controller low-brake pair
 ```
 
-The firmware asserts both brakes whenever it is disarmed, whenever the Pi command lease expires, and while changing motor direction.
+The firmware asserts both brakes whenever it is disarmed, whenever the Pi command lease expires, and while changing motor direction. A physical emergency-stop or controller power-lock remains required because software braking cannot protect against every reset, wiring fault, or failed ESP32.
 
 ### Reverse
 

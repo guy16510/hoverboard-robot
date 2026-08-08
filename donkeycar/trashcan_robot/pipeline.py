@@ -11,7 +11,7 @@ from .dashboard import DashboardServer
 from .esp32_drive import ESP32Drive
 from .logging_part import JsonRunLogger
 from .state import RobotState
-from .transport import MockMotorTransport, SerialMotorTransport
+from .transport import MockMotorTransport, MotorTransport, SerialMotorTransport
 
 DRIVE_OUTPUTS = [
     "esp32/connected",
@@ -19,6 +19,11 @@ DRIVE_OUTPUTS = [
     "drive/angular",
     "serial/latency_ms",
     "drive/fault",
+]
+ULTRASONIC_OUTPUTS = [
+    "ultrasonic/front_m",
+    "ultrasonic/left_m",
+    "ultrasonic/right_m",
 ]
 STATE_UPDATE_INPUTS = [
     "robot/mode",
@@ -28,6 +33,7 @@ STATE_UPDATE_INPUTS = [
     "esp32/connected",
     "serial/latency_ms",
     "drive/fault",
+    *ULTRASONIC_OUTPUTS,
     "camera/fps",
     "inference/rate",
 ]
@@ -99,6 +105,7 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         inputs=["throttle", "angle"],
         outputs=DRIVE_OUTPUTS,
     )
+    vehicle.add(UltrasonicPart(transport), outputs=ULTRASONIC_OUTPUTS)
 
     tub_root = Path(config.raw["data"]["tubs_directory"])
     tub_root.mkdir(parents=True, exist_ok=True)
@@ -208,6 +215,15 @@ class DriveMode:
         )
 
 
+class UltrasonicPart:
+    def __init__(self, transport: MotorTransport) -> None:
+        self._transport = transport
+
+    def run(self) -> tuple[float | None, float | None, float | None]:
+        reading = self._transport.latest_ultrasonic()
+        return reading.front_m, reading.left_m, reading.right_m
+
+
 class StateUpdater:
     def __init__(self, state: RobotState, model_name: str) -> None:
         self._state = state
@@ -222,6 +238,9 @@ class StateUpdater:
         connected: bool | None,
         latency: float | None,
         fault: str | None,
+        ultrasonic_front_m: float | None,
+        ultrasonic_left_m: float | None,
+        ultrasonic_right_m: float | None,
         fps: float | None,
         inference_rate: float | None,
     ) -> None:
@@ -232,6 +251,11 @@ class StateUpdater:
             throttle=float(throttle or 0.0),
             esp32_connected=bool(connected),
             serial_latency_ms=latency,
+            ultrasonic={
+                "front_m": ultrasonic_front_m,
+                "left_m": ultrasonic_left_m,
+                "right_m": ultrasonic_right_m,
+            },
             faults=[fault] if fault else [],
             model_name=self._model_name,
             fps=float(fps or 0.0),

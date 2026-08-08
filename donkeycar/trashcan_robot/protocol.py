@@ -26,6 +26,12 @@ ACK = 0x7E
 ERROR = 0x7F
 DRIVE_MODE = 2
 
+MOTION_PAYLOAD_BYTES = 10
+CAPABILITIES_PAYLOAD_BYTES = 12
+ULTRASONIC_PAYLOAD_BYTES = 8
+ACK_PAYLOAD_BYTES = 2
+ERROR_PAYLOAD_BYTES = 4
+
 
 def crc16_ccitt_false(data: bytes) -> int:
     crc = 0xFFFF
@@ -46,7 +52,9 @@ def encode_frame(message_type: int, sequence: int, payload: bytes = b"", flags: 
 def encode_motion(linear_velocity: float, angular_velocity: float, lease_id: int, lease_ms: int) -> bytes:
     linear = max(-32768, min(32767, round(linear_velocity * 1000)))
     angular = max(-32768, min(32767, round(angular_velocity * 1000)))
-    return struct.pack("<hhIH", linear, angular, lease_id & 0xFFFFFFFF, lease_ms)
+    payload = struct.pack("<hhIH", linear, angular, lease_id & 0xFFFFFFFF, lease_ms)
+    assert len(payload) == MOTION_PAYLOAD_BYTES
+    return payload
 
 
 @dataclass(frozen=True)
@@ -58,14 +66,74 @@ class Frame:
 
 
 @dataclass(frozen=True)
+class Capabilities:
+    protocol_version: int
+    dry_run: bool
+    web_control: bool
+    operating_mode_mask: int
+    control_hz: int
+    motor_output_hz: int
+    maximum_payload: int
+    runtime_config_keys: int
+
+    def supports_mode(self, mode: int) -> bool:
+        return bool(self.operating_mode_mask & (1 << mode))
+
+
+@dataclass(frozen=True)
+class Acknowledgment:
+    request_type: int
+    status: int
+
+
+@dataclass(frozen=True)
+class ErrorResponse:
+    request_type: int
+    code: int
+    detail: int
+
+
+@dataclass(frozen=True)
 class UltrasonicReading:
     front_m: float | None
     left_m: float | None
     right_m: float | None
 
 
+def decode_capabilities(payload: bytes) -> Capabilities:
+    if len(payload) != CAPABILITIES_PAYLOAD_BYTES:
+        raise ValueError("capabilities payload must be 12 bytes")
+    version, dry_run, web_control, mode_mask, control_hz, motor_hz, max_payload, runtime_keys = struct.unpack(
+        "<BBBBHHHH", payload
+    )
+    return Capabilities(
+        protocol_version=version,
+        dry_run=bool(dry_run),
+        web_control=bool(web_control),
+        operating_mode_mask=mode_mask,
+        control_hz=control_hz,
+        motor_output_hz=motor_hz,
+        maximum_payload=max_payload,
+        runtime_config_keys=runtime_keys,
+    )
+
+
+def decode_ack(payload: bytes) -> Acknowledgment:
+    if len(payload) != ACK_PAYLOAD_BYTES:
+        raise ValueError("acknowledgment payload must be 2 bytes")
+    request_type, status = struct.unpack("<BB", payload)
+    return Acknowledgment(request_type=request_type, status=status)
+
+
+def decode_error(payload: bytes) -> ErrorResponse:
+    if len(payload) != ERROR_PAYLOAD_BYTES:
+        raise ValueError("error payload must be 4 bytes")
+    request_type, code, detail = struct.unpack("<BBH", payload)
+    return ErrorResponse(request_type=request_type, code=code, detail=detail)
+
+
 def decode_ultrasonic(payload: bytes) -> UltrasonicReading:
-    if len(payload) != 8:
+    if len(payload) != ULTRASONIC_PAYLOAD_BYTES:
         raise ValueError("ultrasonic payload must be 8 bytes")
     front_mm, left_mm, right_mm, valid_mask, _reserved = struct.unpack("<HHHBB", payload)
 

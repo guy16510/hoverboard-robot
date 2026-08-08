@@ -6,13 +6,17 @@ import pytest
 from trashcan_robot.pipeline import (
     DRIVE_OUTPUTS,
     STATE_UPDATE_INPUTS,
+    ULTRASONIC_OUTPUTS,
     DriveMode,
     FrequencyMeter,
     PilotCondition,
     StateUpdater,
+    UltrasonicPart,
     create_tub_writer,
 )
+from trashcan_robot.protocol import UltrasonicReading
 from trashcan_robot.state import RobotState
+from trashcan_robot.transport import MockMotorTransport
 
 
 def test_tub_writer_uses_donkeycar_53_base_path_keyword() -> None:
@@ -56,7 +60,7 @@ def test_frequency_meter_reports_completed_one_second_window() -> None:
     assert meter.run() == pytest.approx(20.0)
 
 
-def test_state_updater_publishes_runtime_rates() -> None:
+def test_state_updater_publishes_runtime_rates_and_ultrasonic() -> None:
     state = RobotState()
     updater = StateUpdater(state, "driveway")
 
@@ -68,6 +72,9 @@ def test_state_updater_publishes_runtime_rates() -> None:
         False,
         None,
         None,
+        0.42,
+        0.75,
+        None,
         19.8,
         0.0,
     )
@@ -75,9 +82,21 @@ def test_state_updater_publishes_runtime_rates() -> None:
     snapshot = state.snapshot()
     assert snapshot["fps"] == 19.8
     assert snapshot["inference_rate"] == 0.0
+    assert snapshot["ultrasonic"] == {
+        "front_m": 0.42,
+        "left_m": 0.75,
+        "right_m": None,
+    }
 
 
-def test_pipeline_keeps_drive_outputs_separate_from_state_telemetry() -> None:
+def test_ultrasonic_part_exposes_transport_reading() -> None:
+    transport = MockMotorTransport(
+        ultrasonic=UltrasonicReading(front_m=0.25, left_m=0.5, right_m=1.25)
+    )
+    assert UltrasonicPart(transport).run() == (0.25, 0.5, 1.25)
+
+
+def test_pipeline_keeps_drive_and_ultrasonic_outputs_explicit() -> None:
     assert DRIVE_OUTPUTS == [
         "esp32/connected",
         "drive/linear",
@@ -85,7 +104,18 @@ def test_pipeline_keeps_drive_outputs_separate_from_state_telemetry() -> None:
         "serial/latency_ms",
         "drive/fault",
     ]
-    assert STATE_UPDATE_INPUTS[-2:] == ["camera/fps", "inference/rate"]
+    assert ULTRASONIC_OUTPUTS == [
+        "ultrasonic/front_m",
+        "ultrasonic/left_m",
+        "ultrasonic/right_m",
+    ]
+    assert STATE_UPDATE_INPUTS[-5:] == [
+        "ultrasonic/left_m",
+        "ultrasonic/right_m",
+        "camera/fps",
+        "inference/rate",
+    ][-5:]
+    assert "ultrasonic/front_m" in STATE_UPDATE_INPUTS
 
 
 def test_autonomous_is_blocked_when_esp32_disconnects() -> None:

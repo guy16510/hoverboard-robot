@@ -1,64 +1,53 @@
-# Donkeycar driveway MVP
+# Donkeycar driveway runtime
 
-This directory adds Donkeycar as the Raspberry Pi high-level driving system while preserving the existing GD32 hoverboard motor controller and its safety boundary.
+Donkeycar is the Raspberry Pi high-level driving system. It sends normalized steering and throttle through the existing versioned USB serial protocol to an ESP32. The ESP32 now directly controls two WinXu 36/48 V 350 W 18 A motor controllers instead of forwarding commands to GAUSSTOP boards.
 
 ## Architecture
 
 ```text
-Pi Camera 3 -> Donkeycar vehicle pipeline -> steering/throttle
-                                       -> ESP32Drive
-                                       -> velocity/yaw over USB serial
-                                       -> ESP32 differential-drive coordinator
-                                       -> existing GD32 motor controller firmware
+Pi camera -> Donkeycar pipeline -> steering/throttle
+                              -> ESP32Drive
+                              -> USB serial
+                              -> ESP32
+                                   -> left/right throttle DAC
+                                   -> left/right reverse isolation
+                                   -> left/right brake isolation
+                                   -> front/left/right ultrasonic sensors
+                              -> WinXu controllers -> hoverboard wheels
 ```
 
-The Pi never generates motor PWM. The adapter uses the repository's existing binary protocol from `docs/pi-serial-protocol.md`. The ESP32 drive coordinator converts velocity and yaw into bounded left and right demands, applies slew limiting, monitors the MPU6050 and motor feedback, and sends the existing command frames to the GD32 controller.
+The Pi never generates motor phase PWM. It sends velocity/yaw commands with a 500 ms lease. The ESP32 performs differential mixing, throttle slew limiting, direction-change interlocking and local lease timeout braking.
 
-## Build the ESP32 drive firmware
+## ESP32 firmware
+
+From the repository root:
 
 ```sh
 python -m venv .venv
 .venv/bin/pip install -r requirements-dev.txt
-./tools/bootstrap-tools.sh
-PLATFORMIO_CORE_DIR="$PWD/.platformio" \
-  .venv/bin/pio run -c platformio-drive.ini -e esp32_drive_coordinator
+.venv/bin/pio run -e esp32_winxu_drive
 ```
 
-The application image is generated at:
+The application image is generated under:
 
 ```text
-.pio/build/esp32_drive_coordinator/firmware.bin
+.pio/build/esp32_winxu_drive/
 ```
 
-The pull request workflow also publishes a complete ESP32 artifact containing the application, bootloader, partition table, ELF, and map. Flash using the established ESP32 method for this repository. Do not flash or run powered wheels until the lifted-wheel gate below is complete.
+See `docs/WIRING.md` before flashing or powering the controllers.
 
-## Install on Raspberry Pi 5
+## Raspberry Pi
 
 ```sh
-git clone https://github.com/guy16510/hoverboard-robot.git
-cd hoverboard-robot
-git checkout goal/donkeycar-driveway-mvp
 chmod +x donkeycar/scripts/install-pi.sh
 ./donkeycar/scripts/install-pi.sh
 source donkeycar/.venv/bin/activate
 cd donkeycar
 ```
 
-Confirm `/dev/ttyACM0` is the ESP32 and adjust `config/robot.yaml` when needed. On connection the Pi sends hello, selects operating mode `drive`, and explicitly arms. Motion remains lease-bound and falls to zero when commands expire.
+`config/robot.yaml` uses `serial.port: auto`. The transport prefers a stable `/dev/serial/by-id/*` ESP32 path, then `/dev/ttyUSB*`, then `/dev/ttyACM*`.
 
-## Mock validation without hardware
-
-```sh
-cd donkeycar
-python -m pytest -q
-python manage.py drive --mock --config config/robot.yaml
-```
-
-Mock mode validates the pipeline boundary and dashboard without opening a serial device. It does not prove camera drivers, motor direction, loaded braking, hill control, or physical emergency-stop behavior.
-
-## Manual driving and recording
-
-Donkeycar's normal controller and tub pipeline remain the source of manual controls and recorded data. Use the Donkeycar web controller from another device on the same network, or configure its supported joystick controller for an Xbox controller.
+## Manual drive
 
 ```sh
 python manage.py drive --config config/robot.yaml
@@ -66,53 +55,52 @@ python manage.py drive --config config/robot.yaml
 
 Open:
 
-* Donkeycar controller, `http://<pi-ip>:8887`
-* Robot status dashboard, `http://<pi-ip>:8888`
+* Donkeycar controller: `http://<pi-ip>:8887`
+* Robot dashboard: `http://<pi-ip>:8888`
 
-Use manual mode first. Start recording only when the camera view and steering signs are correct. Tubs remain standard Donkeycar tubs, no custom dataset format is introduced.
+The dashboard `/api/state` includes the three ultrasonic ranges.
 
-## Training workflow
+## Donkeycar signals
 
-Record multiple clean passes in both driveway directions and across lighting conditions. Copy the tubs to the training machine, then use standard Donkeycar training commands. A representative command is:
+The drivetrain publishes:
 
-```sh
-donkey train --tub ./data/tubs/* --model ./models/driveway.h5 --type linear
+```text
+esp32/connected
+drive/linear
+drive/angular
+serial/latency_ms
+drive/fault
+ultrasonic/front_m
+ultrasonic/left_m
+ultrasonic/right_m
 ```
 
-Use the exact CLI supported by the installed Donkeycar version. Copy the resulting model back to the Pi and set `model.path` and `model.name` in YAML.
+Ultrasonic distances are meters. `None` means no valid recent ESP32 measurement.
 
-## Autonomous run
+These values are available to additional Donkeycar Parts, so obstacle avoidance can consume them without opening a second serial connection or talking directly to the ESP32.
+
+## Mock validation
 
 ```sh
-python manage.py drive --config config/robot.yaml --model models/driveway.h5
+cd donkeycar
+python -m pytest -q
+python manage.py drive --mock --config config/robot.yaml
 ```
 
-Autonomous output is gated by the ESP32 connection. If the serial transport fails, `ESP32Drive` attempts a zero command, closes the transport, reports disconnected state, and the pipeline stops pilot inference/output until reconnection. The ESP32 independently disables output on stale leases, feedback loss, excessive tilt, transport acknowledgment timeout, local disarm, or internal fault.
+Mock mode validates the Donkeycar pipeline and dashboard but cannot prove controller direction, braking, throttle voltage, reverse wiring or ultrasonic electrical wiring.
 
-## Configuration
+## First hardware run
 
-All integration settings are in `config/robot.yaml`, including camera dimensions, serial device, reconnect timing, logging paths, dashboard bind address, output limits, and model path. There are no hardcoded absolute paths.
+1. Use the wiring guide and keep both wheels lifted.
+2. Complete the WinXu self-learning procedure one motor at a time.
+3. Confirm the dashboard sees the ESP32 and three ultrasonic ranges.
+4. Command zero throttle and confirm neither wheel moves.
+5. Command a very small positive throttle and confirm both contact patches move robot-forward.
+6. Release throttle and confirm both low-level brakes engage.
+7. Only if both controller harnesses have a connector explicitly labeled `Reverse`, command a very small negative throttle and confirm both wheels reverse.
+8. Unplug Pi USB or stop Donkeycar commands and confirm the ESP32 lease expires to zero/brake within 500 ms.
+9. Lower the robot only after those checks pass.
 
-The initial ESP32 mixer defaults are intentionally bounded to 700 command units with a 900-unit-per-second slew limit. Change those only after lifted-wheel direction and braking tests.
+## Training
 
-## Logs
-
-Each process creates JSON Lines logs under `logging.directory`. Records include camera FPS, inference rate, CPU and RAM use, process RSS, serial latency, ESP32 connection heartbeat, raw telemetry packets, wheel-speed and IMU fields when decoded, model name, mode, faults, and UTC timestamp.
-
-## Fast driveway test order
-
-1. Confirm the pull request CI built the production ESP32 artifact and passed Python and mixer tests.
-2. Flash the ESP32 drive coordinator.
-3. Boot with drive wheels lifted and casters restrained.
-4. Confirm the MPU6050 is detected and the dashboard reports an ESP32 connection.
-5. Confirm zero throttle keeps both motor commands at zero.
-6. Verify positive throttle produces the intended forward wheel direction at the lowest Donkeycar limit.
-7. Verify steering sign and left/right mixing.
-8. Verify releasing control lets the 500 ms lease expire to zero.
-9. Verify unplugging Pi USB disables motion.
-10. Verify tilting the chassis beyond 45 degrees disables motion.
-11. Manually drive at walking pace and record several tubs.
-12. Train a basic linear model.
-13. Run autonomous mode with a spotter and immediate physical emergency-stop access.
-
-This is an MVP integration. It intentionally excludes obstacle avoidance, route planning, docking, GPS, RTK, ROS, SLAM, and trash-can detection.
+Tubs remain standard Donkeycar tubs. Existing camera, steering and throttle training workflows are unchanged. Ultrasonic distances are live Donkeycar signals and dashboard/log telemetry, but are not automatically added to the training tub schema.

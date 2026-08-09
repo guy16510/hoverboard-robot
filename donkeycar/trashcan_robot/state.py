@@ -7,16 +7,7 @@ from typing import Any
 
 
 def empty_hall_state() -> dict[str, Any]:
-    return {
-        "state": 0,
-        "valid": False,
-        "moving": False,
-        "transitions": 0,
-        "transitions_per_second": 0.0,
-        "invalid_states": 0,
-        "skipped_transitions": 0,
-        "last_transition_age_s": None,
-    }
+    return {"state": 0, "valid": False, "moving": False, "transitions": 0, "transitions_per_second": 0.0, "invalid_states": 0, "skipped_transitions": 0, "last_transition_age_s": None}
 
 
 class RobotState:
@@ -32,11 +23,8 @@ class RobotState:
             "fps": 0.0,
             "inference_rate": 0.0,
             "serial_latency_ms": None,
-            "ultrasonic": {
-                "front_m": None,
-                "left_m": None,
-                "right_m": None,
-            },
+            "ultrasonic": {"front_m": None, "left_m": None, "right_m": None},
+            "imu": {"accel_x_g": 0.0, "accel_y_g": 0.0, "accel_z_g": 0.0, "gyro_x_dps": 0.0, "gyro_y_dps": 0.0, "gyro_z_dps": 0.0, "temperature_c": 0.0, "valid": False},
             "right_hall": empty_hall_state(),
             "left_hall": empty_hall_state(),
             "telemetry": {},

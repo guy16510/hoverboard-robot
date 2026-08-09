@@ -1,16 +1,16 @@
 # ESP32 Robot Carrier PCB
 
-Carrier PCB for a 30-pin ESP32 DevKit V1, robot sensors, dual motor-controller low-voltage I/O, and Raspberry Pi power.
+Carrier PCB for a 30-pin ESP32 DevKit V1, robot sensors, dual motor-controller low-voltage I/O, and Raspberry Pi/ESP32 low-voltage power distribution.
 
 ## Power architecture
 
-- Input: 10S battery, 36 V nominal / 42 V full charge.
-- On-board 5 V buck: TPS54560-class 60 V / 5 A converter, target output 5.1 V.
-- 5.1 V rail powers the Raspberry Pi, ESP32 VIN, ultrasonic modules, Hall sensors, and servo connector.
+- Input to this PCB is **regulated 5 V only**. Do not connect the 10S battery directly to this board.
+- Use an external 36-42 V to 5 V buck converter sized for the Raspberry Pi and peripherals.
+- The external 5 V rail feeds the Raspberry Pi, ESP32 VIN, ultrasonic modules, Hall sensors, and servo connector.
 - MPU6050 is powered from ESP32 3.3 V.
 - All low-voltage grounds share a common ground plane.
 - Motor phase/current paths do NOT pass through this PCB.
-- Motor-controller throttle +5 V reference wires must NOT be tied to this board's 5.1 V rail.
+- Motor-controller throttle +5 V reference wires must NOT be tied to this board's 5 V rail.
 
 ## ESP32 pin map
 
@@ -36,22 +36,22 @@ Carrier PCB for a 30-pin ESP32 DevKit V1, robot sensors, dual motor-controller l
 
 ## Connector plan
 
-- J1 BATTERY IN: BAT+ / GND
-- J2 PI 5V OUT: +5V1 / GND, high-current connector
+- J1 5V IN: +5V / GND, from external regulated buck converter
+- J2 PI 5V OUT: +5V / GND, high-current connector
 - J3 LEFT MOTOR CTRL: THROTTLE / REVERSE / BRAKE / GND
 - J4 RIGHT MOTOR CTRL: THROTTLE / REVERSE / BRAKE / GND
-- J5 RIGHT HALL: +5V1 / HALL_A / HALL_B / HALL_C / GND
-- J6 LEFT HALL: +5V1 / HALL_A / HALL_B / HALL_C / GND
-- J7 FRONT ULTRASONIC: +5V1 / TRIG / ECHO / GND
-- J8 LEFT ULTRASONIC: +5V1 / TRIG / ECHO / GND
-- J9 RIGHT ULTRASONIC: +5V1 / TRIG / ECHO / GND
+- J5 RIGHT HALL: +5V / HALL_A / HALL_B / HALL_C / GND
+- J6 LEFT HALL: +5V / HALL_A / HALL_B / HALL_C / GND
+- J7 FRONT ULTRASONIC: +5V / TRIG / ECHO / GND
+- J8 LEFT ULTRASONIC: +5V / TRIG / ECHO / GND
+- J9 RIGHT ULTRASONIC: +5V / TRIG / ECHO / GND
 - J10 MPU6050: +3V3 / SDA / SCL / GND
-- J11 SERVO: +5V1 / SIGNAL / GND
-- J12 SPARE POWER: +5V1 / +3V3 / GND
+- J11 SERVO: +5V / SIGNAL / GND
+- J12 SPARE POWER: +5V / +3V3 / GND
 
 ## Input protection / level shifting
 
-All six Hall inputs and all three ultrasonic ECHO inputs use resistor dividers before reaching the ESP32. Nominal values: 10 kOhm upper resistor and 18 kOhm lower resistor, yielding approximately 3.21 V from a 5 V input. Add 100 nF optional filter footprints on Hall inputs if noise requires them.
+All six Hall inputs and all three ultrasonic ECHO inputs use resistor dividers before reaching the ESP32. Nominal values are 10 kOhm upper and 18 kOhm lower, yielding approximately 3.21 V from a 5 V input. Optional 100 nF Hall-filter footprints may be fitted if noise requires them.
 
 ## Reverse and brake outputs
 
@@ -59,29 +59,19 @@ GPIO27, GPIO14, GPIO33, and GPIO32 drive four low-side N-channel MOSFET stages. 
 
 ## Throttle outputs
 
-GPIO25 and GPIO26 are routed to the left and right throttle signal connectors through 1 kOhm series resistors. Provide optional RC filter footprints (1 kOhm + 1 uF) so firmware may use either the ESP32 DAC output directly or a smoothed waveform. Motor-controller throttle ground must connect to PCB GND.
-
-## 5.1 V regulator section
-
-The schematic reserves the TI TPS54560 60 V / 5 A buck topology and follows the TPS54560EVM-515 architecture as the reference implementation. The final PCB layout must keep the switch node compact, use a solid ground plane, large input/output copper, thermal vias under the exposed pad, and keep sensor traces away from the switching node.
-
-Recommended protection at battery input:
-
-- replaceable fuse or resettable fuse footprint
-- reverse-polarity protection footprint
-- 60 V+ TVS footprint
-- bulk input capacitor rated at least 63 V
+GPIO25 and GPIO26 are routed to the left and right throttle signal connectors through 1 kOhm series resistors. Optional 1 uF RC filter footprints are provided. Motor-controller throttle ground must connect to PCB GND.
 
 ## PCB layout requirements
 
-- 2-layer minimum, 2 oz copper preferred if the Pi 5 V rail is routed on-board.
-- Keep the buck converter and Pi power connector together at one edge.
-- Keep Hall/ultrasonic inputs on the opposite side from the buck switch node.
-- Use wide pours for BAT+, +5V1, and GND.
+- 2-layer board is sufficient.
+- Use a wide +5V plane/trace and solid GND plane for Raspberry Pi/servo current.
+- Put J1 external 5V input and J2 Pi output close together.
+- Keep Hall and ultrasonic signal traces away from servo/high-current 5V routing.
 - Add four M3 mounting holes.
 - Put connector names and pin functions on silkscreen.
-- Add test points for BAT+, +5V1, +3V3, GND, both throttle outputs, and each Hall input.
+- Add test points for +5V, +3V3, GND, both throttle outputs, and each Hall input.
+- Clearly silk-screen **5V ONLY - NO BATTERY VOLTAGE** next to J1.
 
 ## Release status
 
-This directory defines the updated electrical design and schematic source. Do not send Gerbers to fabrication until the KiCad ERC/DRC pass, the exact ESP32 DevKit footprint is checked against the physical board, the chosen JLCPCB-available buck components are verified, and the 5 V rail is load-tested at Raspberry Pi current.
+The high-voltage 36-42 V input and onboard buck converter have been removed. This carrier is low-voltage only. The schematic still requires final footprint assignment, physical ESP32 header-spacing verification, PCB placement/routing, ERC/DRC, and Gerber/drill generation before fabrication. Do not order from JLCPCB until those steps are complete.

@@ -18,6 +18,7 @@ from .protocol import (
     DISARM,
     DRIVE_MODE,
     ERROR,
+    HALL,
     HELLO,
     MAX_PAYLOAD,
     SET_OPERATING_MODE,
@@ -27,10 +28,12 @@ from .protocol import (
     VERSION,
     Frame,
     FrameDecoder,
+    HallReading,
     UltrasonicReading,
     decode_ack,
     decode_capabilities,
     decode_error,
+    decode_hall,
     decode_ultrasonic,
     encode_frame,
     encode_motion,
@@ -39,6 +42,19 @@ from .protocol import (
 
 class ProtocolError(ConnectionError):
     pass
+
+
+def empty_hall_reading() -> HallReading:
+    return HallReading(
+        state=0,
+        valid=False,
+        moving=False,
+        transitions=0,
+        invalid_states=0,
+        skipped_transitions=0,
+        transitions_per_second=0.0,
+        last_transition_age_s=None,
+    )
 
 
 class MotorTransport(abc.ABC):
@@ -58,6 +74,9 @@ class MotorTransport(abc.ABC):
     def latest_ultrasonic(self) -> UltrasonicReading: ...
 
     @abc.abstractmethod
+    def latest_hall(self) -> HallReading: ...
+
+    @abc.abstractmethod
     def is_connected(self) -> bool: ...
 
 
@@ -65,6 +84,7 @@ class SerialMotorTransport(MotorTransport):
     _HANDSHAKE_ATTEMPTS = 5
     _HANDSHAKE_RETRY_SECONDS = 0.05
     _ULTRASONIC_STALE_SECONDS = 0.5
+    _HALL_STALE_SECONDS = 0.5
 
     def __init__(self, config: SerialConfig) -> None:
         self._config = config
@@ -76,6 +96,8 @@ class SerialMotorTransport(MotorTransport):
         self._telemetry_queue: list[Frame] = []
         self._latest_ultrasonic = UltrasonicReading(None, None, None)
         self._ultrasonic_updated_at: float | None = None
+        self._latest_hall = empty_hall_reading()
+        self._hall_updated_at: float | None = None
         self._ready = False
 
     def connect(self) -> None:
@@ -139,6 +161,14 @@ class SerialMotorTransport(MotorTransport):
                 return UltrasonicReading(None, None, None)
             return self._latest_ultrasonic
 
+    def latest_hall(self) -> HallReading:
+        with self._lock:
+            if self._hall_updated_at is None:
+                return empty_hall_reading()
+            if time.monotonic() - self._hall_updated_at > self._HALL_STALE_SECONDS:
+                return empty_hall_reading()
+            return self._latest_hall
+
     def is_connected(self) -> bool:
         return self._ready and self._serial_open()
 
@@ -156,6 +186,8 @@ class SerialMotorTransport(MotorTransport):
         self._telemetry_queue.clear()
         self._latest_ultrasonic = UltrasonicReading(None, None, None)
         self._ultrasonic_updated_at = None
+        self._latest_hall = empty_hall_reading()
+        self._hall_updated_at = None
         self._ready = False
 
     def _close_serial(self) -> None:
@@ -235,6 +267,12 @@ class SerialMotorTransport(MotorTransport):
                 self._ultrasonic_updated_at = time.monotonic()
             except ValueError:
                 return
+        elif frame.message_type == HALL:
+            try:
+                self._latest_hall = decode_hall(frame.payload)
+                self._hall_updated_at = time.monotonic()
+            except ValueError:
+                return
         self._telemetry_queue.append(frame)
 
     def _write(self, message_type: int, payload: bytes) -> int:
@@ -273,6 +311,7 @@ class MockMotorTransport(MotorTransport):
     commands: list[dict[str, Any]] = field(default_factory=list)
     telemetry: list[Frame] = field(default_factory=list)
     ultrasonic: UltrasonicReading = field(default_factory=lambda: UltrasonicReading(None, None, None))
+    hall: HallReading = field(default_factory=empty_hall_reading)
 
     def connect(self) -> None:
         self.connected = True
@@ -297,6 +336,9 @@ class MockMotorTransport(MotorTransport):
 
     def latest_ultrasonic(self) -> UltrasonicReading:
         return self.ultrasonic
+
+    def latest_hall(self) -> HallReading:
+        return self.hall
 
     def is_connected(self) -> bool:
         return self.connected

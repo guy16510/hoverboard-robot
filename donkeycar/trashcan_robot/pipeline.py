@@ -25,6 +25,16 @@ ULTRASONIC_OUTPUTS = [
     "ultrasonic/left_m",
     "ultrasonic/right_m",
 ]
+HALL_OUTPUTS = [
+    "hall/right_state",
+    "hall/right_valid",
+    "hall/right_moving",
+    "hall/right_transitions",
+    "hall/right_tps",
+    "hall/right_invalid_states",
+    "hall/right_skipped_transitions",
+    "hall/right_age_s",
+]
 STATE_UPDATE_INPUTS = [
     "robot/mode",
     "recording",
@@ -34,6 +44,7 @@ STATE_UPDATE_INPUTS = [
     "serial/latency_ms",
     "drive/fault",
     *ULTRASONIC_OUTPUTS,
+    *HALL_OUTPUTS,
     "camera/fps",
     "inference/rate",
 ]
@@ -106,6 +117,7 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         outputs=DRIVE_OUTPUTS,
     )
     vehicle.add(UltrasonicPart(transport), outputs=ULTRASONIC_OUTPUTS)
+    vehicle.add(HallPart(transport), outputs=HALL_OUTPUTS)
 
     tub_root = Path(config.raw["data"]["tubs_directory"])
     tub_root.mkdir(parents=True, exist_ok=True)
@@ -224,6 +236,26 @@ class UltrasonicPart:
         return reading.front_m, reading.left_m, reading.right_m
 
 
+class HallPart:
+    def __init__(self, transport: MotorTransport) -> None:
+        self._transport = transport
+
+    def run(
+        self,
+    ) -> tuple[int, bool, bool, int, float, int, int, float | None]:
+        reading = self._transport.latest_hall()
+        return (
+            reading.state,
+            reading.valid,
+            reading.moving,
+            reading.transitions,
+            reading.transitions_per_second,
+            reading.invalid_states,
+            reading.skipped_transitions,
+            reading.last_transition_age_s,
+        )
+
+
 class StateUpdater:
     def __init__(self, state: RobotState, model_name: str) -> None:
         self._state = state
@@ -241,6 +273,14 @@ class StateUpdater:
         ultrasonic_front_m: float | None,
         ultrasonic_left_m: float | None,
         ultrasonic_right_m: float | None,
+        hall_right_state: int | None,
+        hall_right_valid: bool | None,
+        hall_right_moving: bool | None,
+        hall_right_transitions: int | None,
+        hall_right_tps: float | None,
+        hall_right_invalid_states: int | None,
+        hall_right_skipped_transitions: int | None,
+        hall_right_age_s: float | None,
         fps: float | None,
         inference_rate: float | None,
     ) -> None:
@@ -255,6 +295,16 @@ class StateUpdater:
                 "front_m": ultrasonic_front_m,
                 "left_m": ultrasonic_left_m,
                 "right_m": ultrasonic_right_m,
+            },
+            right_hall={
+                "state": int(hall_right_state or 0),
+                "valid": bool(hall_right_valid),
+                "moving": bool(hall_right_moving),
+                "transitions": int(hall_right_transitions or 0),
+                "transitions_per_second": float(hall_right_tps or 0.0),
+                "invalid_states": int(hall_right_invalid_states or 0),
+                "skipped_transitions": int(hall_right_skipped_transitions or 0),
+                "last_transition_age_s": hall_right_age_s,
             },
             faults=[fault] if fault else [],
             model_name=self._model_name,

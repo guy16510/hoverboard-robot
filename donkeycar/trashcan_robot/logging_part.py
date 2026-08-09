@@ -65,6 +65,7 @@ class JsonRunLogger:
             "esp32_heartbeat": snapshot.get("esp32_connected", False),
             "telemetry_packets": telemetry,
             "ultrasonic": snapshot.get("ultrasonic", {}),
+            "right_hall": snapshot.get("right_hall", {}),
             "model_name": self._model_name,
             "mode": snapshot.get("mode"),
             "faults": snapshot.get("faults", []),

@@ -9,6 +9,7 @@ from trashcan_robot.protocol import (
     CAPABILITIES,
     DRIVE_MODE,
     ERROR,
+    HALL,
     HELLO,
     MAX_PAYLOAD,
     SET_OPERATING_MODE,
@@ -154,6 +155,38 @@ def test_transport_caches_ultrasonic_frames(monkeypatch) -> None:
     assert any(frame.message_type == ULTRASONIC for frame in telemetry)
 
 
+def test_transport_caches_right_hall_frames(monkeypatch) -> None:
+    fake = RespondingSerial()
+    install_serial(monkeypatch, fake)
+    transport = SerialMotorTransport(make_config())
+    transport.connect()
+
+    payload = struct.pack(
+        "<BBHIIIII",
+        6,
+        0b11,
+        0,
+        77,
+        1,
+        2,
+        25000,
+        12,
+    )
+    fake.rx.extend(encode_frame(HALL, 124, payload))
+
+    transport.send_command(0.1, 0.0)
+    reading = transport.latest_hall()
+    assert reading.state == 6
+    assert reading.valid
+    assert reading.moving
+    assert reading.transitions == 77
+    assert reading.transitions_per_second == pytest.approx(25.0)
+    assert reading.last_transition_age_s == pytest.approx(0.012)
+
+    telemetry = transport.read_telemetry()
+    assert any(frame.message_type == HALL for frame in telemetry)
+
+
 def test_stale_ultrasonic_is_not_reused_forever(monkeypatch) -> None:
     fake = RespondingSerial()
     install_serial(monkeypatch, fake)
@@ -167,6 +200,31 @@ def test_stale_ultrasonic_is_not_reused_forever(monkeypatch) -> None:
 
     transport._ultrasonic_updated_at = 0.0
     assert transport.latest_ultrasonic().front_m is None
+
+
+def test_stale_hall_is_marked_invalid(monkeypatch) -> None:
+    fake = RespondingSerial()
+    install_serial(monkeypatch, fake)
+    transport = SerialMotorTransport(make_config())
+    transport.connect()
+
+    payload = struct.pack(
+        "<BBHIIIII",
+        3,
+        0b01,
+        0,
+        15,
+        0,
+        0,
+        0,
+        1000,
+    )
+    fake.rx.extend(encode_frame(HALL, 125, payload))
+    transport.send_command(0.0, 0.0)
+    assert transport.latest_hall().valid
+
+    transport._hall_updated_at = 0.0
+    assert not transport.latest_hall().valid
 
 
 def test_auto_port_prefers_stable_by_id_path(monkeypatch) -> None:

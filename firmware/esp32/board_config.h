@@ -13,6 +13,14 @@ constexpr uint8_t kRightReversePin = 14;
 constexpr uint8_t kLeftBrakePin = 33;
 constexpr uint8_t kRightBrakePin = 32;
 
+// Right hoverboard motor Hall inputs. The firmware enables the ESP32's internal
+// pull-ups, so the three signal wires do not need external pull-up resistors.
+// Supply the Hall sensors at the voltage required by the actual Hall IC/motor;
+// never assume a 5 V push-pull signal is safe for an ESP32 input.
+constexpr uint8_t kRightHallAPin = 19;
+constexpr uint8_t kRightHallBPin = 21;
+constexpr uint8_t kRightHallCPin = 22;
+
 constexpr uint8_t kFrontTrigPin = 16;
 constexpr uint8_t kFrontEchoPin = 34;
 constexpr uint8_t kLeftTrigPin = 17;
@@ -31,6 +39,10 @@ constexpr float kCommandDeadband = 0.04f;
 constexpr float kThrottleSlewPerSecond = 1.5f;
 constexpr uint32_t kDirectionBrakeBeforeMs = 180;
 constexpr uint32_t kDirectionBrakeAfterMs = 180;
+
+constexpr uint32_t kHallRateWindowMs = 100;
+constexpr uint32_t kHallMovingWindowMs = 200;
+constexpr uint32_t kHallTelemetryMs = 50;
 
 constexpr uint32_t kUltrasonicPingSpacingMs = 40;
 constexpr uint32_t kUltrasonicTimeoutUs = 15000;

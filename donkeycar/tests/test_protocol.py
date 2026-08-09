@@ -7,6 +7,7 @@ from trashcan_robot.protocol import (
     CAPABILITIES,
     DRIVE_MODE,
     ERROR,
+    HALL,
     MAX_PAYLOAD,
     SET_VELOCITY_YAW,
     ULTRASONIC,
@@ -16,6 +17,7 @@ from trashcan_robot.protocol import (
     decode_ack,
     decode_capabilities,
     decode_error,
+    decode_hall,
     decode_ultrasonic,
     encode_frame,
     encode_motion,
@@ -91,6 +93,51 @@ def test_ultrasonic_payload_decodes_to_meters() -> None:
     assert frame.message_type == ULTRASONIC
 
 
+def test_hall_payload_decodes_right_wheel_movement() -> None:
+    payload = struct.pack(
+        "<BBHIIIII",
+        5,
+        0b11,
+        0,
+        1234,
+        2,
+        3,
+        12750,
+        42,
+    )
+    reading = decode_hall(payload)
+    assert reading.state == 5
+    assert reading.valid
+    assert reading.moving
+    assert reading.transitions == 1234
+    assert reading.invalid_states == 2
+    assert reading.skipped_transitions == 3
+    assert reading.transitions_per_second == pytest.approx(12.75)
+    assert reading.last_transition_age_s == pytest.approx(0.042)
+
+    encoded = encode_frame(HALL, 10, payload)
+    frame = FrameDecoder().feed(encoded)[0]
+    assert frame.message_type == HALL
+
+
+def test_hall_never_moved_uses_none_age() -> None:
+    payload = struct.pack(
+        "<BBHIIIII",
+        1,
+        0b01,
+        0,
+        0,
+        0,
+        0,
+        0,
+        0xFFFFFFFF,
+    )
+    reading = decode_hall(payload)
+    assert reading.valid
+    assert not reading.moving
+    assert reading.last_transition_age_s is None
+
+
 def test_protocol_decoders_reject_wrong_payload_lengths() -> None:
     with pytest.raises(ValueError):
         decode_capabilities(b"short")
@@ -100,3 +147,5 @@ def test_protocol_decoders_reject_wrong_payload_lengths() -> None:
         decode_error(b"bad")
     with pytest.raises(ValueError):
         decode_ultrasonic(b"short")
+    with pytest.raises(ValueError):
+        decode_hall(b"short")

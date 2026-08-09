@@ -10,6 +10,7 @@ from .config import AppConfig
 from .dashboard import DashboardServer
 from .esp32_drive import ESP32Drive
 from .logging_part import JsonRunLogger
+from .protocol import HallReading
 from .state import RobotState
 from .transport import MockMotorTransport, MotorTransport, SerialMotorTransport
 
@@ -25,7 +26,7 @@ ULTRASONIC_OUTPUTS = [
     "ultrasonic/left_m",
     "ultrasonic/right_m",
 ]
-HALL_OUTPUTS = [
+RIGHT_HALL_OUTPUTS = [
     "hall/right_state",
     "hall/right_valid",
     "hall/right_moving",
@@ -35,6 +36,17 @@ HALL_OUTPUTS = [
     "hall/right_skipped_transitions",
     "hall/right_age_s",
 ]
+LEFT_HALL_OUTPUTS = [
+    "hall/left_state",
+    "hall/left_valid",
+    "hall/left_moving",
+    "hall/left_transitions",
+    "hall/left_tps",
+    "hall/left_invalid_states",
+    "hall/left_skipped_transitions",
+    "hall/left_age_s",
+]
+HALL_OUTPUTS = [*RIGHT_HALL_OUTPUTS, *LEFT_HALL_OUTPUTS]
 STATE_UPDATE_INPUTS = [
     "robot/mode",
     "recording",
@@ -117,7 +129,8 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         outputs=DRIVE_OUTPUTS,
     )
     vehicle.add(UltrasonicPart(transport), outputs=ULTRASONIC_OUTPUTS)
-    vehicle.add(HallPart(transport), outputs=HALL_OUTPUTS)
+    vehicle.add(HallPart(transport.latest_hall), outputs=RIGHT_HALL_OUTPUTS)
+    vehicle.add(HallPart(transport.latest_left_hall), outputs=LEFT_HALL_OUTPUTS)
 
     tub_root = Path(config.raw["data"]["tubs_directory"])
     tub_root.mkdir(parents=True, exist_ok=True)
@@ -237,13 +250,13 @@ class UltrasonicPart:
 
 
 class HallPart:
-    def __init__(self, transport: MotorTransport) -> None:
-        self._transport = transport
+    def __init__(self, reader: Callable[[], HallReading]) -> None:
+        self._reader = reader
 
     def run(
         self,
     ) -> tuple[int, bool, bool, int, float, int, int, float | None]:
-        reading = self._transport.latest_hall()
+        reading = self._reader()
         return (
             reading.state,
             reading.valid,
@@ -254,6 +267,28 @@ class HallPart:
             reading.skipped_transitions,
             reading.last_transition_age_s,
         )
+
+
+def hall_state(
+    state: int | None,
+    valid: bool | None,
+    moving: bool | None,
+    transitions: int | None,
+    tps: float | None,
+    invalid_states: int | None,
+    skipped_transitions: int | None,
+    age_s: float | None,
+) -> dict[str, object]:
+    return {
+        "state": int(state or 0),
+        "valid": bool(valid),
+        "moving": bool(moving),
+        "transitions": int(transitions or 0),
+        "transitions_per_second": float(tps or 0.0),
+        "invalid_states": int(invalid_states or 0),
+        "skipped_transitions": int(skipped_transitions or 0),
+        "last_transition_age_s": age_s,
+    }
 
 
 class StateUpdater:
@@ -281,6 +316,14 @@ class StateUpdater:
         hall_right_invalid_states: int | None,
         hall_right_skipped_transitions: int | None,
         hall_right_age_s: float | None,
+        hall_left_state: int | None,
+        hall_left_valid: bool | None,
+        hall_left_moving: bool | None,
+        hall_left_transitions: int | None,
+        hall_left_tps: float | None,
+        hall_left_invalid_states: int | None,
+        hall_left_skipped_transitions: int | None,
+        hall_left_age_s: float | None,
         fps: float | None,
         inference_rate: float | None,
     ) -> None:
@@ -296,16 +339,26 @@ class StateUpdater:
                 "left_m": ultrasonic_left_m,
                 "right_m": ultrasonic_right_m,
             },
-            right_hall={
-                "state": int(hall_right_state or 0),
-                "valid": bool(hall_right_valid),
-                "moving": bool(hall_right_moving),
-                "transitions": int(hall_right_transitions or 0),
-                "transitions_per_second": float(hall_right_tps or 0.0),
-                "invalid_states": int(hall_right_invalid_states or 0),
-                "skipped_transitions": int(hall_right_skipped_transitions or 0),
-                "last_transition_age_s": hall_right_age_s,
-            },
+            right_hall=hall_state(
+                hall_right_state,
+                hall_right_valid,
+                hall_right_moving,
+                hall_right_transitions,
+                hall_right_tps,
+                hall_right_invalid_states,
+                hall_right_skipped_transitions,
+                hall_right_age_s,
+            ),
+            left_hall=hall_state(
+                hall_left_state,
+                hall_left_valid,
+                hall_left_moving,
+                hall_left_transitions,
+                hall_left_tps,
+                hall_left_invalid_states,
+                hall_left_skipped_transitions,
+                hall_left_age_s,
+            ),
             faults=[fault] if fault else [],
             model_name=self._model_name,
             fps=float(fps or 0.0),

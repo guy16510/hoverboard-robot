@@ -5,6 +5,7 @@
 
 #include "board_config.h"
 #include "hall_sensor.h"
+#include "hall_telemetry.h"
 #include "motor_driver.h"
 #include "protocol_contract.h"
 #include "serial_protocol.h"
@@ -16,13 +17,16 @@ using trashbot::drive::DifferentialDrive;
 using trashbot::protocol::FrameParser;
 using trashbot::protocol::FrameView;
 using trashbot::protocol::FrameWriter;
+using trashbot::sensors::LeftHallSensor;
 using trashbot::sensors::RightHallSensor;
 using trashbot::sensors::UltrasonicArray;
 namespace board = trashbot::board;
 namespace protocol = trashbot::protocol;
+namespace sensors = trashbot::sensors;
 
 DifferentialDrive drivetrain;
 RightHallSensor rightHall;
+LeftHallSensor leftHall;
 UltrasonicArray ultrasonic;
 FrameWriter writer(Serial);
 FrameParser parser;
@@ -50,8 +54,7 @@ void stopMotion(bool disarm) {
 }
 
 bool leaseExpired(uint32_t nowMs) {
-  return leaseActive &&
-         static_cast<int32_t>(nowMs - leaseExpiresMs) >= 0;
+  return leaseActive && static_cast<int32_t>(nowMs - leaseExpiresMs) >= 0;
 }
 
 void updateMotorTargets(uint32_t nowMs) {
@@ -98,8 +101,7 @@ void sendStatus(uint16_t sequence) {
   payload[3] = static_cast<uint8_t>((armed ? (1u << 4) : 0u) | (1u << 6));
   protocol::writeU32(payload + 4, 0);  // faults
   protocol::writeU32(payload + 8, 0);  // loop overruns
-  protocol::writeU32(payload + 12,
-                     parser.rejectedFrames() + rejectedCommands);
+  protocol::writeU32(payload + 12, parser.rejectedFrames() + rejectedCommands);
   writer.send(protocol::kStatus, sequence, payload, sizeof(payload));
 }
 
@@ -109,19 +111,12 @@ void sendUltrasonic(uint16_t sequence, uint32_t nowMs) {
   writer.send(protocol::kUltrasonic, sequence, payload, sizeof(payload));
 }
 
-void sendHall(uint16_t sequence, uint32_t nowMs) {
-  const auto hall = rightHall.snapshot(nowMs);
+template <typename HallSensorType>
+void sendHall(uint8_t messageType, HallSensorType &sensor, uint16_t sequence,
+              uint32_t nowMs) {
   uint8_t payload[protocol::kHallPayloadBytes] = {};
-  payload[0] = hall.state;
-  payload[1] = static_cast<uint8_t>((hall.valid ? 1u : 0u) |
-                                    (hall.moving ? (1u << 1u) : 0u));
-  protocol::writeU16(payload + 2, 0);
-  protocol::writeU32(payload + 4, hall.transitions);
-  protocol::writeU32(payload + 8, hall.invalidStates);
-  protocol::writeU32(payload + 12, hall.skippedTransitions);
-  protocol::writeU32(payload + 16, hall.rateMilliHz);
-  protocol::writeU32(payload + 20, hall.lastTransitionAgeMs);
-  writer.send(protocol::kHall, sequence, payload, sizeof(payload));
+  sensors::encodeHallSnapshot(sensor.snapshot(nowMs), payload);
+  writer.send(messageType, sequence, payload, sizeof(payload));
 }
 
 bool decodeMotion(const uint8_t *payload, uint16_t length, uint32_t nowMs) {
@@ -218,7 +213,11 @@ void handleFrame(const FrameView &frame, uint32_t nowMs) {
       return;
 
     case protocol::kHall:
-      sendHall(frame.sequence, nowMs);
+      sendHall(protocol::kHall, rightHall, frame.sequence, nowMs);
+      return;
+
+    case protocol::kLeftHall:
+      sendHall(protocol::kLeftHall, leftHall, frame.sequence, nowMs);
       return;
 
     default:
@@ -232,6 +231,9 @@ void handleFrame(const FrameView &frame, uint32_t nowMs) {
 void setup() {
   drivetrain.begin();
   rightHall.begin();
+  if (board::kLeftHallEnabled) {
+    leftHall.begin();
+  }
   ultrasonic.begin();
   Serial.begin(board::kSerialBaud);
   delay(50);
@@ -248,15 +250,20 @@ void loop() {
   updateMotorTargets(nowMs);
   drivetrain.service(nowMs);
   rightHall.service(nowMs);
+  if (board::kLeftHallEnabled) {
+    leftHall.service(nowMs);
+  }
   ultrasonic.service(nowMs);
 
   if (nowMs - lastHallTelemetryMs >= board::kHallTelemetryMs) {
     lastHallTelemetryMs = nowMs;
-    sendHall(telemetrySequence++, nowMs);
+    sendHall(protocol::kHall, rightHall, telemetrySequence++, nowMs);
+    if (board::kLeftHallEnabled) {
+      sendHall(protocol::kLeftHall, leftHall, telemetrySequence++, nowMs);
+    }
   }
 
-  if (nowMs - lastUltrasonicTelemetryMs >=
-      board::kUltrasonicTelemetryMs) {
+  if (nowMs - lastUltrasonicTelemetryMs >= board::kUltrasonicTelemetryMs) {
     lastUltrasonicTelemetryMs = nowMs;
     sendUltrasonic(telemetrySequence++, nowMs);
   }

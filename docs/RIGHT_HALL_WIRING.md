@@ -1,39 +1,54 @@
 # Right wheel Hall sensor wiring
 
-The ESP32 reads the right hoverboard wheel's three Hall signals directly and publishes movement telemetry to the Raspberry Pi / Donkeycar protocol.
+The right motor controller keeps its Hall connector wired normally. The ESP32 only taps the three Hall signal wires through voltage dividers so Donkeycar can observe wheel movement without interfering with controller commutation.
 
-## ESP32 pins
+## Confirmed electrical behavior
 
-| Motor Hall lead | ESP32 |
+The controller-connected Hall signal measures about 5 V when HIGH and about 2.5 V on a multimeter while the wheel spins quickly. The 2.5 V moving reading is the meter averaging a digital signal that is switching between about 0 V and 5 V. Treat the Hall outputs as 5 V signals.
+
+Do not connect those 5 V Hall signal wires directly to ESP32 GPIO.
+
+## Right wheel ESP32 pins
+
+| Motor Hall lead | Divider output to ESP32 |
 |---|---:|
 | Hall A, typically yellow | GPIO19 |
 | Hall B, typically green | GPIO21 |
 | Hall C, typically blue | GPIO22 |
-| Hall ground, typically black | GND |
-| Hall supply, typically red | Use the voltage required by the Hall sensors |
+| Hall ground, typically black | ESP32 GND |
+| Hall supply, typically red | Leave connected to motor controller |
 
-The firmware configures GPIO19, GPIO21, and GPIO22 as `INPUT_PULLUP`. No external pull-up resistors are required for open-collector Hall outputs.
+The firmware configures GPIO19, GPIO21, and GPIO22 as plain `INPUT`. The motor controller already supplies the Hall pull-ups.
 
-## Resistor-free hookup
+## Divider using only 10k resistors
 
-For a raw hoverboard Hall harness whose three outputs are open collector:
+Use three 10k resistors per Hall signal. One 10k is the upper resistor. Two 10k resistors in series form the 20k lower leg.
 
 ```text
-RIGHT MOTOR HALL             ESP32
-Yellow / Hall A  ----------> GPIO19
-Green  / Hall B  ----------> GPIO21
-Blue   / Hall C  ----------> GPIO22
-Black  / GND     ----------> GND
-Red    / Hall V+ ----------> Hall sensor supply
+existing 5 V Hall signal wire
+          |
+         10k
+          |
+          +---------- ESP32 GPIO19 / GPIO21 / GPIO22
+          |
+         10k
+          |
+         10k
+          |
+COMMON GND+---------- ESP32 GND
+          |
+          +---------- controller Hall GND / motor Hall black
 ```
 
-Do not blindly connect a 5 V push-pull Hall signal to an ESP32 input. ESP32 GPIO is a 3.3 V interface. If the motor Hall sensors require 5 V, the resistor-free arrangement is only appropriate when the Hall outputs themselves are open collector and therefore pulled up by the ESP32 to 3.3 V. If the signal wires measure about 5 V while disconnected from the ESP32, level shifting is required unless sacrificing the ESP32 is acceptable.
+The existing Hall signal wire remains connected to the motor controller. The divider is a tap off that wire. Do not cut the controller out of the Hall circuit.
 
-If the Hall sensors operate correctly from 3.3 V, powering the red Hall lead from ESP32 3V3 is the simplest resistor-free test. If they do not toggle at 3.3 V, use the Hall sensor's required supply voltage and verify the output type before connecting the signal wires.
+At a 5 V Hall HIGH, 10k over 20k produces about 3.33 V at the GPIO junction.
+
+Build this same divider three times, once for yellow, green, and blue.
 
 ## Firmware telemetry
 
-The ESP32 sends Hall telemetry every 50 ms using protocol message `0x36`. The payload reports:
+The ESP32 sends right Hall telemetry every 50 ms using protocol message `0x36`. The payload reports:
 
 - current three-bit Hall state, valid states are 1 through 6
 - whether the Hall state is valid
@@ -44,11 +59,9 @@ The ESP32 sends Hall telemetry every 50 ms using protocol message `0x36`. The pa
 - transitions per second
 - age of the latest transition
 
-This is intentionally transition-based rather than wheel-distance-based. It proves the wheel is moving without assuming a wheel circumference, motor pole count, or Hall sequence orientation that has not been calibrated yet.
+This remains transition-based until wheel circumference and motor Hall transitions per mechanical revolution are calibrated.
 
 ## Donkeycar signals
-
-The Raspberry Pi exposes the right wheel data as:
 
 ```text
 hall/right_state
@@ -61,10 +74,14 @@ hall/right_skipped_transitions
 hall/right_age_s
 ```
 
-The same values are copied into the dashboard state under `right_hall` and written into each JSON run log.
+## First physical test
 
-## Bench check
+Lift the right wheel off the ground. Leave the left wheel uncommanded. After flashing the new ESP32 firmware and updating the Pi code, run:
 
-With motor power off, power the ESP32 and Hall sensors, then rotate the right wheel slowly by hand. `hall/right_state` should cycle only through values 1 through 6, `hall/right_transitions` should increase, and `hall/right_moving` should become true while the wheel is turning.
+```bash
+python donkeycar/scripts/validate_right_hall.py --confirm-lifted
+```
 
-If the state stays at 0 or 7, or the transition count does not increase, stop and verify Hall supply voltage, ground, and the three signal wires before powering the motor controller.
+The test first requires a valid right Hall state, then applies a conservative right-wheel-only forward demand for about 1.5 seconds. It passes only if the right Hall transition count increases, movement is observed, and no new invalid or skipped Hall transitions are recorded. It explicitly commands zero before disconnecting, and disconnect sends STOP and DISARM as an additional safety layer.
+
+If the right Hall state is 0 or 7 before motion, the test refuses to move the wheel. Check the common ground and all three divider taps first.

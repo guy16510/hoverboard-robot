@@ -43,6 +43,7 @@ def test_protocol_message_ids_match_firmware() -> None:
         "kStatus": protocol.STATUS,
         "kUltrasonic": protocol.ULTRASONIC,
         "kHall": protocol.HALL,
+        "kLeftHall": protocol.LEFT_HALL,
         "kAcknowledgment": protocol.ACK,
         "kError": protocol.ERROR,
     }

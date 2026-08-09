@@ -20,22 +20,25 @@ struct HallSnapshot {
   uint32_t lastTransitionAgeMs = UINT32_MAX;
 };
 
-class RightHallSensor {
+template <uint8_t HallAPin, uint8_t HallBPin, uint8_t HallCPin>
+class HallSensor {
  public:
-  RightHallSensor() = default;
-  RightHallSensor(const RightHallSensor &) = delete;
-  RightHallSensor &operator=(const RightHallSensor &) = delete;
+  HallSensor() = default;
+  HallSensor(const HallSensor &) = delete;
+  HallSensor &operator=(const HallSensor &) = delete;
 
   void begin() {
-    static_assert(board::kRightHallAPin < 32 &&
-                      board::kRightHallBPin < 32 &&
-                      board::kRightHallCPin < 32,
-                  "direct Hall ISR register read requires GPIO pins below 32");
+    static_assert(HallAPin <= 39 && HallBPin <= 39 && HallCPin <= 39,
+                  "Hall inputs must be valid ESP32 GPIOs");
 
-    pinMode(board::kRightHallAPin, INPUT_PULLUP);
-    pinMode(board::kRightHallBPin, INPUT_PULLUP);
-    pinMode(board::kRightHallCPin, INPUT_PULLUP);
+    // The controller-connected Hall harness is already pulled up to 5 V.
+    // External dividers/level shifters reduce those signals for the ESP32, so
+    // enabling an internal pull-up here is both unnecessary and misleading.
+    pinMode(HallAPin, INPUT);
+    pinMode(HallBPin, INPUT);
+    pinMode(HallCPin, INPUT);
 
+    instance_ = this;
     portENTER_CRITICAL(&mux_);
     state_ = readState();
     transitions_ = 0;
@@ -48,17 +51,18 @@ class RightHallSensor {
     rateWindowStartedMs_ = millis();
     lastTransitionMs_ = 0;
     rateMilliHz_ = 0;
-    instance_ = this;
+    started_ = true;
 
-    attachInterrupt(digitalPinToInterrupt(board::kRightHallAPin), isrThunk,
-                    CHANGE);
-    attachInterrupt(digitalPinToInterrupt(board::kRightHallBPin), isrThunk,
-                    CHANGE);
-    attachInterrupt(digitalPinToInterrupt(board::kRightHallCPin), isrThunk,
-                    CHANGE);
+    attachInterrupt(digitalPinToInterrupt(HallAPin), isrThunk, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(HallBPin), isrThunk, CHANGE);
+    attachInterrupt(digitalPinToInterrupt(HallCPin), isrThunk, CHANGE);
   }
 
   void service(uint32_t nowMs) {
+    if (!started_) {
+      return;
+    }
+
     uint32_t transitions = 0;
     portENTER_CRITICAL(&mux_);
     transitions = transitions_;
@@ -86,6 +90,10 @@ class RightHallSensor {
 
   HallSnapshot snapshot(uint32_t nowMs) const {
     HallSnapshot value;
+    if (!started_) {
+      return value;
+    }
+
     portENTER_CRITICAL(&mux_);
     value.state = state_;
     value.transitions = transitions_;
@@ -102,17 +110,27 @@ class RightHallSensor {
     return value;
   }
 
+  bool started() const { return started_; }
+
  private:
   static bool ARDUINO_ISR_ATTR validState(uint8_t state) {
     return state >= 1 && state <= 6;
   }
 
+  template <uint8_t Pin>
+  static uint8_t ARDUINO_ISR_ATTR readPinLevel() {
+    if constexpr (Pin < 32) {
+      return static_cast<uint8_t>((REG_READ(GPIO_IN_REG) >> Pin) & 1u);
+    } else {
+      return static_cast<uint8_t>(
+          (REG_READ(GPIO_IN1_REG) >> (static_cast<uint32_t>(Pin) - 32u)) & 1u);
+    }
+  }
+
   static uint8_t ARDUINO_ISR_ATTR readState() {
-    const uint32_t levels = REG_READ(GPIO_IN_REG);
-    return static_cast<uint8_t>(
-        (((levels >> board::kRightHallAPin) & 1u) << 0u) |
-        (((levels >> board::kRightHallBPin) & 1u) << 1u) |
-        (((levels >> board::kRightHallCPin) & 1u) << 2u));
+    return static_cast<uint8_t>((readPinLevel<HallAPin>() << 0u) |
+                                (readPinLevel<HallBPin>() << 1u) |
+                                (readPinLevel<HallCPin>() << 2u));
   }
 
   static void ARDUINO_ISR_ATTR isrThunk() {
@@ -148,7 +166,7 @@ class RightHallSensor {
     portEXIT_CRITICAL_ISR(&mux_);
   }
 
-  inline static RightHallSensor *instance_ = nullptr;
+  inline static HallSensor *instance_ = nullptr;
   mutable portMUX_TYPE mux_ = portMUX_INITIALIZER_UNLOCKED;
   volatile uint8_t state_ = 0;
   volatile uint32_t transitions_ = 0;
@@ -159,6 +177,12 @@ class RightHallSensor {
   uint32_t rateWindowStartedMs_ = 0;
   uint32_t lastTransitionMs_ = 0;
   uint32_t rateMilliHz_ = 0;
+  bool started_ = false;
 };
+
+using RightHallSensor = HallSensor<board::kRightHallAPin, board::kRightHallBPin,
+                                   board::kRightHallCPin>;
+using LeftHallSensor = HallSensor<board::kLeftHallAPin, board::kLeftHallBPin,
+                                  board::kLeftHallCPin>;
 
 }  // namespace trashbot::sensors

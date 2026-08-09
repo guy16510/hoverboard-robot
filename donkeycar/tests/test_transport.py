@@ -11,6 +11,7 @@ from trashcan_robot.protocol import (
     ERROR,
     HALL,
     HELLO,
+    LEFT_HALL,
     MAX_PAYLOAD,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
@@ -155,24 +156,27 @@ def test_transport_caches_ultrasonic_frames(monkeypatch) -> None:
     assert any(frame.message_type == ULTRASONIC for frame in telemetry)
 
 
+def hall_payload(state: int, transitions: int) -> bytes:
+    return struct.pack(
+        "<BBHIIIII",
+        state,
+        0b11,
+        0,
+        transitions,
+        1,
+        2,
+        25000,
+        12,
+    )
+
+
 def test_transport_caches_right_hall_frames(monkeypatch) -> None:
     fake = RespondingSerial()
     install_serial(monkeypatch, fake)
     transport = SerialMotorTransport(make_config())
     transport.connect()
 
-    payload = struct.pack(
-        "<BBHIIIII",
-        6,
-        0b11,
-        0,
-        77,
-        1,
-        2,
-        25000,
-        12,
-    )
-    fake.rx.extend(encode_frame(HALL, 124, payload))
+    fake.rx.extend(encode_frame(HALL, 124, hall_payload(6, 77)))
 
     transport.send_command(0.1, 0.0)
     reading = transport.latest_hall()
@@ -185,6 +189,21 @@ def test_transport_caches_right_hall_frames(monkeypatch) -> None:
 
     telemetry = transport.read_telemetry()
     assert any(frame.message_type == HALL for frame in telemetry)
+
+
+def test_transport_caches_left_hall_independently(monkeypatch) -> None:
+    fake = RespondingSerial()
+    install_serial(monkeypatch, fake)
+    transport = SerialMotorTransport(make_config())
+    transport.connect()
+
+    fake.rx.extend(encode_frame(HALL, 124, hall_payload(6, 77)))
+    fake.rx.extend(encode_frame(LEFT_HALL, 125, hall_payload(3, 88)))
+    transport.send_command(0.0, 0.0)
+
+    assert transport.latest_hall().transitions == 77
+    assert transport.latest_left_hall().transitions == 88
+    assert transport.latest_left_hall().state == 3
 
 
 def test_stale_ultrasonic_is_not_reused_forever(monkeypatch) -> None:
@@ -208,18 +227,7 @@ def test_stale_hall_is_marked_invalid(monkeypatch) -> None:
     transport = SerialMotorTransport(make_config())
     transport.connect()
 
-    payload = struct.pack(
-        "<BBHIIIII",
-        3,
-        0b01,
-        0,
-        15,
-        0,
-        0,
-        0,
-        1000,
-    )
-    fake.rx.extend(encode_frame(HALL, 125, payload))
+    fake.rx.extend(encode_frame(HALL, 125, hall_payload(3, 15)))
     transport.send_command(0.0, 0.0)
     assert transport.latest_hall().valid
 

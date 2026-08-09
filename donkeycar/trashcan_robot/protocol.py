@@ -23,6 +23,7 @@ ODOMETRY = 0x33
 FAULTS = 0x34
 ULTRASONIC = 0x35
 HALL = 0x36
+LEFT_HALL = 0x37
 ACK = 0x7E
 ERROR = 0x7F
 DRIVE_MODE = 2
@@ -112,6 +113,19 @@ class HallReading:
     skipped_transitions: int
     transitions_per_second: float
     last_transition_age_s: float | None
+
+
+def empty_hall_reading() -> HallReading:
+    return HallReading(
+        state=0,
+        valid=False,
+        moving=False,
+        transitions=0,
+        invalid_states=0,
+        skipped_transitions=0,
+        transitions_per_second=0.0,
+        last_transition_age_s=None,
+    )
 
 
 def decode_capabilities(payload: bytes) -> Capabilities:

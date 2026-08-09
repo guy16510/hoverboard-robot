@@ -20,6 +20,7 @@ from .protocol import (
     ERROR,
     HALL,
     HELLO,
+    LEFT_HALL,
     MAX_PAYLOAD,
     SET_OPERATING_MODE,
     SET_VELOCITY_YAW,
@@ -35,6 +36,7 @@ from .protocol import (
     decode_error,
     decode_hall,
     decode_ultrasonic,
+    empty_hall_reading,
     encode_frame,
     encode_motion,
 )
@@ -42,19 +44,6 @@ from .protocol import (
 
 class ProtocolError(ConnectionError):
     pass
-
-
-def empty_hall_reading() -> HallReading:
-    return HallReading(
-        state=0,
-        valid=False,
-        moving=False,
-        transitions=0,
-        invalid_states=0,
-        skipped_transitions=0,
-        transitions_per_second=0.0,
-        last_transition_age_s=None,
-    )
 
 
 class MotorTransport(abc.ABC):
@@ -75,6 +64,9 @@ class MotorTransport(abc.ABC):
 
     @abc.abstractmethod
     def latest_hall(self) -> HallReading: ...
+
+    @abc.abstractmethod
+    def latest_left_hall(self) -> HallReading: ...
 
     @abc.abstractmethod
     def is_connected(self) -> bool: ...
@@ -98,6 +90,8 @@ class SerialMotorTransport(MotorTransport):
         self._ultrasonic_updated_at: float | None = None
         self._latest_hall = empty_hall_reading()
         self._hall_updated_at: float | None = None
+        self._latest_left_hall = empty_hall_reading()
+        self._left_hall_updated_at: float | None = None
         self._ready = False
 
     def connect(self) -> None:
@@ -163,14 +157,21 @@ class SerialMotorTransport(MotorTransport):
 
     def latest_hall(self) -> HallReading:
         with self._lock:
-            if self._hall_updated_at is None:
-                return empty_hall_reading()
-            if time.monotonic() - self._hall_updated_at > self._HALL_STALE_SECONDS:
-                return empty_hall_reading()
-            return self._latest_hall
+            return self._fresh_hall(self._latest_hall, self._hall_updated_at)
+
+    def latest_left_hall(self) -> HallReading:
+        with self._lock:
+            return self._fresh_hall(self._latest_left_hall, self._left_hall_updated_at)
 
     def is_connected(self) -> bool:
         return self._ready and self._serial_open()
+
+    def _fresh_hall(self, reading: HallReading, updated_at: float | None) -> HallReading:
+        if updated_at is None:
+            return empty_hall_reading()
+        if time.monotonic() - updated_at > self._HALL_STALE_SECONDS:
+            return empty_hall_reading()
+        return reading
 
     def _open_serial(self) -> None:
         self._close_serial()
@@ -188,6 +189,8 @@ class SerialMotorTransport(MotorTransport):
         self._ultrasonic_updated_at = None
         self._latest_hall = empty_hall_reading()
         self._hall_updated_at = None
+        self._latest_left_hall = empty_hall_reading()
+        self._left_hall_updated_at = None
         self._ready = False
 
     def _close_serial(self) -> None:
@@ -273,6 +276,12 @@ class SerialMotorTransport(MotorTransport):
                 self._hall_updated_at = time.monotonic()
             except ValueError:
                 return
+        elif frame.message_type == LEFT_HALL:
+            try:
+                self._latest_left_hall = decode_hall(frame.payload)
+                self._left_hall_updated_at = time.monotonic()
+            except ValueError:
+                return
         self._telemetry_queue.append(frame)
 
     def _write(self, message_type: int, payload: bytes) -> int:
@@ -312,6 +321,7 @@ class MockMotorTransport(MotorTransport):
     telemetry: list[Frame] = field(default_factory=list)
     ultrasonic: UltrasonicReading = field(default_factory=lambda: UltrasonicReading(None, None, None))
     hall: HallReading = field(default_factory=empty_hall_reading)
+    left_hall: HallReading = field(default_factory=empty_hall_reading)
 
     def connect(self) -> None:
         self.connected = True
@@ -339,6 +349,9 @@ class MockMotorTransport(MotorTransport):
 
     def latest_hall(self) -> HallReading:
         return self.hall
+
+    def latest_left_hall(self) -> HallReading:
+        return self.left_hall
 
     def is_connected(self) -> bool:
         return self.connected

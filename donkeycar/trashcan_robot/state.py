@@ -6,6 +6,19 @@ from datetime import datetime, timezone
 from typing import Any
 
 
+def empty_hall_state() -> dict[str, Any]:
+    return {
+        "state": 0,
+        "valid": False,
+        "moving": False,
+        "transitions": 0,
+        "transitions_per_second": 0.0,
+        "invalid_states": 0,
+        "skipped_transitions": 0,
+        "last_transition_age_s": None,
+    }
+
+
 class RobotState:
     def __init__(self) -> None:
         self._lock = threading.Lock()
@@ -24,16 +37,8 @@ class RobotState:
                 "left_m": None,
                 "right_m": None,
             },
-            "right_hall": {
-                "state": 0,
-                "valid": False,
-                "moving": False,
-                "transitions": 0,
-                "transitions_per_second": 0.0,
-                "invalid_states": 0,
-                "skipped_transitions": 0,
-                "last_transition_age_s": None,
-            },
+            "right_hall": empty_hall_state(),
+            "left_hall": empty_hall_state(),
             "telemetry": {},
             "faults": [],
             "model_name": None,

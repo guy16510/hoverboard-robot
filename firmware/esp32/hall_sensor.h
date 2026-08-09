@@ -103,7 +103,9 @@ class RightHallSensor {
   }
 
  private:
-  static bool validState(uint8_t state) { return state >= 1 && state <= 6; }
+  static bool IRAM_ATTR validState(uint8_t state) {
+    return state >= 1 && state <= 6;
+  }
 
   static uint8_t IRAM_ATTR readState() {
     const uint32_t levels = REG_READ(GPIO_IN_REG);

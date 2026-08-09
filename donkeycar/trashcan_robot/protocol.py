@@ -14,6 +14,7 @@ STOP = 0x12
 EMERGENCY_STOP = 0x13
 CLEAR_FAULT = 0x14
 SET_OPERATING_MODE = 0x15
+SET_SERVO = 0x16
 SET_VELOCITY_YAW = 0x22
 HEARTBEAT = 0x23
 STATUS = 0x30
@@ -30,6 +31,8 @@ DRIVE_MODE = 2
 
 MOTION_PAYLOAD_BYTES = 10
 CAPABILITIES_PAYLOAD_BYTES = 12
+IMU_PAYLOAD_BYTES = 16
+SERVO_PAYLOAD_BYTES = 2
 ULTRASONIC_PAYLOAD_BYTES = 8
 HALL_PAYLOAD_BYTES = 24
 ACK_PAYLOAD_BYTES = 2
@@ -58,6 +61,11 @@ def encode_motion(linear_velocity: float, angular_velocity: float, lease_id: int
     payload = struct.pack("<hhIH", linear, angular, lease_id & 0xFFFFFFFF, lease_ms)
     assert len(payload) == MOTION_PAYLOAD_BYTES
     return payload
+
+
+def encode_servo(normalized: float) -> bytes:
+    milli = max(-1000, min(1000, round(normalized * 1000)))
+    return struct.pack("<h", milli)
 
 
 @dataclass(frozen=True)
@@ -104,6 +112,18 @@ class UltrasonicReading:
 
 
 @dataclass(frozen=True)
+class ImuReading:
+    accel_x_g: float
+    accel_y_g: float
+    accel_z_g: float
+    gyro_x_dps: float
+    gyro_y_dps: float
+    gyro_z_dps: float
+    temperature_c: float
+    valid: bool
+
+
+@dataclass(frozen=True)
 class HallReading:
     state: int
     valid: bool
@@ -115,84 +135,58 @@ class HallReading:
     last_transition_age_s: float | None
 
 
+def empty_imu_reading() -> ImuReading:
+    return ImuReading(0.0, 0.0, 0.0, 0.0, 0.0, 0.0, 0.0, False)
+
+
 def empty_hall_reading() -> HallReading:
-    return HallReading(
-        state=0,
-        valid=False,
-        moving=False,
-        transitions=0,
-        invalid_states=0,
-        skipped_transitions=0,
-        transitions_per_second=0.0,
-        last_transition_age_s=None,
-    )
+    return HallReading(0, False, False, 0, 0, 0, 0.0, None)
 
 
 def decode_capabilities(payload: bytes) -> Capabilities:
     if len(payload) != CAPABILITIES_PAYLOAD_BYTES:
         raise ValueError("capabilities payload must be 12 bytes")
-    version, dry_run, web_control, mode_mask, control_hz, motor_hz, max_payload, runtime_keys = struct.unpack(
-        "<BBBBHHHH", payload
-    )
-    return Capabilities(
-        protocol_version=version,
-        dry_run=bool(dry_run),
-        web_control=bool(web_control),
-        operating_mode_mask=mode_mask,
-        control_hz=control_hz,
-        motor_output_hz=motor_hz,
-        maximum_payload=max_payload,
-        runtime_config_keys=runtime_keys,
-    )
+    version, dry_run, web_control, mode_mask, control_hz, motor_hz, max_payload, runtime_keys = struct.unpack("<BBBBHHHH", payload)
+    return Capabilities(version, bool(dry_run), bool(web_control), mode_mask, control_hz, motor_hz, max_payload, runtime_keys)
 
 
 def decode_ack(payload: bytes) -> Acknowledgment:
     if len(payload) != ACK_PAYLOAD_BYTES:
         raise ValueError("acknowledgment payload must be 2 bytes")
     request_type, status = struct.unpack("<BB", payload)
-    return Acknowledgment(request_type=request_type, status=status)
+    return Acknowledgment(request_type, status)
 
 
 def decode_error(payload: bytes) -> ErrorResponse:
     if len(payload) != ERROR_PAYLOAD_BYTES:
         raise ValueError("error payload must be 4 bytes")
     request_type, code, detail = struct.unpack("<BBH", payload)
-    return ErrorResponse(request_type=request_type, code=code, detail=detail)
+    return ErrorResponse(request_type, code, detail)
 
 
 def decode_ultrasonic(payload: bytes) -> UltrasonicReading:
     if len(payload) != ULTRASONIC_PAYLOAD_BYTES:
         raise ValueError("ultrasonic payload must be 8 bytes")
     front_mm, left_mm, right_mm, valid_mask, _reserved = struct.unpack("<HHHBB", payload)
-
     def value(index: int, millimeters: int) -> float | None:
         if not valid_mask & (1 << index) or millimeters == 0xFFFF:
             return None
         return millimeters / 1000.0
+    return UltrasonicReading(value(0, front_mm), value(1, left_mm), value(2, right_mm))
 
-    return UltrasonicReading(
-        front_m=value(0, front_mm),
-        left_m=value(1, left_mm),
-        right_m=value(2, right_mm),
-    )
+
+def decode_imu(payload: bytes) -> ImuReading:
+    if len(payload) != IMU_PAYLOAD_BYTES:
+        raise ValueError("IMU payload must be 16 bytes")
+    ax, ay, az, gx, gy, gz, temp, flags = struct.unpack("<hhhhhhhH", payload)
+    return ImuReading(ax / 1000.0, ay / 1000.0, az / 1000.0, gx / 1000.0, gy / 1000.0, gz / 1000.0, temp / 100.0, bool(flags & 1))
 
 
 def decode_hall(payload: bytes) -> HallReading:
     if len(payload) != HALL_PAYLOAD_BYTES:
         raise ValueError("Hall payload must be 24 bytes")
-    state, flags, _reserved, transitions, invalid_states, skipped_transitions, rate_millihz, age_ms = struct.unpack(
-        "<BBHIIIII", payload
-    )
-    return HallReading(
-        state=state,
-        valid=bool(flags & (1 << 0)),
-        moving=bool(flags & (1 << 1)),
-        transitions=transitions,
-        invalid_states=invalid_states,
-        skipped_transitions=skipped_transitions,
-        transitions_per_second=rate_millihz / 1000.0,
-        last_transition_age_s=None if age_ms == 0xFFFFFFFF else age_ms / 1000.0,
-    )
+    state, flags, _reserved, transitions, invalid_states, skipped_transitions, rate_millihz, age_ms = struct.unpack("<BBHIIIII", payload)
+    return HallReading(state, bool(flags & 1), bool(flags & 2), transitions, invalid_states, skipped_transitions, rate_millihz / 1000.0, None if age_ms == 0xFFFFFFFF else age_ms / 1000.0)
 
 
 class FrameDecoder:

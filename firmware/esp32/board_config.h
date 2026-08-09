@@ -7,7 +7,6 @@ namespace trashbot::board {
 
 constexpr uint32_t kSerialBaud = 115200;
 
-// Motor controller outputs.
 constexpr uint8_t kLeftThrottlePin = 25;
 constexpr uint8_t kRightThrottlePin = 26;
 constexpr uint8_t kLeftReversePin = 27;
@@ -15,24 +14,14 @@ constexpr uint8_t kRightReversePin = 14;
 constexpr uint8_t kLeftBrakePin = 33;
 constexpr uint8_t kRightBrakePin = 32;
 
-// Hall inputs. The motor controllers provide 5 V Hall signaling, so each Hall
-// signal must reach the ESP32 through a 5 V -> 3.3 V divider/level shifter.
-// The firmware therefore uses plain INPUT rather than INPUT_PULLUP.
 constexpr uint8_t kRightHallAPin = 19;
 constexpr uint8_t kRightHallBPin = 21;
 constexpr uint8_t kRightHallCPin = 22;
 constexpr uint8_t kLeftHallAPin = 16;
 constexpr uint8_t kLeftHallBPin = 17;
 constexpr uint8_t kLeftHallCPin = 36;
-
-// Leave the unwired left Hall channel disabled so its inputs cannot float and
-// generate interrupts. Flip this to true only after all three left Hall divider
-// taps and common ground are connected.
 constexpr bool kLeftHallEnabled = false;
 
-// Ultrasonic sensors. GPIO34/35/39 are input-only and are intentionally used
-// for ECHO. GPIO5/15 are boot strapping pins but are only connected to the
-// high-impedance TRIG inputs of the ultrasonic modules.
 constexpr uint8_t kFrontTrigPin = 5;
 constexpr uint8_t kFrontEchoPin = 34;
 constexpr uint8_t kLeftTrigPin = 15;
@@ -40,11 +29,13 @@ constexpr uint8_t kLeftEchoPin = 35;
 constexpr uint8_t kRightTrigPin = 18;
 constexpr uint8_t kRightEchoPin = 39;
 
-// Reserved now so later MPU6050 and arm-servo work cannot collide with the
-// drivetrain/sensor pin contract.
 constexpr uint8_t kMpu6050SdaPin = 4;
 constexpr uint8_t kMpu6050SclPin = 23;
 constexpr uint8_t kArmServoPin = 13;
+constexpr bool kRgbEnabled = false;
+
+constexpr uint32_t kImuSampleMs = 20;
+constexpr uint32_t kImuTelemetryMs = 50;
 
 template <std::size_t N>
 constexpr bool pinsAreUnique(const uint8_t (&pins)[N]) {
@@ -77,7 +68,6 @@ static_assert(kFrontEchoPin >= 34 && kLeftEchoPin >= 34 &&
 
 constexpr float kMaxLinearMilli = 350.0f;
 constexpr float kMaxYawMilli = 800.0f;
-
 constexpr float kDacReferenceVolts = 3.3f;
 constexpr float kThrottleIdleVolts = 0.85f;
 constexpr float kThrottleStartVolts = 1.15f;
@@ -86,11 +76,9 @@ constexpr float kCommandDeadband = 0.04f;
 constexpr float kThrottleSlewPerSecond = 1.5f;
 constexpr uint32_t kDirectionBrakeBeforeMs = 180;
 constexpr uint32_t kDirectionBrakeAfterMs = 180;
-
 constexpr uint32_t kHallRateWindowMs = 100;
 constexpr uint32_t kHallMovingWindowMs = 200;
 constexpr uint32_t kHallTelemetryMs = 50;
-
 constexpr uint32_t kUltrasonicPingSpacingMs = 40;
 constexpr uint32_t kUltrasonicTimeoutUs = 15000;
 constexpr uint16_t kUltrasonicMinMm = 25;

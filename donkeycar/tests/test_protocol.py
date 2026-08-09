@@ -8,6 +8,7 @@ from trashcan_robot.protocol import (
     DRIVE_MODE,
     ERROR,
     HALL,
+    LEFT_HALL,
     MAX_PAYLOAD,
     SET_VELOCITY_YAW,
     ULTRASONIC,
@@ -93,7 +94,7 @@ def test_ultrasonic_payload_decodes_to_meters() -> None:
     assert frame.message_type == ULTRASONIC
 
 
-def test_hall_payload_decodes_right_wheel_movement() -> None:
+def test_hall_payload_decodes_for_either_wheel() -> None:
     payload = struct.pack(
         "<BBHIIIII",
         5,
@@ -115,9 +116,11 @@ def test_hall_payload_decodes_right_wheel_movement() -> None:
     assert reading.transitions_per_second == pytest.approx(12.75)
     assert reading.last_transition_age_s == pytest.approx(0.042)
 
-    encoded = encode_frame(HALL, 10, payload)
-    frame = FrameDecoder().feed(encoded)[0]
-    assert frame.message_type == HALL
+    assert FrameDecoder().feed(encode_frame(HALL, 10, payload))[0].message_type == HALL
+    assert (
+        FrameDecoder().feed(encode_frame(LEFT_HALL, 11, payload))[0].message_type
+        == LEFT_HALL
+    )
 
 
 def test_hall_never_moved_uses_none_age() -> None:

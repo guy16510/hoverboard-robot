@@ -13,9 +13,10 @@ constexpr uint8_t kRightReversePin = 14;
 constexpr uint8_t kLeftBrakePin = 33;
 constexpr uint8_t kRightBrakePin = 32;
 
-// Right hoverboard motor Hall sensor inputs. These are normal GPIOs with
-// internal pull-ups, so an open-collector Hall output can be wired directly
-// when the Hall sensors are powered from the ESP32 3.3 V rail.
+// Right hoverboard motor Hall inputs. The firmware enables the ESP32's internal
+// pull-ups, so the three signal wires do not need external pull-up resistors.
+// Supply the Hall sensors at the voltage required by the actual Hall IC/motor;
+// never assume a 5 V push-pull signal is safe for an ESP32 input.
 constexpr uint8_t kRightHallAPin = 19;
 constexpr uint8_t kRightHallBPin = 21;
 constexpr uint8_t kRightHallCPin = 22;

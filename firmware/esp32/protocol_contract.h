@@ -17,6 +17,7 @@ constexpr uint16_t kMotionPayloadBytes = 10;
 constexpr uint16_t kCapabilitiesPayloadBytes = 12;
 constexpr uint16_t kStatusPayloadBytes = 16;
 constexpr uint16_t kUltrasonicPayloadBytes = 8;
+constexpr uint16_t kHallPayloadBytes = 24;
 constexpr uint16_t kAcknowledgmentPayloadBytes = 2;
 constexpr uint16_t kErrorPayloadBytes = 4;
 
@@ -33,6 +34,7 @@ enum MessageType : uint8_t {
   kHeartbeat = 0x23,
   kStatus = 0x30,
   kUltrasonic = 0x35,
+  kHall = 0x36,
   kAcknowledgment = 0x7E,
   kError = 0x7F,
 };

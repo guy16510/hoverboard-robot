@@ -23,6 +23,7 @@ def test_protocol_scalar_contract_matches_firmware() -> None:
     assert cpp_int("kMotionPayloadBytes") == protocol.MOTION_PAYLOAD_BYTES
     assert cpp_int("kCapabilitiesPayloadBytes") == protocol.CAPABILITIES_PAYLOAD_BYTES
     assert cpp_int("kUltrasonicPayloadBytes") == protocol.ULTRASONIC_PAYLOAD_BYTES
+    assert cpp_int("kHallPayloadBytes") == protocol.HALL_PAYLOAD_BYTES
     assert cpp_int("kAcknowledgmentPayloadBytes") == protocol.ACK_PAYLOAD_BYTES
     assert cpp_int("kErrorPayloadBytes") == protocol.ERROR_PAYLOAD_BYTES
 
@@ -41,6 +42,7 @@ def test_protocol_message_ids_match_firmware() -> None:
         "kHeartbeat": protocol.HEARTBEAT,
         "kStatus": protocol.STATUS,
         "kUltrasonic": protocol.ULTRASONIC,
+        "kHall": protocol.HALL,
         "kAcknowledgment": protocol.ACK,
         "kError": protocol.ERROR,
     }

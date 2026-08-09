@@ -1,16 +1,13 @@
 Reference,Qty,Description,Value/Part,Notes
-U1,1,60V 5A buck regulator,TPS54560/TPS54560B,Final exact JLCPCB stocked MPN to verify before fab
 ESP32,1,30-pin ESP32 DevKit V1 socketed module,DOIT-style 30-pin,Use two 1x15 female sockets
-F1,1,Battery input fuse,5A nominal,Choose fuse based on final downstream current and wiring
-D1,1,Input TVS diode,60V+ standoff class,Final clamp voltage to be checked against 60V regulator limit
-J1,1,Battery input connector,2-pin high-voltage rated,36-42V nominal battery
-J2,1,Raspberry Pi power output connector,2-pin >=5A rated,+5V1/GND
+J1,1,External regulated 5V input connector,2-pin >=5A rated,+5V/GND only
+J2,1,Raspberry Pi power output connector,2-pin >=5A rated,+5V/GND
 J3-J4,2,Motor controller low-voltage connector,1x4,Throttle/Reverse/Brake/GND
-J5-J6,2,Hall sensor connector,1x5,+5V1/A/B/C/GND
-J7-J9,3,Ultrasonic connector,1x4,+5V1/TRIG/ECHO/GND
+J5-J6,2,Hall sensor connector,1x5,+5V/A/B/C/GND
+J7-J9,3,Ultrasonic connector,1x4,+5V/TRIG/ECHO/GND
 J10,1,MPU6050 connector,1x4,+3V3/SDA/SCL/GND
-J11,1,Servo connector,1x3,+5V1/SIGNAL/GND
-J12,1,Spare power connector,1x3,+5V1/+3V3/GND
+J11,1,Servo connector,1x3,+5V/SIGNAL/GND
+J12,1,Spare power connector,1x3,+5V/+3V3/GND
 R_HALL_TOP,6,Hall divider top resistor,10k 1%,5V raw input to ESP32 node
 R_HALL_BOTTOM,6,Hall divider bottom resistor,18k 1%,ESP32 node to GND
 R_ECHO_TOP,3,Ultrasonic ECHO divider top resistor,10k 1%,5V raw input to ESP32 node
@@ -21,16 +18,10 @@ R_PD1-R_PD4,4,MOSFET gate pull-down,100k,Defaults reverse/brake OFF during reset
 R_THROTTLE_L-R,2,Throttle series resistor,1k,GPIO25/GPIO26 to controller throttle signal
 C_THROTTLE_L-R,2,Optional throttle RC capacitor,1uF,DNP if direct DAC behavior preferred
 C_HALL1-C_HALL6,6,Optional Hall noise filter,100nF,DNP by default
-C_PI_BULK,1,Pi rail bulk capacitor,470uF low ESR,Near J2
-C_5V,2,5V rail ceramic capacitor,22uF,Near regulator/output distribution
-C_IN,2,Buck input ceramic/bulk capacitors,63V-rated minimum,Final values follow regulator reference design
-L1,1,Buck power inductor,TBD,Select from TPS54560 reference design for 5V/5A
-D_BUCK,1,Buck catch diode,TBD,Select voltage/current rating from TPS54560 reference design
-R_FB1-R_FB2,2,Buck feedback divider,TBD,Set output to approximately 5.1V
-R_COMP/C_COMP,1 set,Buck compensation network,TBD,Use TI reference design/calculation
+C_PI_BULK,1,Pi rail bulk capacitor,470uF low ESR,Near J1/J2
+C_5V,2,5V rail ceramic capacitor,22uF,Near ESP32 and sensor distribution
 LED1,1,5V power indicator LED,Green or user-selected,With series resistor
-LED2,1,Battery-present indicator LED,User-selected,Use high-value divider/current limiter suitable for 42V
-TP1-TP4,4,Power test point,BAT+/+5V1/+3V3/GND,Accessible edge placement
+TP_PWR,3,Power test point,+5V/+3V3/GND,Accessible edge placement
 TP_HALL,6,Hall test point,A/B/C each wheel,After divider
 TP_THR,2,Throttle test point,Left/Right,After series resistor
 MH1-MH4,4,Mounting hole,M3,Non-plated preferred unless chassis grounding intended

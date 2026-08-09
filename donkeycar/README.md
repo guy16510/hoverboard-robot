@@ -35,6 +35,8 @@ The application image is generated under:
 ```
 
 See `docs/WIRING.md` before flashing or powering the controllers.
+The guarded right-wheel commissioning procedure is documented in
+[`docs/RIGHT_WHEEL_BRINGUP.md`](../docs/RIGHT_WHEEL_BRINGUP.md).
 
 ## Raspberry Pi
 

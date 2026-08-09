@@ -5,16 +5,18 @@ import pytest
 
 from trashcan_robot.pipeline import (
     DRIVE_OUTPUTS,
+    HALL_OUTPUTS,
     STATE_UPDATE_INPUTS,
     ULTRASONIC_OUTPUTS,
     DriveMode,
     FrequencyMeter,
+    HallPart,
     PilotCondition,
     StateUpdater,
     UltrasonicPart,
     create_tub_writer,
 )
-from trashcan_robot.protocol import UltrasonicReading
+from trashcan_robot.protocol import HallReading, UltrasonicReading
 from trashcan_robot.state import RobotState
 from trashcan_robot.transport import MockMotorTransport
 
@@ -60,7 +62,7 @@ def test_frequency_meter_reports_completed_one_second_window() -> None:
     assert meter.run() == pytest.approx(20.0)
 
 
-def test_state_updater_publishes_runtime_rates_and_ultrasonic() -> None:
+def test_state_updater_publishes_runtime_rates_ultrasonic_and_hall() -> None:
     state = RobotState()
     updater = StateUpdater(state, "driveway")
 
@@ -75,6 +77,14 @@ def test_state_updater_publishes_runtime_rates_and_ultrasonic() -> None:
         0.42,
         0.75,
         None,
+        5,
+        True,
+        True,
+        123,
+        18.5,
+        2,
+        1,
+        0.03,
         19.8,
         0.0,
     )
@@ -87,6 +97,16 @@ def test_state_updater_publishes_runtime_rates_and_ultrasonic() -> None:
         "left_m": 0.75,
         "right_m": None,
     }
+    assert snapshot["right_hall"] == {
+        "state": 5,
+        "valid": True,
+        "moving": True,
+        "transitions": 123,
+        "transitions_per_second": 18.5,
+        "invalid_states": 2,
+        "skipped_transitions": 1,
+        "last_transition_age_s": 0.03,
+    }
 
 
 def test_ultrasonic_part_exposes_transport_reading() -> None:
@@ -96,7 +116,32 @@ def test_ultrasonic_part_exposes_transport_reading() -> None:
     assert UltrasonicPart(transport).run() == (0.25, 0.5, 1.25)
 
 
-def test_pipeline_keeps_drive_and_ultrasonic_outputs_explicit() -> None:
+def test_hall_part_exposes_right_wheel_movement() -> None:
+    transport = MockMotorTransport(
+        hall=HallReading(
+            state=6,
+            valid=True,
+            moving=True,
+            transitions=99,
+            invalid_states=1,
+            skipped_transitions=2,
+            transitions_per_second=24.5,
+            last_transition_age_s=0.015,
+        )
+    )
+    assert HallPart(transport).run() == (
+        6,
+        True,
+        True,
+        99,
+        24.5,
+        1,
+        2,
+        0.015,
+    )
+
+
+def test_pipeline_keeps_drive_sensor_outputs_explicit() -> None:
     assert DRIVE_OUTPUTS == [
         "esp32/connected",
         "drive/linear",
@@ -109,10 +154,25 @@ def test_pipeline_keeps_drive_and_ultrasonic_outputs_explicit() -> None:
         "ultrasonic/left_m",
         "ultrasonic/right_m",
     ]
-    assert STATE_UPDATE_INPUTS[-5:] == [
-        "ultrasonic/front_m",
-        "ultrasonic/left_m",
-        "ultrasonic/right_m",
+    assert HALL_OUTPUTS == [
+        "hall/right_state",
+        "hall/right_valid",
+        "hall/right_moving",
+        "hall/right_transitions",
+        "hall/right_tps",
+        "hall/right_invalid_states",
+        "hall/right_skipped_transitions",
+        "hall/right_age_s",
+    ]
+    assert STATE_UPDATE_INPUTS[-10:] == [
+        "hall/right_state",
+        "hall/right_valid",
+        "hall/right_moving",
+        "hall/right_transitions",
+        "hall/right_tps",
+        "hall/right_invalid_states",
+        "hall/right_skipped_transitions",
+        "hall/right_age_s",
         "camera/fps",
         "inference/rate",
     ]

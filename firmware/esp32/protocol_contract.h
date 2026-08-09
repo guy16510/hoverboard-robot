@@ -34,7 +34,8 @@ enum MessageType : uint8_t {
   kHeartbeat = 0x23,
   kStatus = 0x30,
   kUltrasonic = 0x35,
-  kHall = 0x36,
+  kHall = 0x36,      // right wheel, retained for compatibility
+  kLeftHall = 0x37,  // left wheel
   kAcknowledgment = 0x7E,
   kError = 0x7F,
 };

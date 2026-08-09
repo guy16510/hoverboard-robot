@@ -4,6 +4,7 @@
 #include <cstdint>
 
 #include "board_config.h"
+#include "hall_sensor.h"
 #include "motor_driver.h"
 #include "protocol_contract.h"
 #include "serial_protocol.h"
@@ -15,11 +16,13 @@ using trashbot::drive::DifferentialDrive;
 using trashbot::protocol::FrameParser;
 using trashbot::protocol::FrameView;
 using trashbot::protocol::FrameWriter;
+using trashbot::sensors::RightHallSensor;
 using trashbot::sensors::UltrasonicArray;
 namespace board = trashbot::board;
 namespace protocol = trashbot::protocol;
 
 DifferentialDrive drivetrain;
+RightHallSensor rightHall;
 UltrasonicArray ultrasonic;
 FrameWriter writer(Serial);
 FrameParser parser;
@@ -33,6 +36,7 @@ int16_t requestedLinearMilli = 0;
 int16_t requestedYawMilli = 0;
 uint32_t rejectedCommands = 0;
 uint32_t lastUltrasonicTelemetryMs = 0;
+uint32_t lastHallTelemetryMs = 0;
 uint16_t telemetrySequence = 0;
 
 void stopMotion(bool disarm) {
@@ -103,6 +107,21 @@ void sendUltrasonic(uint16_t sequence, uint32_t nowMs) {
   uint8_t payload[protocol::kUltrasonicPayloadBytes] = {};
   ultrasonic.encode(payload, nowMs);
   writer.send(protocol::kUltrasonic, sequence, payload, sizeof(payload));
+}
+
+void sendHall(uint16_t sequence, uint32_t nowMs) {
+  const auto hall = rightHall.snapshot(nowMs);
+  uint8_t payload[protocol::kHallPayloadBytes] = {};
+  payload[0] = hall.state;
+  payload[1] = static_cast<uint8_t>((hall.valid ? 1u : 0u) |
+                                    (hall.moving ? (1u << 1u) : 0u));
+  protocol::writeU16(payload + 2, 0);
+  protocol::writeU32(payload + 4, hall.transitions);
+  protocol::writeU32(payload + 8, hall.invalidStates);
+  protocol::writeU32(payload + 12, hall.skippedTransitions);
+  protocol::writeU32(payload + 16, hall.rateMilliHz);
+  protocol::writeU32(payload + 20, hall.lastTransitionAgeMs);
+  writer.send(protocol::kHall, sequence, payload, sizeof(payload));
 }
 
 bool decodeMotion(const uint8_t *payload, uint16_t length, uint32_t nowMs) {
@@ -198,6 +217,10 @@ void handleFrame(const FrameView &frame, uint32_t nowMs) {
       sendUltrasonic(frame.sequence, nowMs);
       return;
 
+    case protocol::kHall:
+      sendHall(frame.sequence, nowMs);
+      return;
+
     default:
       reject(frame.type, frame.sequence, 4, frame.type);
       return;
@@ -208,6 +231,7 @@ void handleFrame(const FrameView &frame, uint32_t nowMs) {
 
 void setup() {
   drivetrain.begin();
+  rightHall.begin();
   ultrasonic.begin();
   Serial.begin(board::kSerialBaud);
   delay(50);
@@ -223,7 +247,13 @@ void loop() {
                  });
   updateMotorTargets(nowMs);
   drivetrain.service(nowMs);
+  rightHall.service(nowMs);
   ultrasonic.service(nowMs);
+
+  if (nowMs - lastHallTelemetryMs >= board::kHallTelemetryMs) {
+    lastHallTelemetryMs = nowMs;
+    sendHall(telemetrySequence++, nowMs);
+  }
 
   if (nowMs - lastUltrasonicTelemetryMs >=
       board::kUltrasonicTelemetryMs) {

@@ -103,11 +103,11 @@ class RightHallSensor {
   }
 
  private:
-  static bool IRAM_ATTR validState(uint8_t state) {
+  static bool ARDUINO_ISR_ATTR validState(uint8_t state) {
     return state >= 1 && state <= 6;
   }
 
-  static uint8_t IRAM_ATTR readState() {
+  static uint8_t ARDUINO_ISR_ATTR readState() {
     const uint32_t levels = REG_READ(GPIO_IN_REG);
     return static_cast<uint8_t>(
         (((levels >> board::kRightHallAPin) & 1u) << 0u) |
@@ -115,13 +115,13 @@ class RightHallSensor {
         (((levels >> board::kRightHallCPin) & 1u) << 2u));
   }
 
-  static void IRAM_ATTR isrThunk() {
+  static void ARDUINO_ISR_ATTR isrThunk() {
     if (instance_ != nullptr) {
       instance_->captureEdge();
     }
   }
 
-  void IRAM_ATTR captureEdge() {
+  void ARDUINO_ISR_ATTR captureEdge() {
     const uint8_t next = readState();
 
     portENTER_CRITICAL_ISR(&mux_);

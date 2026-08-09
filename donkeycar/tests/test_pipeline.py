@@ -6,6 +6,8 @@ import pytest
 from trashcan_robot.pipeline import (
     DRIVE_OUTPUTS,
     HALL_OUTPUTS,
+    LEFT_HALL_OUTPUTS,
+    RIGHT_HALL_OUTPUTS,
     STATE_UPDATE_INPUTS,
     ULTRASONIC_OUTPUTS,
     DriveMode,
@@ -62,7 +64,7 @@ def test_frequency_meter_reports_completed_one_second_window() -> None:
     assert meter.run() == pytest.approx(20.0)
 
 
-def test_state_updater_publishes_runtime_rates_ultrasonic_and_hall() -> None:
+def test_state_updater_publishes_runtime_rates_ultrasonic_and_both_halls() -> None:
     state = RobotState()
     updater = StateUpdater(state, "driveway")
 
@@ -85,6 +87,14 @@ def test_state_updater_publishes_runtime_rates_ultrasonic_and_hall() -> None:
         2,
         1,
         0.03,
+        3,
+        True,
+        False,
+        88,
+        0.0,
+        0,
+        0,
+        0.25,
         19.8,
         0.0,
     )
@@ -107,6 +117,16 @@ def test_state_updater_publishes_runtime_rates_ultrasonic_and_hall() -> None:
         "skipped_transitions": 1,
         "last_transition_age_s": 0.03,
     }
+    assert snapshot["left_hall"] == {
+        "state": 3,
+        "valid": True,
+        "moving": False,
+        "transitions": 88,
+        "transitions_per_second": 0.0,
+        "invalid_states": 0,
+        "skipped_transitions": 0,
+        "last_transition_age_s": 0.25,
+    }
 
 
 def test_ultrasonic_part_exposes_transport_reading() -> None:
@@ -116,20 +136,22 @@ def test_ultrasonic_part_exposes_transport_reading() -> None:
     assert UltrasonicPart(transport).run() == (0.25, 0.5, 1.25)
 
 
-def test_hall_part_exposes_right_wheel_movement() -> None:
-    transport = MockMotorTransport(
-        hall=HallReading(
-            state=6,
-            valid=True,
-            moving=True,
-            transitions=99,
-            invalid_states=1,
-            skipped_transitions=2,
-            transitions_per_second=24.5,
-            last_transition_age_s=0.015,
-        )
+def sample_hall(state: int, transitions: int) -> HallReading:
+    return HallReading(
+        state=state,
+        valid=True,
+        moving=True,
+        transitions=transitions,
+        invalid_states=1,
+        skipped_transitions=2,
+        transitions_per_second=24.5,
+        last_transition_age_s=0.015,
     )
-    assert HallPart(transport).run() == (
+
+
+def test_hall_part_depends_on_reader_not_transport_concrete_type() -> None:
+    transport = MockMotorTransport(hall=sample_hall(6, 99))
+    assert HallPart(transport.latest_hall).run() == (
         6,
         True,
         True,
@@ -154,7 +176,7 @@ def test_pipeline_keeps_drive_sensor_outputs_explicit() -> None:
         "ultrasonic/left_m",
         "ultrasonic/right_m",
     ]
-    assert HALL_OUTPUTS == [
+    assert RIGHT_HALL_OUTPUTS == [
         "hall/right_state",
         "hall/right_valid",
         "hall/right_moving",
@@ -164,15 +186,20 @@ def test_pipeline_keeps_drive_sensor_outputs_explicit() -> None:
         "hall/right_skipped_transitions",
         "hall/right_age_s",
     ]
-    assert STATE_UPDATE_INPUTS[-10:] == [
-        "hall/right_state",
-        "hall/right_valid",
-        "hall/right_moving",
-        "hall/right_transitions",
-        "hall/right_tps",
-        "hall/right_invalid_states",
-        "hall/right_skipped_transitions",
-        "hall/right_age_s",
+    assert LEFT_HALL_OUTPUTS == [
+        "hall/left_state",
+        "hall/left_valid",
+        "hall/left_moving",
+        "hall/left_transitions",
+        "hall/left_tps",
+        "hall/left_invalid_states",
+        "hall/left_skipped_transitions",
+        "hall/left_age_s",
+    ]
+    assert HALL_OUTPUTS == [*RIGHT_HALL_OUTPUTS, *LEFT_HALL_OUTPUTS]
+    assert STATE_UPDATE_INPUTS[-18:] == [
+        *RIGHT_HALL_OUTPUTS,
+        *LEFT_HALL_OUTPUTS,
         "camera/fps",
         "inference/rate",
     ]

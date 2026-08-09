@@ -121,9 +121,10 @@ class HallSensor {
   static uint8_t ARDUINO_ISR_ATTR readPinLevel() {
     if constexpr (Pin < 32) {
       return static_cast<uint8_t>((REG_READ(GPIO_IN_REG) >> Pin) & 1u);
+    } else {
+      return static_cast<uint8_t>(
+          (REG_READ(GPIO_IN1_REG) >> (static_cast<uint32_t>(Pin) - 32u)) & 1u);
     }
-    return static_cast<uint8_t>(
-        (REG_READ(GPIO_IN1_REG) >> static_cast<uint8_t>(Pin - 32)) & 1u);
   }
 
   static uint8_t ARDUINO_ISR_ATTR readState() {

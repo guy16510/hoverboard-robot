@@ -22,6 +22,7 @@ MOTOR = 0x32
 ODOMETRY = 0x33
 FAULTS = 0x34
 ULTRASONIC = 0x35
+HALL = 0x36
 ACK = 0x7E
 ERROR = 0x7F
 DRIVE_MODE = 2
@@ -29,6 +30,7 @@ DRIVE_MODE = 2
 MOTION_PAYLOAD_BYTES = 10
 CAPABILITIES_PAYLOAD_BYTES = 12
 ULTRASONIC_PAYLOAD_BYTES = 8
+HALL_PAYLOAD_BYTES = 24
 ACK_PAYLOAD_BYTES = 2
 ERROR_PAYLOAD_BYTES = 4
 
@@ -100,6 +102,18 @@ class UltrasonicReading:
     right_m: float | None
 
 
+@dataclass(frozen=True)
+class HallReading:
+    state: int
+    valid: bool
+    moving: bool
+    transitions: int
+    invalid_states: int
+    skipped_transitions: int
+    transitions_per_second: float
+    last_transition_age_s: float | None
+
+
 def decode_capabilities(payload: bytes) -> Capabilities:
     if len(payload) != CAPABILITIES_PAYLOAD_BYTES:
         raise ValueError("capabilities payload must be 12 bytes")
@@ -146,6 +160,24 @@ def decode_ultrasonic(payload: bytes) -> UltrasonicReading:
         front_m=value(0, front_mm),
         left_m=value(1, left_mm),
         right_m=value(2, right_mm),
+    )
+
+
+def decode_hall(payload: bytes) -> HallReading:
+    if len(payload) != HALL_PAYLOAD_BYTES:
+        raise ValueError("Hall payload must be 24 bytes")
+    state, flags, _reserved, transitions, invalid_states, skipped_transitions, rate_millihz, age_ms = struct.unpack(
+        "<BBHIIIII", payload
+    )
+    return HallReading(
+        state=state,
+        valid=bool(flags & (1 << 0)),
+        moving=bool(flags & (1 << 1)),
+        transitions=transitions,
+        invalid_states=invalid_states,
+        skipped_transitions=skipped_transitions,
+        transitions_per_second=rate_millihz / 1000.0,
+        last_transition_age_s=None if age_ms == 0xFFFFFFFF else age_ms / 1000.0,
     )
 
 

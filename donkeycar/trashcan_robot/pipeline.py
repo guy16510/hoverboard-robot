@@ -9,6 +9,7 @@ from typing import Any
 from .config import AppConfig
 from .dashboard import DashboardServer
 from .esp32_drive import ESP32Drive
+from .kinematics import HallKinematics
 from .logging_part import JsonRunLogger
 from .protocol import HallReading
 from .state import RobotState
@@ -32,6 +33,10 @@ RIGHT_HALL_OUTPUTS = [
     "hall/right_moving",
     "hall/right_transitions",
     "hall/right_tps",
+    "hall/right_rpm",
+    "hall/right_speed_mps",
+    "hall/right_speed_mph",
+    "hall/right_travel_m",
     "hall/right_invalid_states",
     "hall/right_skipped_transitions",
     "hall/right_age_s",
@@ -42,6 +47,10 @@ LEFT_HALL_OUTPUTS = [
     "hall/left_moving",
     "hall/left_transitions",
     "hall/left_tps",
+    "hall/left_rpm",
+    "hall/left_speed_mps",
+    "hall/left_speed_mph",
+    "hall/left_travel_m",
     "hall/left_invalid_states",
     "hall/left_skipped_transitions",
     "hall/left_age_s",
@@ -73,6 +82,7 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
     state = RobotState()
     transport = MockMotorTransport() if use_mock else SerialMotorTransport(config.serial)
     drive = ESP32Drive(transport, config.limits, config.serial.reconnect_seconds)
+    hall_kinematics = HallKinematics(config.wheel_kinematics)
 
     camera_cfg = config.raw["camera"]
     camera = PiCamera(
@@ -129,8 +139,14 @@ def build_vehicle(config: AppConfig, use_mock: bool = False) -> Any:
         outputs=DRIVE_OUTPUTS,
     )
     vehicle.add(UltrasonicPart(transport), outputs=ULTRASONIC_OUTPUTS)
-    vehicle.add(HallPart(transport.latest_hall), outputs=RIGHT_HALL_OUTPUTS)
-    vehicle.add(HallPart(transport.latest_left_hall), outputs=LEFT_HALL_OUTPUTS)
+    vehicle.add(
+        HallPart(transport.latest_hall, hall_kinematics),
+        outputs=RIGHT_HALL_OUTPUTS,
+    )
+    vehicle.add(
+        HallPart(transport.latest_left_hall, hall_kinematics),
+        outputs=LEFT_HALL_OUTPUTS,
+    )
 
     tub_root = Path(config.raw["data"]["tubs_directory"])
     tub_root.mkdir(parents=True, exist_ok=True)
@@ -250,19 +266,42 @@ class UltrasonicPart:
 
 
 class HallPart:
-    def __init__(self, reader: Callable[[], HallReading]) -> None:
+    def __init__(
+        self,
+        reader: Callable[[], HallReading],
+        kinematics: HallKinematics,
+    ) -> None:
         self._reader = reader
+        self._kinematics = kinematics
 
     def run(
         self,
-    ) -> tuple[int, bool, bool, int, float, int, int, float | None]:
+    ) -> tuple[
+        int,
+        bool,
+        bool,
+        int,
+        float,
+        float,
+        float,
+        float,
+        float,
+        int,
+        int,
+        float | None,
+    ]:
         reading = self._reader()
+        motion = self._kinematics.calculate(reading)
         return (
             reading.state,
             reading.valid,
             reading.moving,
             reading.transitions,
             reading.transitions_per_second,
+            motion.rpm,
+            motion.speed_mps,
+            motion.speed_mph,
+            motion.travel_m,
             reading.invalid_states,
             reading.skipped_transitions,
             reading.last_transition_age_s,
@@ -275,6 +314,10 @@ def hall_state(
     moving: bool | None,
     transitions: int | None,
     tps: float | None,
+    rpm: float | None,
+    speed_mps: float | None,
+    speed_mph: float | None,
+    travel_m: float | None,
     invalid_states: int | None,
     skipped_transitions: int | None,
     age_s: float | None,
@@ -285,6 +328,10 @@ def hall_state(
         "moving": bool(moving),
         "transitions": int(transitions or 0),
         "transitions_per_second": float(tps or 0.0),
+        "rpm": float(rpm or 0.0),
+        "speed_mps": float(speed_mps or 0.0),
+        "speed_mph": float(speed_mph or 0.0),
+        "travel_m": float(travel_m or 0.0),
         "invalid_states": int(invalid_states or 0),
         "skipped_transitions": int(skipped_transitions or 0),
         "last_transition_age_s": age_s,
@@ -313,6 +360,10 @@ class StateUpdater:
         hall_right_moving: bool | None,
         hall_right_transitions: int | None,
         hall_right_tps: float | None,
+        hall_right_rpm: float | None,
+        hall_right_speed_mps: float | None,
+        hall_right_speed_mph: float | None,
+        hall_right_travel_m: float | None,
         hall_right_invalid_states: int | None,
         hall_right_skipped_transitions: int | None,
         hall_right_age_s: float | None,
@@ -321,6 +372,10 @@ class StateUpdater:
         hall_left_moving: bool | None,
         hall_left_transitions: int | None,
         hall_left_tps: float | None,
+        hall_left_rpm: float | None,
+        hall_left_speed_mps: float | None,
+        hall_left_speed_mph: float | None,
+        hall_left_travel_m: float | None,
         hall_left_invalid_states: int | None,
         hall_left_skipped_transitions: int | None,
         hall_left_age_s: float | None,
@@ -345,6 +400,10 @@ class StateUpdater:
                 hall_right_moving,
                 hall_right_transitions,
                 hall_right_tps,
+                hall_right_rpm,
+                hall_right_speed_mps,
+                hall_right_speed_mph,
+                hall_right_travel_m,
                 hall_right_invalid_states,
                 hall_right_skipped_transitions,
                 hall_right_age_s,
@@ -355,6 +414,10 @@ class StateUpdater:
                 hall_left_moving,
                 hall_left_transitions,
                 hall_left_tps,
+                hall_left_rpm,
+                hall_left_speed_mps,
+                hall_left_speed_mph,
+                hall_left_travel_m,
                 hall_left_invalid_states,
                 hall_left_skipped_transitions,
                 hall_left_age_s,

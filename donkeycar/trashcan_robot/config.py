@@ -26,10 +26,23 @@ class LimitsConfig:
 
 
 @dataclass(frozen=True)
+class WheelKinematicsConfig:
+    wheel_diameter_m: float
+    hall_transitions_per_revolution: int
+
+    def validate(self) -> None:
+        if self.wheel_diameter_m <= 0:
+            raise ValueError("wheel_diameter_m must be greater than zero")
+        if self.hall_transitions_per_revolution <= 0:
+            raise ValueError("hall_transitions_per_revolution must be greater than zero")
+
+
+@dataclass(frozen=True)
 class AppConfig:
     raw: dict[str, Any]
     serial: SerialConfig
     limits: LimitsConfig
+    wheel_kinematics: WheelKinematicsConfig
 
 
 def load_config(path: str | Path) -> AppConfig:
@@ -38,8 +51,11 @@ def load_config(path: str | Path) -> AppConfig:
         raw = yaml.safe_load(handle) or {}
     serial = raw["serial"]
     limits = raw["limits"]
+    wheel_kinematics = WheelKinematicsConfig(**raw["wheel_kinematics"])
+    wheel_kinematics.validate()
     return AppConfig(
         raw=raw,
         serial=SerialConfig(**serial),
         limits=LimitsConfig(**limits),
+        wheel_kinematics=wheel_kinematics,
     )

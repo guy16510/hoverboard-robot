@@ -55,7 +55,7 @@ The production build defaults are in `platformio.ini`.
 
 ## Donkeycar
 
-The Raspberry Pi side remains under `donkeycar/`. The serial port is configured as `auto`, which prefers `/dev/serial/by-id/*` and falls back to `/dev/ttyUSB*` or `/dev/ttyACM*`.
+The Raspberry Pi side remains under `donkeycar/`. The serial port is configured as `auto`, which checks stable Linux serial IDs, Linux USB serial devices, and macOS USB serial/modem devices.
 
 Donkeycar publishes these drivetrain outputs:
 
@@ -68,9 +68,66 @@ drive/fault
 ultrasonic/front_m
 ultrasonic/left_m
 ultrasonic/right_m
+
+hall/right_state
+hall/right_valid
+hall/right_moving
+hall/right_transitions
+hall/right_tps
+hall/right_rpm
+hall/right_speed_mps
+hall/right_speed_mph
+hall/right_travel_m
+hall/right_invalid_states
+hall/right_skipped_transitions
+hall/right_age_s
+
+hall/left_state
+hall/left_valid
+hall/left_moving
+hall/left_transitions
+hall/left_tps
+hall/left_rpm
+hall/left_speed_mps
+hall/left_speed_mph
+hall/left_travel_m
+hall/left_invalid_states
+hall/left_skipped_transitions
+hall/left_age_s
 ```
 
-The ultrasonic values are also included in the robot dashboard state and JSON run logs.
+The ultrasonic and Hall values are included in robot dashboard state and JSON run logs. `travel_m` is cumulative wheel travel magnitude since the ESP32 Hall counter reset. Speed is also a magnitude because the current Hall telemetry does not encode direction.
+
+### Hall wheel calibration
+
+The initial wheel conversion in `donkeycar/config/robot.yaml` is:
+
+```yaml
+wheel_kinematics:
+  wheel_diameter_m: 0.1651
+  hall_transitions_per_revolution: 90
+```
+
+This models the 6.5-inch hoverboard wheel as 15 electrical pole pairs with six valid Hall-state transitions per electrical revolution. Keep these values configurable until a physical one-wheel-revolution count confirms the 90-transition assumption on the installed motor.
+
+For the measured right-wheel run that produced about 1,200 Hall transitions in five seconds:
+
+```text
+average Hall rate:  1200 / 5 = 240 transitions/s
+wheel speed:        240 / 90 = 2.667 rev/s
+wheel RPM:          160 RPM
+linear speed:       about 1.383 m/s, 3.094 mph
+wheel travel:       about 6.916 m, 22.69 ft
+```
+
+The right-wheel validation command now prints average RPM, m/s, mph, and wheel travel directly:
+
+```sh
+PYTHONPATH=donkeycar python donkeycar/scripts/validate_right_hall.py \
+  --confirm-lifted \
+  --demand 0.25 \
+  --duration 5
+```
 
 Run the Pi tests with:
 

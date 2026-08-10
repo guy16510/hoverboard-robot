@@ -3,12 +3,14 @@ from __future__ import annotations
 
 import argparse
 import sys
+from dataclasses import replace
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from trashcan_robot.config import load_config
+from trashcan_robot.kinematics import HallKinematics
 from trashcan_robot.right_wheel_hall_test import RightWheelHallTester, RightWheelHallTestPlan
 from trashcan_robot.transport import SerialMotorTransport
 
@@ -43,11 +45,25 @@ def main() -> int:
         )
     )
 
+    average_tps = result.transition_delta / args.duration
+    motion = HallKinematics(config.wheel_kinematics).calculate(
+        replace(
+            result.final,
+            transitions=result.transition_delta,
+            transitions_per_second=average_tps,
+        )
+    )
+
     print(
         "RIGHT_HALL",
         "PASS" if result.passed else "FAIL",
         f"transitions={result.transition_delta}",
+        f"avg_tps={average_tps:.2f}",
         f"peak_tps={result.peak_transitions_per_second:.2f}",
+        f"avg_rpm={motion.rpm:.2f}",
+        f"avg_speed_mps={motion.speed_mps:.3f}",
+        f"avg_speed_mph={motion.speed_mph:.3f}",
+        f"travel_m={motion.travel_m:.3f}",
         f"invalid_delta={result.invalid_state_delta}",
         f"skipped_delta={result.skipped_transition_delta}",
         f"state={result.final.state}",

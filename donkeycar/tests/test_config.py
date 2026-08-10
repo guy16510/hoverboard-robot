@@ -1,5 +1,7 @@
 from pathlib import Path
 
+import pytest
+
 from trashcan_robot.config import load_config
 
 
@@ -10,3 +12,12 @@ def test_robot_config_uses_automatic_esp32_serial_discovery() -> None:
 
     assert config.serial.port == "auto"
     assert config.serial.baud == 115200
+
+
+def test_robot_config_contains_t882_hall_calibration() -> None:
+    config_path = Path(__file__).parents[1] / "config" / "robot.yaml"
+
+    config = load_config(config_path)
+
+    assert config.wheel_kinematics.wheel_diameter_m == pytest.approx(0.1651)
+    assert config.wheel_kinematics.hall_transitions_per_revolution == 90

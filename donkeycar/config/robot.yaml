@@ -26,6 +26,11 @@ limits:
   max_angular_velocity: 0.8
   throttle_deadband: 0.03
   steering_deadband: 0.03
+wheel_kinematics:
+  # Swagtron T882 6.5-inch hoverboard wheel.
+  wheel_diameter_m: 0.1651
+  # 15 pole pairs x 6 valid Hall-state transitions per electrical revolution.
+  hall_transitions_per_revolution: 90
 model:
   path: ./models/driveway.h5
   name: driveway

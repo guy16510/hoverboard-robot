@@ -245,3 +245,14 @@ def test_auto_port_prefers_stable_by_id_path(monkeypatch) -> None:
 
     monkeypatch.setattr("trashcan_robot.transport.glob.glob", fake_glob)
     assert SerialMotorTransport._resolve_port("auto") == "/dev/serial/by-id/usb-ESP32"
+
+
+def test_auto_port_supports_macos_usb_serial(monkeypatch) -> None:
+    def fake_glob(pattern: str) -> list[str]:
+        if pattern == "/dev/cu.usbserial*":
+            return ["/dev/cu.usbserial-0001"]
+        return []
+
+    monkeypatch.setattr("trashcan_robot.transport.glob.glob", fake_glob)
+
+    assert SerialMotorTransport._resolve_port("auto") == "/dev/cu.usbserial-0001"

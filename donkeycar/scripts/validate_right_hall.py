@@ -20,6 +20,11 @@ def main() -> int:
     parser.add_argument("--duration", type=float, default=1.5)
     parser.add_argument("--minimum-transitions", type=int, default=6)
     parser.add_argument("--confirm-lifted", action="store_true")
+    parser.add_argument(
+        "--allow-invalid-start",
+        action="store_true",
+        help="diagnostic only: run the bounded pulse even if the initial Hall state is invalid",
+    )
     args = parser.parse_args()
 
     if not args.confirm_lifted:
@@ -33,6 +38,7 @@ def main() -> int:
             demand=args.demand,
             duration_seconds=args.duration,
             minimum_transitions=args.minimum_transitions,
+            allow_invalid_start=args.allow_invalid_start,
             sample_period_seconds=max(0.02, 1.0 / max(config.serial.command_hz, 1)),
         )
     )
@@ -45,6 +51,9 @@ def main() -> int:
         f"invalid_delta={result.invalid_state_delta}",
         f"skipped_delta={result.skipped_transition_delta}",
         f"state={result.final.state}",
+        f"valid={result.final.valid}",
+        f"moving={result.observed_moving}",
+        f"baseline_state={result.baseline.state}",
     )
     return 0 if result.passed else 2
 

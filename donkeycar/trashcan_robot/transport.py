@@ -305,11 +305,13 @@ class SerialMotorTransport(MotorTransport):
             "/dev/serial/by-id/*",
             "/dev/ttyUSB*",
             "/dev/ttyACM*",
+            "/dev/cu.usbserial*",
+            "/dev/cu.usbmodem*",
         ):
             candidates.extend(sorted(glob.glob(pattern)))
         if not candidates:
             raise ConnectionError(
-                "no ESP32 serial device found under /dev/serial/by-id, /dev/ttyUSB*, or /dev/ttyACM*"
+                "no ESP32 serial device found under Linux or macOS USB serial paths"
             )
         return candidates[0]
 

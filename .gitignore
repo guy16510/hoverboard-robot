@@ -16,5 +16,10 @@ hardware_readbacks/
 # Host-side structured drive logs
 logs/
 
+# Python bytecode and test caches
+__pycache__/
+*.py[cod]
+.pytest_cache/
+
 # macOS metadata
 .DS_Store

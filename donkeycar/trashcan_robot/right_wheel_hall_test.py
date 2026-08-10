@@ -16,6 +16,7 @@ class RightWheelHallTestPlan:
     sample_period_seconds: float = 0.05
     sensor_ready_timeout_seconds: float = 1.0
     minimum_transitions: int = 6
+    allow_invalid_start: bool = False
 
     def validate(self) -> None:
         if not 0.05 <= self.demand <= 0.5:
@@ -91,6 +92,7 @@ class RightWheelHallTester:
         peak_tps = 0.0
         try:
             ready_deadline = self._clock() + plan.sensor_ready_timeout_seconds
+            candidate = self._transport.latest_hall()
             while self._clock() < ready_deadline:
                 self._transport.read_telemetry()
                 candidate = self._transport.latest_hall()
@@ -99,9 +101,11 @@ class RightWheelHallTester:
                     break
                 self._sleep(plan.sample_period_seconds)
             if baseline is None:
-                raise RuntimeError(
-                    "right Hall sensor never reported a valid state; do not move the wheel"
-                )
+                if not plan.allow_invalid_start:
+                    raise RuntimeError(
+                        "right Hall sensor never reported a valid state; do not move the wheel"
+                    )
+                baseline = candidate
 
             final = baseline
             motion_deadline = self._clock() + plan.duration_seconds
@@ -109,8 +113,8 @@ class RightWheelHallTester:
                 self._transport.send_command(linear_velocity, angular_velocity)
                 self._transport.read_telemetry()
                 sample = self._transport.latest_hall()
+                final = sample
                 if sample.valid:
-                    final = sample
                     observed_moving = observed_moving or sample.moving
                     peak_tps = max(peak_tps, sample.transitions_per_second)
                 self._sleep(plan.sample_period_seconds)
